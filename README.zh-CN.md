@@ -63,9 +63,10 @@ curl -fsSL https://raw.githubusercontent.com/HandleCoding/OpenHuskyAgent/main/in
 bash install.sh --non-interactive
 bash install.sh --install-dir="$HOME/openHusky" --port=18088
 bash install.sh --upgrade
+husky update
 ```
 
-安装脚本默认会把仓库 clone 到 `~/openHusky`，按需安装 JDK 17+，构建 service 和 TUI client JAR，把运行配置写到 `~/.husky/.env`，创建 `~/.husky/config`、`~/.husky/skills`、`~/.husky/db` 和 `~/.husky/logs` 目录，生成随机 `HUSKY_API_KEYS`，并可选安装 systemd 服务。
+安装脚本默认会把仓库 clone 到 `~/openHusky`，按需安装 JDK 17+，构建 service 和 TUI client JAR，把运行配置写到 `~/.husky/.env`，创建 `~/.husky/config`、`~/.husky/skills`、`~/.husky/db`、`~/.husky/logs` 和 `~/.husky/memory` 目录，生成随机 `HUSKY_API_KEYS`，并可选安装 systemd 服务。
 
 `bin/husky` 会优先读取 `~/.husky/.env`，只有在用户级配置不存在时才回退到仓库内的 `.env`。
 
@@ -143,8 +144,35 @@ bin/husky tui --server ws://localhost:18088/api/tui
 | `~/.husky/skills/` | 从 Husky 数据目录加载的已安装或自定义 skills |
 | `~/.husky/db/` | 运行时 SQLite 数据，例如 session 状态和 checkpoints |
 | `~/.husky/logs/` | 可选日志输出目录，以及需要可写权限的运行时日志目录 |
+| `~/.husky/memory/` | 持久文件型记忆目录 |
+| `~/.husky/memory/MEMORY.md` | 由 `memory_*` tools 管理的共享持久笔记 |
+| `~/.husky/memory/USER.md` | 由 `user_*` tools 管理的用户画像记忆 |
+
+`~/.husky/.env` 和 `~/.husky/config/` 属于配置层；持久记忆内容单独放在 `~/.husky/memory/` 下。
+
+记忆策略说明：
+
+- `default`：会自动把 `~/.husky/memory/` 下的文件型记忆注入 prompt。
+- `manual-only`：`MEMORY.md` 和 `USER.md` 仍可通过 memory tools 读写，但不会自动注入 prompt。
+- `session-recall`：prompt / session recall 不使用持久文件型记忆，而是走会话召回。
 
 你可以单独备份或迁移 `~/.husky`，而不影响 `~/openHusky` 中的仓库代码。
+
+### 升级现有安装
+
+推荐的本机升级方式是：
+
+```bash
+husky update
+```
+
+`husky update` 底层仍然复用 `bash install.sh --upgrade`，但会先拒绝脏工作区，并在升级结束后打印当前代码目录、配置目录和 memory 目录。
+
+如果你想显式走底层命令，仍可使用：
+
+```bash
+bash install.sh --upgrade
+```
 
 ## 最小配置
 
@@ -174,6 +202,27 @@ bin/husky tui --server ws://localhost:18088/api/tui
 | `SKILLHUB_API_KEY` | empty | 启用需要认证的 SkillHub 操作 |
 
 Browser 和 MCP 默认关闭，需要明确配置后再开启。
+
+### 后台运行方式
+
+`husky serve` 会以前台方式占用当前终端。如果你没有使用 `systemd`，可以用轻量后台命令：
+
+```bash
+husky start
+husky status
+husky logs
+husky stop
+```
+
+这套命令会把 PID 写到 `~/.husky/husky.pid`，把日志写到 `~/.husky/logs/husky-serve.log`。
+
+对于长期运行的 Linux 服务器部署，仍然推荐 `systemd`：
+
+```bash
+sudo systemctl start husky-agent
+sudo systemctl status husky-agent
+journalctl -u husky-agent -f
+```
 
 ## 使用 Husky
 

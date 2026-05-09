@@ -318,8 +318,11 @@ class CommandHandler {
 
     private void showMemory() {
         println(GRAY + "Memory system status:" + RESET);
-        println("  - MEMORY.md: static memory (memory_read/write/append)");
-        println("  - USER.md: user profile (user_read/write/append)");
+        println("  - ~/.husky/memory/MEMORY.md: shared persistent notes (memory_read/write/append)");
+        println("  - ~/.husky/memory/USER.md: user profile memory (user_read/write/append)");
+        println("  - default strategy: file-backed memory is loaded into prompts automatically");
+        println("  - manual-only strategy: files stay editable, but are not auto-loaded into prompts");
+        println("  - session-recall strategy: session recall is used instead of persistent file-backed prompt memory");
         println("  - session_search: conversation history search");
         println("");
         println(YELLOW + "Tip: ask the agent directly in chat to manage memory" + RESET);

@@ -1,12 +1,17 @@
 #!/bin/bash
 # Husky CLI
 # Usage:
-#   husky serve        Start the Husky service (default)
-#   husky tui          Connect the TUI to a running service
-#   husky tui --server ws://host:port/api/tui   Connect to a remote service
-#   husky tui --port 18089                     Connect to localhost:18089
-#   husky dev          Start service + TUI together
-#   husky install      Create a symlink in /usr/local/bin for global access
+#   husky serve                                  Start the Husky service (foreground)
+#   husky tui                                    Connect the TUI to a running service
+#   husky tui --server ws://host:port/api/tui    Connect to a remote service
+#   husky tui --port 18089                       Connect to localhost:18089
+#   husky dev                                    Start service + TUI together
+#   husky start                                  Start the service in background
+#   husky stop                                   Stop the background service
+#   husky status                                 Show background service status
+#   husky logs                                   Tail background service logs
+#   husky update                                 Upgrade this checkout via install.sh --upgrade
+#   husky install                                Create a symlink in /usr/local/bin for global access
 
 set -e
 
@@ -19,11 +24,13 @@ while [ -L "$SOURCE" ]; do
 done
 SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+CLI_SCRIPT="$SCRIPT_DIR/husky"
 
-# Load .env (project dir first, then home dir fallback)
+# Load .env (user config first, then repo-local fallback)
 load_env() {
     for env_file in "$HOME/.husky/.env" "$PROJECT_DIR/.env"; do
         if [ -f "$env_file" ]; then
+            LOADED_ENV_FILE="$env_file"
             set -a
             # shellcheck disable=SC1090
             source "$env_file"
@@ -34,6 +41,119 @@ load_env() {
     return 1
 }
 load_env
+
+resolve_absolute_path() {
+    local path_value="$1"
+    local base_dir="$2"
+
+    case "$path_value" in
+        "~")
+            printf '%s\n' "$HOME"
+            ;;
+        "~/"*)
+            printf '%s\n' "$HOME/${path_value#~/}"
+            ;;
+        /*)
+            printf '%s\n' "$path_value"
+            ;;
+        *)
+            printf '%s/%s\n' "${base_dir%/}" "$path_value"
+            ;;
+    esac
+}
+
+ENV_BASE_DIR="$PROJECT_DIR"
+if [ -n "${LOADED_ENV_FILE:-}" ]; then
+    ENV_BASE_DIR="$(cd "$(dirname "$LOADED_ENV_FILE")" && pwd)"
+fi
+
+DATA_DIR="$(resolve_absolute_path "${HUSKY_DATA_DIR:-$HOME/.husky}" "$ENV_BASE_DIR")"
+PID_FILE="$DATA_DIR/husky.pid"
+LOG_FILE="$DATA_DIR/logs/husky-serve.log"
+HEALTH_PORT="${HUSKY_PORT:-18088}"
+HEALTH_URL="http://localhost:${HEALTH_PORT}/actuator/health"
+MEMORY_DIR="$DATA_DIR/memory"
+ENV_FILE="$(resolve_absolute_path "${HUSKY_ENV_FILE:-$DATA_DIR/.env}" "$ENV_BASE_DIR")"
+
+ensure_runtime_dirs() {
+    mkdir -p "$DATA_DIR/config" "$DATA_DIR/skills" "$DATA_DIR/db" "$DATA_DIR/logs" "$MEMORY_DIR"
+    touch "$MEMORY_DIR/MEMORY.md" "$MEMORY_DIR/USER.md"
+}
+
+service_installed() {
+    [ -f /etc/systemd/system/husky-agent.service ]
+}
+
+read_pid_file() {
+    if [ -f "$PID_FILE" ]; then
+        tr -d '[:space:]' < "$PID_FILE"
+    fi
+}
+
+pid_is_running() {
+    local pid="$1"
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+clear_stale_pid_file() {
+    local pid
+    pid="$(read_pid_file)"
+    if [ -n "$pid" ] && ! pid_is_running "$pid"; then
+        rm -f "$PID_FILE"
+    fi
+}
+
+background_status() {
+    clear_stale_pid_file
+    local pid
+    pid="$(read_pid_file)"
+    if pid_is_running "$pid"; then
+        echo "$pid"
+        return 0
+    fi
+    return 1
+}
+
+print_systemd_hint() {
+    if service_installed; then
+        echo "Tip: systemd remains the recommended long-running Linux deployment path."
+        echo "     sudo systemctl start husky-agent"
+        echo "     sudo systemctl status husky-agent"
+        echo "     journalctl -u husky-agent -f"
+    fi
+}
+
+print_runtime_summary() {
+    echo ""
+    echo "Husky runtime paths:"
+    echo "  Code directory : $PROJECT_DIR"
+    echo "  Data directory : $DATA_DIR"
+    echo "  Config file    : $ENV_FILE"
+    echo "  Memory dir     : $MEMORY_DIR"
+    if service_installed; then
+        echo "  systemd        : /etc/systemd/system/husky-agent.service"
+    else
+        echo "  systemd        : not installed"
+    fi
+}
+
+# Helper: wait for service to be ready
+wait_for_service() {
+    local url="${1:-$HEALTH_URL}"
+    local max_wait="${2:-30}"
+    local elapsed=0
+    echo "  Waiting for service readiness..."
+    while [ "$elapsed" -lt "$max_wait" ]; do
+        if curl -sf "$url" > /dev/null 2>&1; then
+            echo "  Service is ready"
+            return 0
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    echo "  Service was not ready within ${max_wait}s; trying to connect..."
+    return 1
+}
 
 # Find the Husky JARs
 if [ -f "$PROJECT_DIR/service/target/husky-agent-service-0.0.1-SNAPSHOT.jar" ]; then
@@ -56,24 +176,6 @@ MVNW="$PROJECT_DIR/mvnw"
 if [ ! -f "$MVNW" ]; then
     MVNW=""
 fi
-
-# Helper: wait for service to be ready
-wait_for_service() {
-    local url="${1:-http://localhost:18088/actuator/health}"
-    local max_wait="${2:-30}"
-    local elapsed=0
-    echo "  Waiting for service readiness..."
-    while [ "$elapsed" -lt "$max_wait" ]; do
-        if curl -sf "$url" > /dev/null 2>&1; then
-            echo "  Service is ready"
-            return 0
-        fi
-        sleep 1
-        elapsed=$((elapsed + 1))
-    done
-    echo "  Service was not ready within ${max_wait}s; trying to connect..."
-    return 1
-}
 
 case "${1:-serve}" in
     serve)
@@ -164,6 +266,110 @@ case "${1:-serve}" in
             exit 1
         fi
         ;;
+    start)
+        shift
+        ensure_runtime_dirs
+
+        if pid="$(background_status)"; then
+            echo "Husky is already running in background with PID $pid"
+            echo "Log file: $LOG_FILE"
+            print_systemd_hint
+            exit 0
+        fi
+
+        echo "Starting Husky in background..."
+        nohup "$CLI_SCRIPT" serve "$@" > "$LOG_FILE" 2>&1 &
+        pid=$!
+        echo "$pid" > "$PID_FILE"
+
+        if wait_for_service "$HEALTH_URL" 30; then
+            echo "Husky started in background with PID $pid"
+        elif pid_is_running "$pid"; then
+            echo "Husky started in background with PID $pid, but readiness is still pending"
+            echo "Check logs with: husky logs"
+        else
+            echo "Husky failed to stay running; showing recent logs"
+            rm -f "$PID_FILE"
+            if [ -f "$LOG_FILE" ]; then
+                tail -20 "$LOG_FILE"
+            fi
+            exit 1
+        fi
+
+        echo "PID file: $PID_FILE"
+        echo "Log file: $LOG_FILE"
+        print_systemd_hint
+        ;;
+    stop)
+        shift
+        if pid="$(background_status)"; then
+            echo "Stopping Husky background process $pid..."
+            kill "$pid"
+            for _ in $(seq 1 20); do
+                if ! pid_is_running "$pid"; then
+                    rm -f "$PID_FILE"
+                    echo "Husky background process stopped"
+                    exit 0
+                fi
+                sleep 1
+            done
+            echo "Husky process $pid did not exit within 20s"
+            exit 1
+        fi
+
+        echo "No Husky background process is tracked at $PID_FILE"
+        print_systemd_hint
+        ;;
+    status)
+        shift
+        if pid="$(background_status)"; then
+            echo "Husky background process is running"
+            echo "  PID file: $PID_FILE"
+            echo "  PID: $pid"
+            echo "  Log file: $LOG_FILE"
+        else
+            echo "Husky background process is not running"
+            echo "  PID file: $PID_FILE"
+            echo "  Log file: $LOG_FILE"
+        fi
+
+        if service_installed && command -v systemctl >/dev/null 2>&1; then
+            if systemctl is-active --quiet husky-agent; then
+                echo "  systemd: husky-agent is active"
+            else
+                echo "  systemd: husky-agent is not active"
+            fi
+        fi
+        ;;
+    logs)
+        shift
+        if [ -f "$LOG_FILE" ]; then
+            echo "Tailing $LOG_FILE"
+            exec tail -f "$LOG_FILE"
+        fi
+
+        echo "No background log file found at $LOG_FILE"
+        print_systemd_hint
+        exit 1
+        ;;
+    update)
+        shift
+        if [ ! -d "$PROJECT_DIR/.git" ]; then
+            echo "Error: husky update requires a git checkout at $PROJECT_DIR"
+            exit 1
+        fi
+        if [ ! -f "$PROJECT_DIR/install.sh" ]; then
+            echo "Error: Cannot find install.sh in $PROJECT_DIR"
+            exit 1
+        fi
+        if [ -n "$(git -C "$PROJECT_DIR" status --porcelain)" ]; then
+            echo "Error: Working tree is not clean. Commit, stash, or discard local changes before running husky update."
+            exit 1
+        fi
+
+        bash "$PROJECT_DIR/install.sh" --upgrade "$@"
+        print_runtime_summary
+        ;;
     install)
         TARGET="/usr/local/bin/husky"
         if [ -L "$TARGET" ]; then
@@ -186,22 +392,31 @@ case "${1:-serve}" in
         echo "Now you can run 'husky serve' or 'husky tui' from anywhere."
         ;;
     *)
-        echo "Usage: husky {serve|tui|dev|install}"
+        echo "Usage: husky {serve|tui|dev|start|stop|status|logs|update|install}"
         echo ""
         echo "Start here:"
-        echo "  husky serve                 Start the service on this machine"
+        echo "  husky serve                 Start the service in the current terminal"
         echo "  husky tui                   Open the TUI and connect to localhost"
-        echo "  husky dev                   Start service + TUI together for local development"
+        echo "  husky start                 Start the service in background"
+        echo "  husky status                Check background service status"
+        echo "  husky update                Upgrade this checkout with install.sh --upgrade"
         echo ""
         echo "Commands:"
         echo "  serve    Start the Husky service (HTTP + WebSocket)"
         echo "  tui      Connect the TUI to a running service"
         echo "  dev      Start service + TUI in one command"
+        echo "  start    Start the service in background with nohup"
+        echo "  stop     Stop the background service"
+        echo "  status   Show background service status"
+        echo "  logs     Tail background service logs"
+        echo "  update   Run the recommended local upgrade path"
         echo "  install  Create a symlink in /usr/local/bin for global access"
         echo ""
         echo "TUI options:"
         echo "  --server URL   WebSocket URL (default: ws://localhost:18088/api/tui)"
         echo "  --port PORT    Shortcut for ws://localhost:PORT/api/tui"
+        echo ""
+        print_systemd_hint
         exit 1
         ;;
 esac

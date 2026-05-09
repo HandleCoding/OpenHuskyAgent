@@ -63,9 +63,10 @@ Useful options:
 bash install.sh --non-interactive
 bash install.sh --install-dir="$HOME/openHusky" --port=18088
 bash install.sh --upgrade
+husky update
 ```
 
-The installer clones the repository into `~/openHusky` by default, installs JDK 17+ when needed, builds the service and TUI client JARs, writes runtime config to `~/.husky/.env`, creates the `~/.husky/config`, `~/.husky/skills`, `~/.husky/db`, and `~/.husky/logs` directories, generates a random `HUSKY_API_KEYS` value, and can install a systemd service.
+The installer clones the repository into `~/openHusky` by default, installs JDK 17+ when needed, builds the service and TUI client JARs, writes runtime config to `~/.husky/.env`, creates the `~/.husky/config`, `~/.husky/skills`, `~/.husky/db`, `~/.husky/logs`, and `~/.husky/memory` directories, generates a random `HUSKY_API_KEYS` value, and can install a systemd service.
 
 `bin/husky` prefers `~/.husky/.env` and only falls back to the repo-local `.env` when the user-level config file is missing.
 
@@ -143,8 +144,35 @@ After installation, Husky keeps user-level config and runtime data under `~/.hus
 | `~/.husky/skills/` | Installed or user-authored skills loaded from the Husky data directory |
 | `~/.husky/db/` | Runtime SQLite data such as session state and checkpoints |
 | `~/.husky/logs/` | Optional log output and writable runtime log directory |
+| `~/.husky/memory/` | Persistent file-backed memory directory |
+| `~/.husky/memory/MEMORY.md` | Shared persistent notes managed by `memory_*` tools |
+| `~/.husky/memory/USER.md` | User profile memory managed by `user_*` tools |
+
+Configuration lives in `~/.husky/.env` and `~/.husky/config/`; persistent memory content lives separately under `~/.husky/memory/`.
+
+Memory strategy notes:
+
+- `default` loads file-backed memory from `~/.husky/memory/` into prompts automatically.
+- `manual-only` keeps `MEMORY.md` and `USER.md` editable through memory tools without auto-injecting them into prompts.
+- `session-recall` uses session recall instead of persistent file-backed memory for prompt/session recall.
 
 You can back up or move `~/.husky` independently from the checked-out repository in `~/openHusky`.
+
+### Upgrade An Existing Install
+
+The recommended local upgrade path is:
+
+```bash
+husky update
+```
+
+`husky update` wraps `bash install.sh --upgrade`, refuses to run on a dirty checkout, and prints the active code/config/memory paths after the upgrade.
+
+If you want the lower-level command explicitly, this still works:
+
+```bash
+bash install.sh --upgrade
+```
 
 ## Minimal Configuration
 
@@ -174,6 +202,27 @@ Most deployments only need `.env`:
 | `SKILLHUB_API_KEY` | empty | Enables authenticated SkillHub operations |
 
 Browser and MCP integrations are disabled by default. Enable them only when configured intentionally.
+
+### Background Service Options
+
+`husky serve` keeps the service in the current terminal. For a lightweight background process without `systemd`, use:
+
+```bash
+husky start
+husky status
+husky logs
+husky stop
+```
+
+This mode writes its PID to `~/.husky/husky.pid` and logs to `~/.husky/logs/husky-serve.log`.
+
+For long-running Linux server deployments, `systemd` is still the recommended path:
+
+```bash
+sudo systemctl start husky-agent
+sudo systemctl status husky-agent
+journalctl -u husky-agent -f
+```
 
 ## Use Husky
 

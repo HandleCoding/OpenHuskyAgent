@@ -86,10 +86,8 @@ echo "==> Building with Maven (skip tests)"
 stop_existing_husky
 
 if [ "$USE_NOHUP" = true ]; then
-  log_file="husky-serve.log"
-  echo "==> Starting Husky in background with nohup; log: $log_file"
-  nohup ./bin/husky serve > "$log_file" 2>&1 &
-  echo "Husky started with PID $!"
+  echo "==> Starting Husky in background via husky start"
+  exec ./bin/husky start
 else
   echo "==> Starting Husky in foreground"
   exec ./bin/husky serve

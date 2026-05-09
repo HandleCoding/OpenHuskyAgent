@@ -290,6 +290,10 @@ MCP_CONFIG_PATH=$DATA_DIR/config/mcp-servers.json
 ENVEOF
     fi
 
+    local memory_dir="$DATA_DIR/memory"
+    local memory_index="$memory_dir/MEMORY.md"
+    local user_profile="$memory_dir/USER.md"
+
     if grep -q '^HUSKY_PORT=' "$env_file"; then
         sed -i.bak "s|^HUSKY_PORT=.*|HUSKY_PORT=$PORT|" "$env_file" && rm -f "$env_file.bak"
     else
@@ -314,7 +318,8 @@ ENVEOF
         echo "HUSKY_API_KEYS=$generated_key" >> "$env_file"
     fi
 
-    mkdir -p "$DATA_DIR/config" "$DATA_DIR/skills" "$DATA_DIR/db" "$DATA_DIR/logs"
+    mkdir -p "$DATA_DIR/config" "$DATA_DIR/skills" "$DATA_DIR/db" "$DATA_DIR/logs" "$memory_dir"
+    touch "$memory_index" "$user_profile"
 
     warn "Config created: $env_file"
     warn "You MUST set OPENAI_API_KEY before starting the service."
@@ -334,7 +339,8 @@ setup_user() {
         return 0
     fi
 
-    mkdir -p "$DATA_DIR" "$DATA_DIR/config" "$DATA_DIR/skills" "$DATA_DIR/db" "$DATA_DIR/logs"
+    mkdir -p "$DATA_DIR" "$DATA_DIR/config" "$DATA_DIR/skills" "$DATA_DIR/db" "$DATA_DIR/logs" "$DATA_DIR/memory"
+    touch "$DATA_DIR/memory/MEMORY.md" "$DATA_DIR/memory/USER.md"
 }
 
 # ── Step 8: Install systemd service ─────────────────────────────────────
@@ -465,11 +471,14 @@ print_success() {
     echo "  Config file : $ENV_FILE"
     echo ""
     echo "  Data layout:"
-    echo -e "     ${CYAN}$DATA_DIR/.env${NC}            Runtime config"
-    echo -e "     ${CYAN}$DATA_DIR/config/${NC}        MCP and other user config files"
-    echo -e "     ${CYAN}$DATA_DIR/skills/${NC}        Installed and custom skills"
-    echo -e "     ${CYAN}$DATA_DIR/db/${NC}            SQLite runtime state"
-    echo -e "     ${CYAN}$DATA_DIR/logs/${NC}          Writable log directory"
+    echo -e "     ${CYAN}$DATA_DIR/.env${NC}                   Runtime config"
+    echo -e "     ${CYAN}$DATA_DIR/config/${NC}               MCP and other user config files"
+    echo -e "     ${CYAN}$DATA_DIR/skills/${NC}               Installed and custom skills"
+    echo -e "     ${CYAN}$DATA_DIR/db/${NC}                   SQLite runtime state"
+    echo -e "     ${CYAN}$DATA_DIR/logs/${NC}                 Writable log directory"
+    echo -e "     ${CYAN}$DATA_DIR/memory/${NC}               Persistent file-backed memory"
+    echo -e "     ${CYAN}$DATA_DIR/memory/MEMORY.md${NC}      Shared persistent notes"
+    echo -e "     ${CYAN}$DATA_DIR/memory/USER.md${NC}        User profile memory"
     echo ""
     echo "  Next steps:"
     echo ""
