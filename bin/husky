@@ -27,6 +27,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 CLI_SCRIPT="$SCRIPT_DIR/husky"
+INITIAL_COMMAND="${1:-serve}"
 
 read_version() {
     if [ -f "$PROJECT_DIR/VERSION" ]; then
@@ -44,6 +45,18 @@ fi
 
 # Load .env (user config first, then repo-local fallback)
 load_env() {
+    if [ "$INITIAL_COMMAND" = "init" ]; then
+        if [ -f "$HOME/.husky/.env" ]; then
+            LOADED_ENV_FILE="$HOME/.husky/.env"
+            set -a
+            # shellcheck disable=SC1090
+            source "$HOME/.husky/.env"
+            set +a
+            return 0
+        fi
+        return 1
+    fi
+
     for env_file in "$HOME/.husky/.env" "$PROJECT_DIR/.env"; do
         if [ -f "$env_file" ]; then
             LOADED_ENV_FILE="$env_file"
@@ -101,25 +114,29 @@ initialize_env_file() {
         return 0
     fi
 
-    local env_template=""
     if [ -f "$PROJECT_DIR/.env.example" ]; then
-        env_template="$PROJECT_DIR/.env.example"
-    elif [ -f "$PROJECT_DIR/.env" ]; then
-        env_template="$PROJECT_DIR/.env"
-    fi
-
-    if [ -n "$env_template" ]; then
-        cp "$env_template" "$ENV_FILE"
+        cp "$PROJECT_DIR/.env.example" "$ENV_FILE"
     else
         cat > "$ENV_FILE" <<EOF
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com
 OPENAI_MODEL=gpt-5.4
+OPENAI_COMPLETIONS_PATH=/v1/chat/completions
+OPENAI_TEMPERATURE=0.7
 HUSKY_PORT=${HEALTH_PORT}
 HUSKY_DATA_DIR=${DATA_DIR}
 AUTH_ENABLED=true
+HUSKY_API_KEYS=change-me-generate-a-random-key
+BROWSER_ENABLED=false
+MCP_ENABLED=false
 MCP_CONFIG_PATH=${DATA_DIR}/config/mcp-servers.json
 EOF
+    fi
+
+    if grep -q '^OPENAI_MODEL=' "$ENV_FILE"; then
+        perl -0pi -e 's|^OPENAI_MODEL=.*$|OPENAI_MODEL=gpt-5.4|m' "$ENV_FILE"
+    else
+        printf '\nOPENAI_MODEL=gpt-5.4\n' >> "$ENV_FILE"
     fi
 
     if grep -q '^HUSKY_DATA_DIR=' "$ENV_FILE"; then
@@ -147,7 +164,11 @@ run_init() {
     echo "  Config file: $ENV_FILE"
     echo "  Memory files: $MEMORY_DIR/MEMORY.md, $MEMORY_DIR/USER.md"
     echo ""
-    echo "Next step: edit $ENV_FILE and set OPENAI_API_KEY"
+    echo "Next steps:"
+    echo "  1. Edit $ENV_FILE and set OPENAI_API_KEY at minimum"
+    echo "  2. Choose one startup mode: foreground with husky serve"
+    echo "  3. Or background with husky start"
+    echo "  4. If you use background mode, check status/logs with: husky status && husky logs"
 }
 
 service_installed() {
