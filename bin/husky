@@ -56,7 +56,7 @@ load_env() {
     done
     return 1
 }
-load_env
+load_env || true
 
 resolve_absolute_path() {
     local path_value="$1"
