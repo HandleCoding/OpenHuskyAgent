@@ -3,6 +3,14 @@ name: Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to upload assets to
+        required: true
+
+permissions:
+  contents: write
 
 jobs:
   build-and-upload:
@@ -42,6 +50,7 @@ jobs:
       - name: Upload release artifacts
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
           files: |
             service/target/husky-agent-service-0.0.1-SNAPSHOT.jar
             client/target/husky-agent-client-0.0.1-SNAPSHOT.jar
