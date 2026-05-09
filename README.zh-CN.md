@@ -70,6 +70,20 @@ husky update
 
 `bin/husky` 会优先读取 `~/.husky/.env`，只有在用户级配置不存在时才回退到仓库内的 `.env`。
 
+#### macOS 快速安装（Homebrew）
+
+如果你在 macOS 上追求最顺滑的安装体验，优先使用官方 Homebrew tap。
+
+```bash
+brew tap HandleCoding/husky
+brew install HandleCoding/husky/husky
+mkdir -p ~/.husky
+cp "$(brew --prefix husky)/libexec/husky-macos-universal/.env.example" ~/.husky/.env
+husky serve
+```
+
+Homebrew 会自动安装 `openjdk@17`，把 `husky` 命令放进 PATH，并把运行时 bundle 放到 Homebrew 管理的 `libexec` 目录下。
+
 #### macOS / Windows / 通用源码安装
 
 如果你是在本地开发，或系统不是 Linux，使用源码方式。

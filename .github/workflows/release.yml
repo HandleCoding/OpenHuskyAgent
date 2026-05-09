@@ -22,9 +22,28 @@ jobs:
       - name: Build release artifacts
         run: ./mvnw -B -ntp -DskipTests package
 
+      - name: Prepare Homebrew bundle
+        run: |
+          rm -rf dist husky-macos-universal.tar.gz husky-macos-universal.tar.gz.sha256
+          mkdir -p dist/husky-macos-universal/bin
+          mkdir -p dist/husky-macos-universal/service/target
+          mkdir -p dist/husky-macos-universal/client/target
+
+          cp bin/husky dist/husky-macos-universal/bin/
+          cp .env.example dist/husky-macos-universal/
+          cp LICENSE dist/husky-macos-universal/
+          cp service/target/husky-agent-service-0.0.1-SNAPSHOT.jar dist/husky-macos-universal/service/target/
+          cp client/target/husky-agent-client-0.0.1-SNAPSHOT.jar dist/husky-macos-universal/client/target/
+
+          chmod +x dist/husky-macos-universal/bin/husky
+          tar -czf husky-macos-universal.tar.gz -C dist husky-macos-universal
+          sha256sum husky-macos-universal.tar.gz | tee husky-macos-universal.tar.gz.sha256
+
       - name: Upload release artifacts
         uses: softprops/action-gh-release@v2
         with:
           files: |
             service/target/husky-agent-service-0.0.1-SNAPSHOT.jar
             client/target/husky-agent-client-0.0.1-SNAPSHOT.jar
+            husky-macos-universal.tar.gz
+            husky-macos-universal.tar.gz.sha256

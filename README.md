@@ -70,6 +70,20 @@ The installer clones the repository into `~/openHusky` by default, installs JDK 
 
 `bin/husky` prefers `~/.husky/.env` and only falls back to the repo-local `.env` when the user-level config file is missing.
 
+#### macOS Quick Install (Homebrew)
+
+For the smoothest macOS install path, use the official Homebrew tap.
+
+```bash
+brew tap HandleCoding/husky
+brew install HandleCoding/husky/husky
+mkdir -p ~/.husky
+cp "$(brew --prefix husky)/libexec/husky-macos-universal/.env.example" ~/.husky/.env
+husky serve
+```
+
+Homebrew installs `openjdk@17` automatically, installs the `husky` launcher into your PATH, and keeps the runtime bundle under Homebrew-managed `libexec`.
+
 #### macOS / Windows / Any Platform From Source
 
 Use the source path when you are developing locally or not on Linux.
