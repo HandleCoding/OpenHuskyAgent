@@ -81,6 +81,18 @@ husky init
 husky serve
 ```
 
+After `husky init`, edit `~/.husky/.env` and set `OPENAI_API_KEY` at minimum. Then choose one startup mode:
+
+- Foreground: `husky serve`
+- Background: `husky start`
+
+To upgrade a Homebrew install later:
+
+```bash
+brew update
+brew upgrade HandleCoding/husky/husky
+```
+
 Homebrew installs `openjdk@17` automatically, installs the `husky` launcher into your PATH, and keeps the runtime bundle under Homebrew-managed `libexec`.
 
 #### macOS / Windows / Any Platform From Source
@@ -141,7 +153,7 @@ Success signal: you should get JSON with `"status":"UP"`.
 In another terminal:
 
 ```bash
-bin/husky tui --server ws://localhost:18088/api/tui
+husky tui --server ws://localhost:18088/api/tui
 ```
 
 Success signal: the TUI connects without errors and you can send a prompt immediately.
@@ -173,7 +185,16 @@ You can back up or move `~/.husky` independently from the checked-out repository
 
 ### Upgrade An Existing Install
 
-The recommended local upgrade path is:
+The recommended local upgrade path depends on how you installed Husky.
+
+For a Homebrew install on macOS:
+
+```bash
+brew update
+brew upgrade HandleCoding/husky/husky
+```
+
+For a git checkout managed with `install.sh`, use:
 
 ```bash
 husky update
@@ -218,7 +239,7 @@ Browser and MCP integrations are disabled by default. Enable them only when conf
 
 ### Background Service Options
 
-`husky serve` keeps the service in the current terminal. For a lightweight background process without `systemd`, use:
+`husky serve` keeps the service in the current terminal. On macOS or other environments without `systemd`, use the lightweight background commands:
 
 ```bash
 husky start
@@ -242,7 +263,7 @@ journalctl -u husky-agent -f
 ### TUI Personal Assistant
 
 ```bash
-bin/husky tui --server ws://localhost:18088/api/tui
+husky tui --server ws://localhost:18088/api/tui
 ```
 
 The TUI uses WebSocket JSON-RPC and supports streaming text, tool-call display, approval prompts, and session interaction.

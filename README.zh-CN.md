@@ -81,6 +81,18 @@ husky init
 husky serve
 ```
 
+执行完 `husky init` 后，先编辑 `~/.husky/.env`，至少填好 `OPENAI_API_KEY`。然后二选一启动方式：
+
+- 前台启动：`husky serve`
+- 后台启动：`husky start`
+
+后续如果你是通过 Homebrew 安装的，升级方式是：
+
+```bash
+brew update
+brew upgrade HandleCoding/husky/husky
+```
+
 Homebrew 会自动安装 `openjdk@17`，把 `husky` 命令放进 PATH，并把运行时 bundle 放到 Homebrew 管理的 `libexec` 目录下。
 
 #### macOS / Windows / 通用源码安装
@@ -141,7 +153,7 @@ curl http://localhost:18088/actuator/health
 另开一个终端：
 
 ```bash
-bin/husky tui --server ws://localhost:18088/api/tui
+husky tui --server ws://localhost:18088/api/tui
 ```
 
 成功信号：TUI 无报错完成连接，并且你可以立刻发送第一条提示词。
@@ -173,7 +185,16 @@ bin/husky tui --server ws://localhost:18088/api/tui
 
 ### 升级现有安装
 
-推荐的本机升级方式是：
+推荐的本机升级方式取决于你的安装来源。
+
+如果你是在 macOS 上通过 Homebrew 安装的：
+
+```bash
+brew update
+brew upgrade HandleCoding/husky/husky
+```
+
+如果你是通过 git checkout + `install.sh` 管理的源码安装，使用：
 
 ```bash
 husky update
@@ -218,7 +239,7 @@ Browser 和 MCP 默认关闭，需要明确配置后再开启。
 
 ### 后台运行方式
 
-`husky serve` 会以前台方式占用当前终端。如果你没有使用 `systemd`，可以用轻量后台命令：
+`husky serve` 会以前台方式占用当前终端。在 macOS 或其他没有 `systemd` 的环境里，推荐使用轻量后台命令：
 
 ```bash
 husky start
@@ -242,7 +263,7 @@ journalctl -u husky-agent -f
 ### TUI 个人助手
 
 ```bash
-bin/husky tui --server ws://localhost:18088/api/tui
+husky tui --server ws://localhost:18088/api/tui
 ```
 
 TUI 使用 WebSocket JSON-RPC，支持流式文本、工具调用展示、审批提示和 session 交互。
