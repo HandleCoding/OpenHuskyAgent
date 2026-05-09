@@ -1,5 +1,5 @@
 #!/bin/bash
-# Husky Agent — Linux VPS one-click installer
+# Husky — Linux VPS quick installer
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/HandleCoding/OpenHuskyAgent/main/install.sh | bash
 #   bash install.sh [--non-interactive] [--upgrade] [--port PORT]
@@ -15,7 +15,9 @@ NON_INTERACTIVE=false
 UPGRADE=false
 PORT=18088
 REPO_URL="https://github.com/HandleCoding/OpenHuskyAgent.git"
-INSTALL_DIR="${HUSKY_INSTALL_DIR:-/opt/husky-agent}"
+INSTALL_DIR="${HUSKY_INSTALL_DIR:-$HOME/openHusky}"
+DATA_DIR="${HUSKY_DATA_DIR:-$HOME/.husky}"
+ENV_FILE="$DATA_DIR/.env"
 LOG_FILE="/tmp/husky-install-$(date +%Y%m%d%H%M%S).log"
 
 # ── Parse arguments ──────────────────────────────────────────────────────
@@ -33,7 +35,7 @@ for arg in "$@"; do
             echo "  --non-interactive     Skip all prompts, use defaults"
             echo "  --upgrade             Re-install over existing installation"
             echo "  --port=PORT           Service port (default: 18088)"
-            echo "  --install-dir=DIR     Installation directory (default: /opt/husky-agent)"
+            echo "  --install-dir=DIR     Installation directory (default: $HOME/openHusky)"
             exit 0
             ;;
     esac
@@ -210,7 +212,7 @@ clone_repo() {
         err "Use --upgrade to update, or remove it first: rm -rf $INSTALL_DIR"
         exit 1
     else
-        info "Cloning Husky Agent into $INSTALL_DIR..."
+        info "Cloning Husky into $INSTALL_DIR..."
         git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
         cd "$INSTALL_DIR"
     fi
@@ -232,7 +234,7 @@ build() {
     _resolve_java_home
     export JAVA_HOME PATH
 
-    info "Building Husky Agent (this may take 2-5 minutes on first run)..."
+    info "Building Husky (this may take 2-5 minutes on first run)..."
 
     # Increase Maven heap for low-memory VPS
     export MAVEN_OPTS="${MAVEN_OPTS:--Xmx512m}"
@@ -256,9 +258,11 @@ build() {
 
 # ── Step 6: Generate .env config ────────────────────────────────────────
 setup_env() {
-    local env_file="$INSTALL_DIR/.env"
+    local env_file="$ENV_FILE"
     local generated_key
     generated_key="$(generate_api_key)"
+
+    mkdir -p "$DATA_DIR"
 
     if [ -f "$env_file" ] && [ "$UPGRADE" = true ]; then
         ok "Existing .env preserved: $env_file"
@@ -272,16 +276,17 @@ setup_env() {
 # ── Required ────────────────────────────────────────────────────────────
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com
-OPENAI_MODEL=gpt-4o
+OPENAI_MODEL=gpt-5.4
 
 # ── Optional ────────────────────────────────────────────────────────────
 HUSKY_PORT=$PORT
-HUSKY_DATA_DIR=~/.husky
+HUSKY_DATA_DIR=$DATA_DIR
 AUTH_ENABLED=true
 HUSKY_API_KEYS=$generated_key
 BRAVE_SEARCH_API_KEY=
 BROWSER_ENABLED=false
 MCP_ENABLED=false
+MCP_CONFIG_PATH=$DATA_DIR/config/mcp-servers.json
 ENVEOF
     fi
 
@@ -291,11 +296,25 @@ ENVEOF
         echo "HUSKY_PORT=$PORT" >> "$env_file"
     fi
 
+    if grep -q '^HUSKY_DATA_DIR=' "$env_file"; then
+        sed -i.bak "s|^HUSKY_DATA_DIR=.*|HUSKY_DATA_DIR=$DATA_DIR|" "$env_file" && rm -f "$env_file.bak"
+    else
+        echo "HUSKY_DATA_DIR=$DATA_DIR" >> "$env_file"
+    fi
+
+    if grep -q '^MCP_CONFIG_PATH=' "$env_file"; then
+        sed -i.bak "s|^MCP_CONFIG_PATH=.*|MCP_CONFIG_PATH=$DATA_DIR/config/mcp-servers.json|" "$env_file" && rm -f "$env_file.bak"
+    else
+        echo "MCP_CONFIG_PATH=$DATA_DIR/config/mcp-servers.json" >> "$env_file"
+    fi
+
     if grep -q '^HUSKY_API_KEYS=change-me-generate-a-random-key$' "$env_file"; then
         sed -i.bak "s|^HUSKY_API_KEYS=.*|HUSKY_API_KEYS=$generated_key|" "$env_file" && rm -f "$env_file.bak"
     elif ! grep -q '^HUSKY_API_KEYS=' "$env_file"; then
         echo "HUSKY_API_KEYS=$generated_key" >> "$env_file"
     fi
+
+    mkdir -p "$DATA_DIR/config" "$DATA_DIR/skills" "$DATA_DIR/db" "$DATA_DIR/logs"
 
     warn "Config created: $env_file"
     warn "You MUST set OPENAI_API_KEY before starting the service."
@@ -311,19 +330,11 @@ ENVEOF
 
 # ── Step 7: Create husky user & set permissions (Linux only) ────────────
 setup_user() {
-    # Skip if running as root and non-interactive (e.g. Docker)
     if [ "$(id -u)" -eq 0 ]; then
-        # Create a dedicated service user if it doesn't exist
-        if ! id husky >/dev/null 2>&1; then
-            info "Creating service user 'husky'..."
-            sudo useradd --system --home-dir "$INSTALL_DIR" --shell /usr/sbin/nologin husky 2>/dev/null || true
-        fi
-        # Grant ownership
-        sudo chown -R husky:husky "$INSTALL_DIR"
-        # Ensure data dir is writable
-        sudo mkdir -p "$INSTALL_DIR/data"
-        sudo chmod 755 "$INSTALL_DIR/data"
+        return 0
     fi
+
+    mkdir -p "$DATA_DIR" "$DATA_DIR/config" "$DATA_DIR/skills" "$DATA_DIR/db" "$DATA_DIR/logs"
 }
 
 # ── Step 8: Install systemd service ─────────────────────────────────────
@@ -343,27 +354,31 @@ setup_systemd() {
 
     local service_src="$INSTALL_DIR/deploy/husky.service"
     local service_user
+    local systemd_readwrite_paths
     service_user="$(id -un)"
+    systemd_readwrite_paths="$DATA_DIR $DATA_DIR/config $DATA_DIR/skills $DATA_DIR/db $DATA_DIR/logs"
 
     if [ -f "$service_src" ]; then
         # Patch the template with actual paths and user
         sed \
-            -e "s|/opt/husky-agent|$INSTALL_DIR|g" \
-            -e "s|User=husky|User=$service_user|g" \
-            -e "s|ReadWritePaths=.*|ReadWritePaths=$INSTALL_DIR/data $INSTALL_DIR/logs|g" \
+            -e "s|WorkingDirectory=.*|WorkingDirectory=$INSTALL_DIR|g" \
+            -e "s|EnvironmentFile=.*|EnvironmentFile=$ENV_FILE|g" \
+            -e "s|ExecStart=.*|ExecStart=$JAVA_HOME/bin/java -jar $INSTALL_DIR/service/target/husky-agent-service-0.0.1-SNAPSHOT.jar|g" \
+            -e "s|^User=.*|User=$service_user|g" \
+            -e "s|ReadWritePaths=.*|ReadWritePaths=$systemd_readwrite_paths|g" \
             "$service_src" > /tmp/husky-agent.service
     else
         # Generate from scratch
         cat > /tmp/husky-agent.service <<SVCEOF
 [Unit]
-Description=Husky Agent — AI assistant service
+Description=Husky — AI assistant service
 After=network.target
 
 [Service]
 Type=simple
 User=$service_user
 WorkingDirectory=$INSTALL_DIR
-EnvironmentFile=$INSTALL_DIR/.env
+EnvironmentFile=$ENV_FILE
 Environment=JAVA_HOME=$JAVA_HOME
 ExecStart=$JAVA_HOME/bin/java -jar $INSTALL_DIR/service/target/husky-agent-service-0.0.1-SNAPSHOT.jar
 Restart=on-failure
@@ -374,7 +389,7 @@ StandardError=journal
 # Security hardening
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=$INSTALL_DIR/data $INSTALL_DIR/logs
+ReadWritePaths=$systemd_readwrite_paths
 
 [Install]
 WantedBy=multi-user.target
@@ -441,20 +456,21 @@ setup_firewall() {
 print_success() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${GREEN}  Husky Agent installed successfully!${NC}"
+    echo -e "${GREEN}  Husky installed successfully!${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "  Install dir : $INSTALL_DIR"
+    echo "  Data dir    : $DATA_DIR"
     echo "  Service port: $PORT"
-    echo "  Config file : $INSTALL_DIR/.env"
+    echo "  Config file : $ENV_FILE"
     echo ""
     echo "  Next steps:"
     echo ""
-    echo "  1. Edit configuration:"
-    echo "     ${CYAN}vi $INSTALL_DIR/.env${NC}"
+    echo "  1. Edit the minimal configuration:"
+    echo "     ${CYAN}vi $ENV_FILE${NC}"
     echo "     (Set OPENAI_API_KEY at minimum)"
     echo ""
-    echo "  2. Start the service:"
+    echo "  2. Start Husky:"
     if [ -f /etc/systemd/system/husky-agent.service ]; then
         echo "     ${CYAN}sudo systemctl start husky-agent${NC}"
         echo "     ${CYAN}sudo systemctl status husky-agent${NC}"
@@ -463,10 +479,11 @@ print_success() {
         echo "     ${CYAN}cd $INSTALL_DIR && bin/husky serve${NC}"
     fi
     echo ""
-    echo "  3. Test the API:"
+    echo "  3. Verify the service:"
     echo "     ${CYAN}curl http://localhost:$PORT/actuator/health${NC}"
+    echo "     (Look for JSON containing \"status\":\"UP\")"
     echo ""
-    echo "  4. Connect TUI (from your local machine):"
+    echo "  4. Open the TUI from another terminal or your local machine:"
     echo "     ${CYAN}husky tui --server ws://YOUR_VPS_IP:$PORT/api/tui${NC}"
     echo ""
     if [ "$UPGRADE" = true ]; then
@@ -478,7 +495,7 @@ print_success() {
 # ── Main ────────────────────────────────────────────────────────────────
 main() {
     echo ""
-    echo -e "${CYAN}Husky Agent — Linux VPS Installer${NC}"
+    echo -e "${CYAN}Husky — Linux VPS Installer${NC}"
     echo ""
 
     preflight

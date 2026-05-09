@@ -35,7 +35,13 @@ Husky 可以用于：
 
 ## 快速开始
 
-### Linux 一键安装
+目标是用不到一分钟先成功跑起来一次：安装、启动服务、验证健康状态、再打开 TUI。
+
+### 第一步：选择安装路径
+
+#### Linux / VPS 快速安装
+
+如果你想在 Linux 主机上尽快完成部署，优先使用安装脚本。
 
 更安全的安装方式：
 
@@ -55,13 +61,17 @@ curl -fsSL https://raw.githubusercontent.com/HandleCoding/OpenHuskyAgent/main/in
 
 ```bash
 bash install.sh --non-interactive
-bash install.sh --install-dir=/opt/husky-agent --port=18088
+bash install.sh --install-dir="$HOME/openHusky" --port=18088
 bash install.sh --upgrade
 ```
 
-安装脚本会 clone 公开仓库，按需安装 JDK 17+，构建 service/client JAR，创建 `.env`，生成随机 `HUSKY_API_KEYS`，并可选安装 systemd 服务。
+安装脚本默认会把仓库 clone 到 `~/openHusky`，按需安装 JDK 17+，构建 service 和 TUI client JAR，把运行配置写到 `~/.husky/.env`，创建 `~/.husky/config`、`~/.husky/skills`、`~/.husky/db` 和 `~/.husky/logs` 目录，生成随机 `HUSKY_API_KEYS`，并可选安装 systemd 服务。
 
-### 手动启动
+`bin/husky` 会优先读取 `~/.husky/.env`，只有在用户级配置不存在时才回退到仓库内的 `.env`。
+
+#### macOS / Windows / 通用源码安装
+
+如果你是在本地开发，或系统不是 Linux，使用源码方式。
 
 前置要求：
 
@@ -75,41 +85,66 @@ bash install.sh --upgrade
 ```bash
 git clone https://github.com/HandleCoding/OpenHuskyAgent.git
 cd OpenHuskyAgent
-cp .env.example .env
+mkdir -p ~/.husky
+cp .env.example ~/.husky/.env
 ```
 
-编辑 `.env`，至少设置：
+如果你只是做纯源码调试，也可以使用仓库内 `.env`；当 `~/.husky/.env` 不存在时，`bin/husky` 会自动回退到它。
+
+### 第二步：设置最小配置
+
+编辑 `~/.husky/.env`，至少设置：
 
 ```bash
 OPENAI_API_KEY=your-key
 OPENAI_BASE_URL=https://api.openai.com
-OPENAI_MODEL=gpt-4o
+OPENAI_MODEL=gpt-5.4
 ```
 
-构建并启动：
+如果默认 base URL 和 model 就适用于你的 provider，那么第一次运行严格必填的只有 `OPENAI_API_KEY`。
+
+### 第三步：构建并启动 Husky
 
 ```bash
 ./mvnw -B -ntp clean install
 bin/husky serve
 ```
 
-健康检查：
+成功信号：当前终端会持续运行服务，并默认监听 `18088` 端口，除非你改了 `HUSKY_PORT`。
+
+本地开发时也可以使用 `bin/husky dev` 一次启动 service 和 TUI，但首次体验更推荐按 `serve` + `tui` 的路径理解整个流程。
+
+### 第四步：验证服务可用
 
 ```bash
 curl http://localhost:18088/actuator/health
 ```
 
-另开终端连接 TUI：
+成功信号：返回的 JSON 中应包含 `"status":"UP"`。
+
+### 第五步：打开 TUI
+
+另开一个终端：
 
 ```bash
 bin/husky tui --server ws://localhost:18088/api/tui
 ```
 
-本地开发可以同时启动 service 和 TUI：
+成功信号：TUI 无报错完成连接，并且你可以立刻发送第一条提示词。
 
-```bash
-bin/husky dev
-```
+## `~/.husky` 目录结构
+
+安装完成后，Husky 会把用户级配置和运行时数据统一放在 `~/.husky` 下：
+
+| 路径 | 用途 |
+|------|------|
+| `~/.husky/.env` | 主运行时配置，包含模型设置、API keys、端口和功能开关 |
+| `~/.husky/config/` | 用户维护的配置文件，例如 `mcp-servers.json` |
+| `~/.husky/skills/` | 从 Husky 数据目录加载的已安装或自定义 skills |
+| `~/.husky/db/` | 运行时 SQLite 数据，例如 session 状态和 checkpoints |
+| `~/.husky/logs/` | 可选日志输出目录，以及需要可写权限的运行时日志目录 |
+
+你可以单独备份或迁移 `~/.husky`，而不影响 `~/openHusky` 中的仓库代码。
 
 ## 最小配置
 
@@ -120,7 +155,7 @@ bin/husky dev
 | `OPENAI_API_KEY` | empty | OpenAI-compatible API key；模型调用必填 |
 | `OPENAI_BASE_URL` | `https://api.openai.com` | OpenAI-compatible endpoint |
 | `OPENAI_COMPLETIONS_PATH` | `/v1/chat/completions` | Chat completions path |
-| `OPENAI_MODEL` | `gpt-4o` | 主 chat model |
+| `OPENAI_MODEL` | `gpt-5.4` | 主 chat model |
 | `OPENAI_TEMPERATURE` | `0.7` | 主模型 temperature |
 | `AUXILIARY_*` | blank/main fallback | 可选辅助模型，用于摘要、压缩、网页总结和 vision |
 | `HUSKY_PORT` | `18088` | HTTP/WebSocket 服务端口 |

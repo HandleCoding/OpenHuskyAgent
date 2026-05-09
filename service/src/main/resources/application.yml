@@ -8,7 +8,7 @@ spring:
       completions-path: ${OPENAI_COMPLETIONS_PATH:/v1/chat/completions}
       chat:
         options:
-          model: ${OPENAI_MODEL:gpt-4o}
+          model: ${OPENAI_MODEL:gpt-5.4}
           temperature: ${OPENAI_TEMPERATURE:0.7}
     mcp:
       client:
@@ -41,7 +41,7 @@ tui:
 # Agent configuration
 agent:
   auxiliary:
-    model: ${AUXILIARY_MODEL:${OPENAI_MODEL:gpt-4o}}
+    model: ${AUXILIARY_MODEL:${OPENAI_MODEL:gpt-5.4}}
     base-url: ${AUXILIARY_BASE_URL:}
     api-key: ${AUXILIARY_API_KEY:}
     completions-path: ${AUXILIARY_COMPLETIONS_PATH:}
@@ -116,11 +116,11 @@ context:
   max-summary-tokens: 4000
   context-length: 128000
   model-context-lengths:
-    gpt-4o: 128000
+    gpt-5.4: 128000
     mimo-v2.5-pro: 800000
     glm-5: 200000
     glm-5.1: 200000
-  summary-model: ${AUXILIARY_MODEL:${OPENAI_MODEL:gpt-4o}}
+  summary-model: ${AUXILIARY_MODEL:${OPENAI_MODEL:gpt-5.4}}
 
 # Shared outbound HTTP proxy config
 proxy:

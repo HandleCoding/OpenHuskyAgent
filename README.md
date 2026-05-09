@@ -35,7 +35,13 @@ Husky can be used as:
 
 ## Quick Start
 
-### One-Click Install On Linux
+The goal is to get Husky working once in under a minute: install, start the service, verify health, then open the TUI.
+
+### Step 1: Pick Your Install Path
+
+#### Linux / VPS Quick Install
+
+Use the installer when you want the fastest setup on a Linux host.
 
 Safer install path:
 
@@ -55,13 +61,17 @@ Useful options:
 
 ```bash
 bash install.sh --non-interactive
-bash install.sh --install-dir=/opt/husky-agent --port=18088
+bash install.sh --install-dir="$HOME/openHusky" --port=18088
 bash install.sh --upgrade
 ```
 
-The installer clones the public repository, installs JDK 17+ when needed, builds service/client JARs, creates `.env`, generates a random `HUSKY_API_KEYS` value, and can install a systemd service.
+The installer clones the repository into `~/openHusky` by default, installs JDK 17+ when needed, builds the service and TUI client JARs, writes runtime config to `~/.husky/.env`, creates the `~/.husky/config`, `~/.husky/skills`, `~/.husky/db`, and `~/.husky/logs` directories, generates a random `HUSKY_API_KEYS` value, and can install a systemd service.
 
-### Manual Setup
+`bin/husky` prefers `~/.husky/.env` and only falls back to the repo-local `.env` when the user-level config file is missing.
+
+#### macOS / Windows / Any Platform From Source
+
+Use the source path when you are developing locally or not on Linux.
 
 Requirements:
 
@@ -75,41 +85,66 @@ Requirements:
 ```bash
 git clone https://github.com/HandleCoding/OpenHuskyAgent.git
 cd OpenHuskyAgent
-cp .env.example .env
+mkdir -p ~/.husky
+cp .env.example ~/.husky/.env
 ```
 
-Edit `.env` and set at least:
+If you prefer a repo-local config for source-only work, `bin/husky` still falls back to `.env` when `~/.husky/.env` does not exist.
+
+### Step 2: Set Minimal Configuration
+
+Edit `~/.husky/.env` and set at least:
 
 ```bash
 OPENAI_API_KEY=your-key
 OPENAI_BASE_URL=https://api.openai.com
-OPENAI_MODEL=gpt-4o
+OPENAI_MODEL=gpt-5.4
 ```
 
-Build and start:
+`OPENAI_API_KEY` is the only strictly required value for a first run if the default base URL and model work for your provider.
+
+### Step 3: Build And Start Husky
 
 ```bash
 ./mvnw -B -ntp clean install
 bin/husky serve
 ```
 
-Health check:
+Success signal: the service keeps running in the current terminal and starts listening on port `18088` unless you changed `HUSKY_PORT`.
+
+For local development, `bin/husky dev` starts the service and TUI together, but `serve` + `tui` is the clearest first-run path.
+
+### Step 4: Verify The Service
 
 ```bash
 curl http://localhost:18088/actuator/health
 ```
 
-Connect the TUI from another terminal:
+Success signal: you should get JSON with `"status":"UP"`.
+
+### Step 5: Open The TUI
+
+In another terminal:
 
 ```bash
 bin/husky tui --server ws://localhost:18088/api/tui
 ```
 
-For local development, start service and TUI together:
+Success signal: the TUI connects without errors and you can send a prompt immediately.
 
-```bash
-bin/husky dev
-```
+## `~/.husky` Layout
+
+After installation, Husky keeps user-level config and runtime data under `~/.husky`:
+
+| Path | Purpose |
+|------|---------|
+| `~/.husky/.env` | Main runtime configuration, including model settings, API keys, ports, and feature toggles |
+| `~/.husky/config/` | User-managed configuration files such as `mcp-servers.json` |
+| `~/.husky/skills/` | Installed or user-authored skills loaded from the Husky data directory |
+| `~/.husky/db/` | Runtime SQLite data such as session state and checkpoints |
+| `~/.husky/logs/` | Optional log output and writable runtime log directory |
+
+You can back up or move `~/.husky` independently from the checked-out repository in `~/openHusky`.
 
 ## Minimal Configuration
 
@@ -120,7 +155,7 @@ Most deployments only need `.env`:
 | `OPENAI_API_KEY` | empty | OpenAI-compatible API key; required for model calls |
 | `OPENAI_BASE_URL` | `https://api.openai.com` | OpenAI-compatible endpoint |
 | `OPENAI_COMPLETIONS_PATH` | `/v1/chat/completions` | Chat completions path |
-| `OPENAI_MODEL` | `gpt-4o` | Main chat model |
+| `OPENAI_MODEL` | `gpt-5.4` | Main chat model |
 | `OPENAI_TEMPERATURE` | `0.7` | Main model temperature |
 | `AUXILIARY_*` | blank/main fallback | Optional model for summaries, compression, web summaries, and vision |
 | `HUSKY_PORT` | `18088` | HTTP/WebSocket service port |

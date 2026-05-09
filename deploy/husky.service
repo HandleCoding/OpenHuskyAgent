@@ -1,13 +1,13 @@
 [Unit]
-Description=Husky Agent — AI assistant service
+Description=Husky — AI assistant service
 After=network.target
 
 [Service]
 Type=simple
-User=husky
-WorkingDirectory=/opt/husky-agent
-EnvironmentFile=/opt/husky-agent/.env
-ExecStart=/usr/bin/java -jar /opt/husky-agent/service/target/husky-agent-service-0.0.1-SNAPSHOT.jar
+User=__HUSKY_USER__
+WorkingDirectory=__HUSKY_INSTALL_DIR__
+EnvironmentFile=__HUSKY_ENV_FILE__
+ExecStart=/usr/bin/java -jar __HUSKY_INSTALL_DIR__/service/target/husky-agent-service-0.0.1-SNAPSHOT.jar
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
@@ -16,7 +16,7 @@ StandardError=journal
 # Security hardening
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/opt/husky-agent/data /opt/husky-agent/logs
+ReadWritePaths=__HUSKY_DATA_DIR__ __HUSKY_DATA_DIR__/config __HUSKY_DATA_DIR__/skills __HUSKY_DATA_DIR__/db __HUSKY_DATA_DIR__/logs
 
 [Install]
 WantedBy=multi-user.target
