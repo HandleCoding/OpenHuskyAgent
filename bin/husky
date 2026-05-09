@@ -1,6 +1,8 @@
 #!/bin/bash
 # Husky CLI
 # Usage:
+#   husky --version                              Print Husky CLI version
+#   husky init                                   Initialize ~/.husky runtime files
 #   husky serve                                  Start the Husky service (foreground)
 #   husky tui                                    Connect the TUI to a running service
 #   husky tui --server ws://host:port/api/tui    Connect to a remote service
@@ -25,6 +27,20 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 CLI_SCRIPT="$SCRIPT_DIR/husky"
+
+read_version() {
+    if [ -f "$PROJECT_DIR/VERSION" ]; then
+        tr -d '[:space:]' < "$PROJECT_DIR/VERSION"
+        return 0
+    fi
+
+    perl -0ne 'if (s|<parent>.*?</parent>||s && m|<project[^>]*>.*?<version>([^<]+)</version>|s) { print $1 }' "$PROJECT_DIR/pom.xml" 2>/dev/null
+}
+
+VERSION="$(read_version || true)"
+if [ -z "$VERSION" ]; then
+    VERSION="unknown"
+fi
 
 # Load .env (user config first, then repo-local fallback)
 load_env() {
@@ -78,6 +94,60 @@ ENV_FILE="$(resolve_absolute_path "${HUSKY_ENV_FILE:-$DATA_DIR/.env}" "$ENV_BASE
 ensure_runtime_dirs() {
     mkdir -p "$DATA_DIR/config" "$DATA_DIR/skills" "$DATA_DIR/db" "$DATA_DIR/logs" "$MEMORY_DIR"
     touch "$MEMORY_DIR/MEMORY.md" "$MEMORY_DIR/USER.md"
+}
+
+initialize_env_file() {
+    if [ -f "$ENV_FILE" ]; then
+        return 0
+    fi
+
+    local env_template=""
+    if [ -f "$PROJECT_DIR/.env.example" ]; then
+        env_template="$PROJECT_DIR/.env.example"
+    elif [ -f "$PROJECT_DIR/.env" ]; then
+        env_template="$PROJECT_DIR/.env"
+    fi
+
+    if [ -n "$env_template" ]; then
+        cp "$env_template" "$ENV_FILE"
+    else
+        cat > "$ENV_FILE" <<EOF
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://api.openai.com
+OPENAI_MODEL=gpt-5.4
+HUSKY_PORT=${HEALTH_PORT}
+HUSKY_DATA_DIR=${DATA_DIR}
+AUTH_ENABLED=true
+MCP_CONFIG_PATH=${DATA_DIR}/config/mcp-servers.json
+EOF
+    fi
+
+    if grep -q '^HUSKY_DATA_DIR=' "$ENV_FILE"; then
+        perl -0pi -e 's|^HUSKY_DATA_DIR=.*$|HUSKY_DATA_DIR='"$DATA_DIR"'|m' "$ENV_FILE"
+    else
+        printf '\nHUSKY_DATA_DIR=%s\n' "$DATA_DIR" >> "$ENV_FILE"
+    fi
+
+    if grep -q '^MCP_CONFIG_PATH=' "$ENV_FILE"; then
+        perl -0pi -e 's|^MCP_CONFIG_PATH=.*$|MCP_CONFIG_PATH='"$DATA_DIR"'/config/mcp-servers.json|m' "$ENV_FILE"
+    else
+        printf 'MCP_CONFIG_PATH=%s/config/mcp-servers.json\n' "$DATA_DIR" >> "$ENV_FILE"
+    fi
+}
+
+print_version() {
+    echo "husky $VERSION"
+}
+
+run_init() {
+    ensure_runtime_dirs
+    initialize_env_file
+    echo "Initialized Husky runtime files"
+    echo "  Data directory: $DATA_DIR"
+    echo "  Config file: $ENV_FILE"
+    echo "  Memory files: $MEMORY_DIR/MEMORY.md, $MEMORY_DIR/USER.md"
+    echo ""
+    echo "Next step: edit $ENV_FILE and set OPENAI_API_KEY"
 }
 
 service_installed() {
@@ -178,6 +248,13 @@ if [ ! -f "$MVNW" ]; then
 fi
 
 case "${1:-serve}" in
+    --version|-v|version)
+        print_version
+        ;;
+    init)
+        shift
+        run_init
+        ;;
     serve)
         if [ -n "$JAR" ]; then
             exec java -jar "$JAR" "${@:2}"
@@ -392,9 +469,10 @@ case "${1:-serve}" in
         echo "Now you can run 'husky serve' or 'husky tui' from anywhere."
         ;;
     *)
-        echo "Usage: husky {serve|tui|dev|start|stop|status|logs|update|install}"
+        echo "Usage: husky {init|serve|tui|dev|start|stop|status|logs|update|install|--version}"
         echo ""
         echo "Start here:"
+        echo "  husky init                  Create ~/.husky config and runtime directories"
         echo "  husky serve                 Start the service in the current terminal"
         echo "  husky tui                   Open the TUI and connect to localhost"
         echo "  husky start                 Start the service in background"
@@ -402,6 +480,7 @@ case "${1:-serve}" in
         echo "  husky update                Upgrade this checkout with install.sh --upgrade"
         echo ""
         echo "Commands:"
+        echo "  init     Initialize ~/.husky config and runtime files"
         echo "  serve    Start the Husky service (HTTP + WebSocket)"
         echo "  tui      Connect the TUI to a running service"
         echo "  dev      Start service + TUI in one command"
@@ -411,6 +490,7 @@ case "${1:-serve}" in
         echo "  logs     Tail background service logs"
         echo "  update   Run the recommended local upgrade path"
         echo "  install  Create a symlink in /usr/local/bin for global access"
+        echo "  --version  Print Husky CLI version"
         echo ""
         echo "TUI options:"
         echo "  --server URL   WebSocket URL (default: ws://localhost:18088/api/tui)"

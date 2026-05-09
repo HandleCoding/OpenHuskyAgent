@@ -37,6 +37,7 @@ jobs:
           mkdir -p dist/husky-macos-universal/service/target
           mkdir -p dist/husky-macos-universal/client/target
 
+          printf '%s\n' "${GITHUB_REF_NAME#v}" > dist/husky-macos-universal/VERSION
           cp bin/husky dist/husky-macos-universal/bin/
           cp .env.example dist/husky-macos-universal/
           cp LICENSE dist/husky-macos-universal/

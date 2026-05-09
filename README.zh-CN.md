@@ -77,8 +77,7 @@ husky update
 ```bash
 brew tap HandleCoding/husky
 brew install HandleCoding/husky/husky
-mkdir -p ~/.husky
-cp "$(brew --prefix husky)/libexec/husky-macos-universal/.env.example" ~/.husky/.env
+husky init
 husky serve
 ```
 
