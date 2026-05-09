@@ -1,0 +1,221 @@
+#!/bin/bash
+# Husky Agent CLI
+# Usage:
+#   husky serve        Start the agent service (default)
+#   husky tui          Connect TUI client to running service
+#   husky tui --server ws://host:port/api/tui   Connect to remote service
+#   husky tui --port 18089                     Connect to localhost:18089
+#   husky dev          Start service + TUI (one command)
+#   husky install      Create symlink in /usr/local/bin for global access
+
+set -e
+
+# ── Resolve script location (handle symlinks & relative paths) ────────────
+SOURCE="$0"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# ── Load .env (project dir first, then home dir fallback) ──────────────────
+load_env() {
+    for env_file in "$PROJECT_DIR/.env" "$HOME/.husky-agent/.env"; do
+        if [ -f "$env_file" ]; then
+            set -a
+            # shellcheck disable=SC1090
+            source "$env_file"
+            set +a
+            return 0
+        fi
+    done
+    return 1
+}
+load_env
+
+# ── Find the Husky JARs ────────────────────────────────────────────────────
+if [ -f "$PROJECT_DIR/service/target/husky-agent-service-0.0.1-SNAPSHOT.jar" ]; then
+    JAR="$PROJECT_DIR/service/target/husky-agent-service-0.0.1-SNAPSHOT.jar"
+elif [ -f "$PROJECT_DIR/target/husky-agent-service-0.0.1-SNAPSHOT.jar" ]; then
+    JAR="$PROJECT_DIR/target/husky-agent-service-0.0.1-SNAPSHOT.jar"
+else
+    JAR=""
+fi
+
+if [ -f "$PROJECT_DIR/client/target/husky-agent-client-0.0.1-SNAPSHOT.jar" ]; then
+    CLIENT_JAR="$PROJECT_DIR/client/target/husky-agent-client-0.0.1-SNAPSHOT.jar"
+elif [ -f "$PROJECT_DIR/target/husky-agent-client-0.0.1-SNAPSHOT.jar" ]; then
+    CLIENT_JAR="$PROJECT_DIR/target/husky-agent-client-0.0.1-SNAPSHOT.jar"
+else
+    CLIENT_JAR=""
+fi
+
+MVNW="$PROJECT_DIR/mvnw"
+if [ ! -f "$MVNW" ]; then
+    MVNW=""
+fi
+
+# ── Helper: wait for service to be ready ──────────────────────────────────
+wait_for_service() {
+    local url="${1:-http://localhost:18088/actuator/health}"
+    local max_wait="${2:-30}"
+    local elapsed=0
+    echo "  ⏳ 等待服务就绪..."
+    while [ $elapsed -lt $max_wait ]; do
+        if curl -sf "$url" > /dev/null 2>&1; then
+            echo "  ✓ 服务已就绪"
+            return 0
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    echo "  ⚠ 服务未在 ${max_wait}s 内就绪，尝试连接..."
+    return 1
+}
+
+# ── Helper: start service in background ───────────────────────────────────
+start_service_bg() {
+    if [ -n "$JAR" ]; then
+        java -jar "$JAR" &
+    elif [ -n "$MVNW" ]; then
+        "$MVNW" spring-boot:run -pl service &
+    else
+        echo "Error: Cannot find Husky JAR or mvnw"
+        exit 1
+    fi
+    SERVICE_PID=$!
+}
+
+# ── Commands ──────────────────────────────────────────────────────────────
+
+case "${1:-serve}" in
+    serve)
+        if [ -n "$JAR" ]; then
+            exec java -jar "$JAR" "${@:2}"
+        elif [ -n "$MVNW" ]; then
+            exec "$MVNW" spring-boot:run -pl service
+        else
+            echo "Error: Cannot find Husky JAR or mvnw"
+            exit 1
+        fi
+        ;;
+    tui)
+        shift
+        SERVER_URL="ws://localhost:18088/api/tui"
+
+        # Parse --server / --port options
+        while [[ $# -gt 0 ]]; do
+            case $1 in
+                --server)
+                    SERVER_URL="$2"
+                    shift 2
+                    ;;
+                --port)
+                    SERVER_URL="ws://localhost:$2/api/tui"
+                    shift 2
+                    ;;
+                *)
+                    shift
+                    ;;
+            esac
+        done
+
+        if [ -n "$CLIENT_JAR" ]; then
+            exec java -jar "$CLIENT_JAR" --server "$SERVER_URL"
+        elif [ -n "$MVNW" ]; then
+            exec "$MVNW" exec:java -pl client \
+                -Dexec.mainClass="io.github.huskyagent.tui.AgentTUI" \
+                -Dexec.args="--server $SERVER_URL"
+        else
+            echo "Error: Cannot find Husky client JAR or mvnw"
+            exit 1
+        fi
+        ;;
+    dev)
+        # Start service in background, wait for ready, then connect TUI
+        shift
+        SERVER_PORT="18088"
+        SERVER_URL="ws://localhost:${SERVER_PORT}/api/tui"
+
+        # Parse --server / --port options
+        while [[ $# -gt 0 ]]; do
+            case $1 in
+                --server)
+                    SERVER_URL="$2"
+                    shift 2
+                    ;;
+                --port)
+                    SERVER_PORT="$2"
+                    SERVER_URL="ws://localhost:${SERVER_PORT}/api/tui"
+                    shift 2
+                    ;;
+                *)
+                    shift
+                    ;;
+            esac
+        done
+
+        echo "🚀 Starting Husky service..."
+        if [ -n "$JAR" ]; then
+            java -jar "$JAR" --server.port="$SERVER_PORT" &
+        elif [ -n "$MVNW" ]; then
+            "$MVNW" spring-boot:run -pl service -Dspring-boot.run.arguments="--server.port=$SERVER_PORT" &
+        else
+            echo "Error: Cannot find Husky JAR or mvnw"
+            exit 1
+        fi
+        SERVICE_PID=$!
+        wait_for_service "http://localhost:${SERVER_PORT}/actuator/health" 30
+
+        echo "🐺 Connecting TUI..."
+        if [ -n "$CLIENT_JAR" ]; then
+            exec java -jar "$CLIENT_JAR" --server "$SERVER_URL"
+        elif [ -n "$MVNW" ]; then
+            exec "$MVNW" exec:java -pl client \
+                -Dexec.mainClass="io.github.huskyagent.tui.AgentTUI" \
+                -Dexec.args="--server $SERVER_URL"
+        else
+            echo "Error: Cannot find client JAR or mvnw"
+            kill $SERVICE_PID 2>/dev/null
+            exit 1
+        fi
+        ;;
+    install)
+        # Create symlink in /usr/local/bin for global access
+        TARGET="/usr/local/bin/husky"
+        if [ -L "$TARGET" ]; then
+            existing="$(readlink "$TARGET")"
+            if [ "$existing" = "$SCRIPT_DIR/husky" ]; then
+                echo "✓ Already installed: $TARGET → $SCRIPT_DIR/husky"
+            else
+                echo "⚠ $TARGET exists (→ $existing), updating..."
+                sudo ln -sf "$SCRIPT_DIR/husky" "$TARGET"
+                echo "✓ Updated: $TARGET → $SCRIPT_DIR/husky"
+            fi
+        elif [ -e "$TARGET" ]; then
+            echo "⚠ $TARGET exists and is not a symlink. Remove it first or choose another path."
+            exit 1
+        else
+            sudo ln -s "$SCRIPT_DIR/husky" "$TARGET"
+            echo "✓ Installed: $TARGET → $SCRIPT_DIR/husky"
+        fi
+        echo ""
+        echo "Now you can run 'husky serve' or 'husky tui' from anywhere!"
+        ;;
+    *)
+        echo "Usage: husky {serve|tui|dev|install}"
+        echo ""
+        echo "Commands:"
+        echo "  serve    Start the agent service (HTTP + WebSocket)"
+        echo "  tui      Connect TUI client to running service"
+        echo "  dev      Start service + TUI in one command"
+        echo "  install  Create symlink in /usr/local/bin for global access"
+        echo ""
+        echo "TUI options:"
+        echo "  --server URL   WebSocket URL (default: ws://localhost:18088/api/tui)"
+echo "  --port PORT    Shortcut for ws://localhost:PORT/api/tui"
+        exit 1
+        ;;
+esac

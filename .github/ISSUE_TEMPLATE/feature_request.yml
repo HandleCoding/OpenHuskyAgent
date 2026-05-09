@@ -1,0 +1,28 @@
+name: Feature request
+description: Propose a capability, integration, or behavior change
+labels: [enhancement]
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: Scenario
+      description: What workflow, channel, scene, or deployment need does this support?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the user-visible behavior and any relevant metadata, tool, memory, storage, or security policy impact.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing workarounds or other designs you considered.
+  - type: textarea
+    id: risks
+    attributes:
+      label: Operational or security considerations
+      description: Note any new external calls, tool exposure, data storage, permissions, or deployment impact.

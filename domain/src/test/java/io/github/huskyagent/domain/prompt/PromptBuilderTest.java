@@ -1,0 +1,497 @@
+package io.github.huskyagent.domain.prompt;
+
+import io.github.huskyagent.domain.capability.CapabilityView;
+import io.github.huskyagent.domain.context.policy.ContextPolicy;
+import io.github.huskyagent.domain.memory.policy.MemoryPolicyConfig;
+import io.github.huskyagent.domain.prompt.section.*;
+import io.github.huskyagent.infra.knowledge.KnowledgeManager;
+import io.github.huskyagent.domain.runtime.RuntimePolicy;
+import io.github.huskyagent.infra.memory.MemoryManager;
+import io.github.huskyagent.infra.session.SessionScope;
+import io.github.huskyagent.infra.mcp.McpServerConnector;
+import io.github.huskyagent.infra.skill.SkillManager;
+import io.github.huskyagent.infra.tool.registry.ToolDefinition;
+import io.github.huskyagent.infra.tool.registry.ToolRegistry;
+import io.github.huskyagent.infra.tool.todo.TodoStore;
+import io.github.huskyagent.infra.tool.Toolset;
+import io.modelcontextprotocol.spec.McpSchema;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.when;
+
+/**
+ * Prompt Builder 单元测试
+ */
+class PromptBuilderTest {
+
+    private ToolRegistry toolRegistry;
+    private ContextFileLoader contextFileLoader;
+    private PromptBuilder promptBuilder;
+
+    @BeforeEach
+    void setUp() {
+        toolRegistry = new ToolRegistry(java.util.List.of());
+        contextFileLoader = new ContextFileLoader();
+        promptBuilder = new PromptBuilder(contextFileLoader, mock(MemoryManager.class), mock(KnowledgeManager.class), mock(SkillManager.class), new TodoStore(), null, "test-model", "https://api.openai.com", "auto");
+    }
+
+    @Test
+    void testDefaultSectionsRegistered() {
+        List<PromptBuilder.SectionInfo> infos = promptBuilder.getSectionInfos();
+
+        // 验证默认注册的 Section
+        assertTrue(infos.stream().anyMatch(s -> s.name().equals("identity")));
+        assertTrue(infos.stream().anyMatch(s -> s.name().equals("gateway")));
+        assertTrue(infos.stream().anyMatch(s -> s.name().equals("memory")));
+        assertTrue(infos.stream().anyMatch(s -> s.name().equals("skills")));
+        assertTrue(infos.stream().anyMatch(s -> s.name().equals("knowledge")));
+        assertTrue(infos.stream().anyMatch(s -> s.name().equals("context-files")));
+        assertTrue(infos.stream().anyMatch(s -> s.name().equals("tools")));
+        assertTrue(infos.stream().anyMatch(s -> s.name().equals("tool_use_enforcement")));
+        assertTrue(infos.stream().anyMatch(s -> s.name().equals("mcp")));
+        assertTrue(infos.stream().anyMatch(s -> s.name().equals("todo")));
+        assertTrue(infos.stream().anyMatch(s -> s.name().equals("runtime")));
+    }
+
+    @Test
+    void testSectionPriorityOrder() {
+        List<PromptBuilder.SectionInfo> infos = promptBuilder.getSectionInfos();
+
+        // 验证按 priority 排序
+        int lastPriority = -1;
+        for (PromptBuilder.SectionInfo info : infos) {
+            assertTrue(info.priority() >= lastPriority,
+                "Sections should be sorted by priority");
+            lastPriority = info.priority();
+        }
+    }
+
+    @Test
+    void testBuildBasicPrompt() {
+        String prompt = promptBuilder.build(context("test-session-basic"));
+
+        // 验证基本内容存在
+        assertTrue(prompt.contains("全能的个人智能助手"), "Should contain identity");
+        // RuntimeSection 使用 markdown 格式: **Date**: 和 **Time**:
+        assertTrue(prompt.contains("Date"), "Should contain date");
+        assertTrue(prompt.contains("Time"), "Should contain time");
+        assertTrue(prompt.contains("OS"), "Should contain OS info");
+    }
+
+    @Test
+    void testSceneSystemPromptTemplateIsRendered() {
+        String prompt = promptBuilder.build(context("test-session-scene-template", "根据系统提供的信息，当前时间是：{{currentDateTime}}"));
+
+        assertTrue(prompt.contains("根据系统提供的信息，当前时间是："));
+        assertFalse(prompt.contains("{{currentDateTime}}"));
+    }
+
+    @Test
+    void testBuildSessionStableExcludesDynamicSections() {
+        String prompt = promptBuilder.buildSessionStable(context("stable-session")
+                .gatewaySystemPrompt("Stable gateway instructions."));
+
+        assertTrue(prompt.contains("全能的个人智能助手"));
+        assertTrue(prompt.contains("Stable gateway instructions."));
+        assertFalse(prompt.contains("Runtime Environment"));
+        assertFalse(prompt.contains("Available Tools"));
+        assertFalse(prompt.contains("Current Tasks"));
+    }
+
+    @Test
+    void testBuildDynamicIncludesOnlyDynamicSections() {
+        registerReadFileTool();
+
+        String prompt = promptBuilder.buildDynamic(context("dynamic-session")
+                .runtimePolicy(runtimePolicyWithRegistryTools())
+                .gatewaySystemPrompt("Stable gateway instructions."));
+
+        assertTrue(prompt.contains("Runtime Environment"));
+        assertTrue(prompt.contains("Available Tools"));
+        assertFalse(prompt.contains("全能的个人智能助手"));
+        assertFalse(prompt.contains("Stable gateway instructions."));
+    }
+
+    @Test
+    void testBuildStillIncludesStableAndDynamicSections() {
+        registerReadFileTool();
+
+        String prompt = promptBuilder.build(context("full-session")
+                .runtimePolicy(runtimePolicyWithRegistryTools())
+                .gatewaySystemPrompt("Stable gateway instructions."));
+
+        assertTrue(prompt.contains("全能的个人智能助手"));
+        assertTrue(prompt.contains("Stable gateway instructions."));
+        assertTrue(prompt.contains("Runtime Environment"));
+        assertTrue(prompt.contains("Available Tools"));
+    }
+
+    @Test
+    void testNullSessionStableBuildDoesNotReuseCachedSectionAcrossContexts() {
+        PromptContext firstContext = context(null)
+                .gatewaySystemPrompt("First gateway instructions.");
+        PromptContext secondContext = context(null)
+                .gatewaySystemPrompt("Second gateway instructions.");
+
+        String firstPrompt = promptBuilder.buildSessionStable(firstContext);
+        String secondPrompt = promptBuilder.buildSessionStable(secondContext);
+
+        assertTrue(firstPrompt.contains("First gateway instructions."));
+        assertFalse(firstPrompt.contains("Second gateway instructions."));
+        assertTrue(secondPrompt.contains("Second gateway instructions."));
+        assertFalse(secondPrompt.contains("First gateway instructions."));
+    }
+
+    private PromptContext context(String sessionId) {
+        return context(sessionId, null);
+    }
+
+    private PromptContext context(String sessionId, String systemPrompt) {
+        return PromptContext.of(sessionId, Path.of("/tmp"))
+                .runtimePolicy(runtimePolicyWithTools(List.of(), systemPrompt));
+    }
+
+    private RuntimePolicy defaultRuntimePolicy() {
+        return runtimePolicyWithTools(List.of());
+    }
+
+    private RuntimePolicy runtimePolicyWithRegistryTools() {
+        return runtimePolicyWithTools(toolRegistry.getAllEnabled());
+    }
+
+    private RuntimePolicy runtimePolicyWithTools(List<ToolDefinition> tools) {
+        return runtimePolicyWithTools(tools, null);
+    }
+
+    private RuntimePolicy runtimePolicyWithTools(List<ToolDefinition> tools, String systemPrompt) {
+        return RuntimePolicy.builder()
+                .systemPrompt(systemPrompt)
+                .capabilityView(CapabilityView.builder()
+                        .visibleTools(tools)
+                        .visibleToolNames(tools.stream().map(ToolDefinition::name).collect(java.util.stream.Collectors.toSet()))
+                        .visibleToolsets(tools.stream().map(ToolDefinition::toolset).collect(java.util.stream.Collectors.toSet()))
+                        .visibleSkills(List.of())
+                        .visibleSkillNames(Set.of())
+                        .visiblePromptSections(Set.of())
+                        .build())
+                .contextPolicy(ContextPolicy.builder().enabled(true).build())
+                .memoryPolicy(MemoryPolicyConfig.from(null))
+                .build();
+    }
+
+    private void registerReadFileTool() {
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode schema = mapper.createObjectNode();
+        schema.put("type", "object");
+        toolRegistry.register(ToolDefinition.of(
+                "read_file",
+                "Read file content",
+                Toolset.CORE,
+                schema,
+                args -> io.github.huskyagent.infra.tool.registry.ToolResult.success("test")
+        ));
+    }
+
+    @Test
+    void testMcpSectionRefreshesFromVisibleRegistryTools() {
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode schema = mapper.createObjectNode();
+        schema.put("type", "object");
+        toolRegistry.register(ToolDefinition.of("mcp_server_weather", "Weather tool", Toolset.MCP, schema,
+                args -> io.github.huskyagent.infra.tool.registry.ToolResult.success("ok")));
+
+        String prompt = promptBuilder.buildDynamic(context("dynamic-mcp")
+                .runtimePolicy(runtimePolicyWithRegistryTools()));
+        assertTrue(prompt.contains("MCP Tools"));
+        assertTrue(prompt.contains("mcp_server_weather"));
+    }
+
+    @Test
+    void testBuildPromptWithTools() {
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode schema = mapper.createObjectNode();
+        schema.put("type", "object");
+
+        toolRegistry.register(ToolDefinition.of(
+            "read_file",
+            "Read file content",
+            Toolset.CORE,
+            schema,
+            args -> io.github.huskyagent.infra.tool.registry.ToolResult.success("test")
+        ));
+
+        toolRegistry.register(ToolDefinition.of(
+            "terminal",
+            "Execute shell command",
+            Toolset.TERMINAL,
+            schema,
+            args -> io.github.huskyagent.infra.tool.registry.ToolResult.success("test")
+        ));
+
+        String prompt = promptBuilder.build(context("test-session")
+                .runtimePolicy(runtimePolicyWithRegistryTools()));
+
+        assertTrue(prompt.contains("Available Tools"), "Should contain tools section");
+        assertTrue(prompt.contains("read_file"), "Should contain read_file tool");
+        assertTrue(prompt.contains("terminal"), "Should contain terminal tool");
+        assertTrue(prompt.contains("CORE"), "Should contain CORE toolset");
+        assertTrue(prompt.contains("TERMINAL"), "Should contain TERMINAL toolset");
+    }
+
+    @Test
+    void testMcpSectionRespectsRuntimeVisibleTools() {
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode schema = mapper.createObjectNode();
+        schema.put("type", "object");
+
+        ToolDefinition visibleMcpTool = ToolDefinition.of("mcp_server_weather", "Weather tool", Toolset.MCP, schema,
+                args -> io.github.huskyagent.infra.tool.registry.ToolResult.success("ok"));
+        ToolDefinition hiddenMcpTool = ToolDefinition.of("mcp_server_secret", "Secret tool", Toolset.MCP, schema,
+                args -> io.github.huskyagent.infra.tool.registry.ToolResult.success("ok"));
+
+        RuntimePolicy runtimePolicy = RuntimePolicy.builder()
+                .capabilityView(CapabilityView.builder()
+                        .visibleTools(List.of(visibleMcpTool))
+                        .visibleToolNames(Set.of("mcp_server_weather"))
+                        .visibleToolsets(Set.of(Toolset.MCP))
+                        .visibleSkills(List.of())
+                        .visibleSkillNames(Set.of())
+                        .visiblePromptSections(Set.of())
+                        .build())
+                .contextPolicy(ContextPolicy.builder().enabled(true).build())
+                .memoryPolicy(MemoryPolicyConfig.from(null))
+                .build();
+
+        toolRegistry.register(visibleMcpTool);
+        toolRegistry.register(hiddenMcpTool);
+
+        String prompt = promptBuilder.buildDynamic(context("dynamic-mcp-visible")
+                .runtimePolicy(runtimePolicy));
+
+        assertTrue(prompt.contains("mcp_server_weather"));
+        assertFalse(prompt.contains("mcp_server_secret"));
+    }
+
+    @Test
+    void testSceneAllowedToolsFiltersToolSection() {
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode schema = mapper.createObjectNode();
+        schema.put("type", "object");
+        ToolDefinition readFile = ToolDefinition.of("read_file", "Read file content", Toolset.CORE, schema,
+                args -> io.github.huskyagent.infra.tool.registry.ToolResult.success("test"));
+        toolRegistry.register(readFile);
+        toolRegistry.register(ToolDefinition.of("terminal", "Execute shell command", Toolset.TERMINAL, schema,
+                args -> io.github.huskyagent.infra.tool.registry.ToolResult.success("test")));
+
+        RuntimePolicy runtimePolicy = RuntimePolicy.builder()
+                .capabilityView(CapabilityView.builder()
+                        .visibleTools(List.of(readFile))
+                        .visibleToolNames(Set.of("read_file"))
+                        .visibleToolsets(Set.of(Toolset.CORE))
+                        .visibleSkills(List.of())
+                        .visibleSkillNames(Set.of())
+                        .visiblePromptSections(Set.of())
+                        .build())
+                .contextPolicy(ContextPolicy.builder().enabled(true).build())
+                .memoryPolicy(MemoryPolicyConfig.from(null))
+                .build();
+        String prompt = promptBuilder.build(context("test-session-allowed-tools")
+                .runtimePolicy(runtimePolicy));
+
+        assertTrue(prompt.contains("read_file"));
+        assertFalse(prompt.contains("terminal"));
+    }
+
+    @Test
+    void testDynamicSectionRebuilds() {
+        RuntimeSection runtimeSection = promptBuilder.getSection("runtime");
+
+        assertNotNull(runtimeSection, "RuntimeSection should exist");
+        assertTrue(runtimeSection.isDynamic(), "RuntimeSection should be dynamic");
+
+        // 构建两次，时间应该不同（至少秒数）
+        String prompt1 = promptBuilder.build(context("session1"));
+        String prompt2 = promptBuilder.build(context("session1"));
+
+        // DateTime 是动态的，每次都应该重新生成
+        // 但由于测试执行很快，时间可能相同，所以我们只验证它是 dynamic
+        assertTrue(runtimeSection.isDynamic());
+    }
+
+    @Test
+    void testStaticSectionCached() {
+        IdentitySection identitySection = promptBuilder.getSection("identity");
+
+        assertNotNull(identitySection, "IdentitySection should exist");
+        assertFalse(identitySection.isDynamic(), "IdentitySection should not be dynamic");
+
+        // 构建两次，内容应该相同（缓存）
+        String prompt1 = promptBuilder.build(context("session1"));
+        String prompt2 = promptBuilder.build(context("session1"));
+
+        // Identity 部分应该相同
+        assertTrue(prompt1.contains("全能的个人智能助手"));
+        assertTrue(prompt2.contains("全能的个人智能助手"));
+    }
+
+    @Test
+    void testClearCache() {
+        // 构建一次（会缓存静态 Section）
+        String prompt1 = promptBuilder.build(context("session1"));
+
+        // 清除缓存
+        promptBuilder.clearCache("session1");
+
+        // 再次构建
+        String prompt2 = promptBuilder.build(context("session1"));
+
+        // 验证内容仍然正确（只是重建了）
+        assertTrue(prompt2.contains("全能的个人智能助手"));
+    }
+
+    @Test
+    void testEnableDisableSection() {
+        RuntimeSection runtimeSection = promptBuilder.getSection("runtime");
+        assertNotNull(runtimeSection, "RuntimeSection should exist");
+
+        // 禁用 Runtime Section
+        runtimeSection.setEnabled(false);
+        assertFalse(runtimeSection.isEnabled(), "RuntimeSection should be disabled");
+
+        // 清除缓存
+        promptBuilder.clearCache();
+
+        String prompt = promptBuilder.build(context("test-session-disable"));
+
+        // Runtime 应该不存在
+        assertFalse(prompt.contains("Runtime Environment"), "Runtime section content should not appear when disabled");
+
+        // 重新启用
+        runtimeSection.setEnabled(true);
+        assertTrue(runtimeSection.isEnabled(), "RuntimeSection should be enabled after setting true");
+
+        prompt = promptBuilder.build(context("test-session-enable"));
+        assertTrue(prompt.contains("Runtime Environment"), "Runtime section content should appear when enabled");
+    }
+
+    @Test
+    void testRegisterCustomSection() {
+        // 注册自定义 Section
+        promptBuilder.registerSection(new AbstractPromptSection() {
+            @Override
+            public String getName() {
+                return "custom";
+            }
+
+            @Override
+            public int getPriority() {
+                return 150;  // 在 Identity 和 Gateway 之间
+            }
+
+            @Override
+            public String build(PromptContext context) {
+                return "## Custom Section\n\nThis is a custom section.\n\n";
+            }
+        });
+
+        String prompt = promptBuilder.build(context("test-session"));
+
+        assertTrue(prompt.contains("Custom Section"), "Should contain custom section");
+    }
+
+    @Test
+    void testMemorySection() {
+        MemorySection memorySection = promptBuilder.getSection("memory");
+
+        // 设置 memory 内容
+        memorySection.setMemoryContent("User prefers Python over Java.");
+        memorySection.setUserContent("User is a backend developer.");
+
+        String prompt = promptBuilder.build(context("test-session"));
+
+        // 验证 memory 标签存在
+        assertTrue(prompt.contains("<memory-context>"), "Should contain memory-context tag");
+        assertTrue(prompt.contains("Python over Java"), "Should contain memory content");
+        assertTrue(prompt.contains("<user-context>"), "Should contain user-context tag");
+    }
+
+
+    @Test
+    void memorySectionPassesExplicitSessionScopeToManager() {
+        MemoryManager memoryManager = mock(MemoryManager.class);
+        MemorySection section = new MemorySection(memoryManager);
+        SessionScope scope = SessionScope.builder()
+                .sessionId("session-1")
+                .memoryPolicy("SESSION")
+                .memoryStrategyId("default")
+                .build();
+        when(memoryManager.hasAvailableProvider()).thenReturn(true);
+        when(memoryManager.buildSystemPrompt(same(scope))).thenReturn("Scoped memory");
+
+        String prompt = section.build(context("session-1").sessionScope(scope));
+
+        assertEquals("Scoped memory", prompt);
+    }
+
+
+    @Test
+    void memorySectionRequiresSessionScopeWhenManagerIsAvailable() {
+        MemoryManager memoryManager = mock(MemoryManager.class);
+        MemorySection section = new MemorySection(memoryManager);
+        when(memoryManager.hasAvailableProvider()).thenReturn(true);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> section.build(context("session-1")));
+
+        assertEquals("SessionScope is required for memory prompt", error.getMessage());
+    }
+
+    @Test
+    void testPromptContextWithGateway() {
+        PromptContext context = context("test-session")
+            .gatewaySystemPrompt("You are assisting a user on Telegram.");
+
+        String prompt = promptBuilder.build(context);
+
+        assertTrue(prompt.contains("Telegram"), "Should contain gateway prompt");
+    }
+
+    @Test
+    void testGatewayPromptComposesWithOtherSections() {
+        PromptContext context = context("test-session-scene")
+                .gatewaySystemPrompt("Scene-specific instructions.");
+
+        String prompt = promptBuilder.build(context);
+
+        assertTrue(prompt.contains("Scene-specific instructions."), "Should contain scene/gateway prompt");
+        assertTrue(prompt.contains("全能的个人智能助手"), "Should still contain identity section");
+        assertTrue(prompt.contains("Runtime Environment"), "Should still contain runtime section");
+    }
+
+    @Test
+    void testSectionRemoval() {
+        // 移除 MCP Section
+        promptBuilder.removeSection("mcp");
+
+        List<PromptBuilder.SectionInfo> infos = promptBuilder.getSectionInfos();
+
+        assertFalse(infos.stream().anyMatch(s -> s.name().equals("mcp")),
+            "MCP section should be removed");
+
+        // 重新添加
+        promptBuilder.registerSection(new McpSection());
+        infos = promptBuilder.getSectionInfos();
+        assertTrue(infos.stream().anyMatch(s -> s.name().equals("mcp")),
+            "MCP section should be added back");
+    }
+}

@@ -1,0 +1,395 @@
+spring:
+  application:
+    name: husky
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      completions-path: ${OPENAI_COMPLETIONS_PATH:/v1/chat/completions}
+      chat:
+        options:
+          model: ${OPENAI_MODEL:gpt-4o}
+          temperature: ${OPENAI_TEMPERATURE:0.7}
+    mcp:
+      client:
+        enabled: false
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
+  datasource:
+    url: jdbc:sqlite:${husky.data.dir}/db/sessions.db?journal_mode=WAL
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+
+# TUI 配置
+tui:
+  in-process: false
+  ws:
+    path: ${TUI_WS_PATH:/api/tui}
+    allowed-origins: ${TUI_WS_ALLOWED_ORIGINS:*}
+
+# Agent 配置
+agent:
+  auxiliary:
+    model: ${AUXILIARY_MODEL:${OPENAI_MODEL:gpt-4o}}
+    base-url: ${AUXILIARY_BASE_URL:}
+    api-key: ${AUXILIARY_API_KEY:}
+    completions-path: ${AUXILIARY_COMPLETIONS_PATH:}
+    temperature: ${AUXILIARY_TEMPERATURE:0.3}
+    max-tokens: ${AUXILIARY_MAX_TOKENS:1000}
+    web-summary-max-tokens: ${AUXILIARY_WEB_SUMMARY_MAX_TOKENS:2000}
+  executor:
+    core-size: 4
+    max-size: 8
+    queue-capacity: 100
+    thread-prefix: "agent-exec-"
+  graph:
+    max-react-loops: 200
+  llm:
+    max-retries: 3
+    initial-backoff-ms: 500
+    connect-timeout-seconds: 30
+    read-timeout-minutes: 5
+    call-block-timeout-minutes: 5
+  tool:
+    max-retries: 3
+    execution-timeout-seconds: 120
+  tool-use-enforcement:
+    enforcement: auto
+  checkpoint:
+    enabled: true
+  delegation:
+    enabled: true
+    max-iterations: 50
+    max-concurrent-children: 3
+    max-spawn-depth: 1
+    child-timeout-seconds: 600
+    blocked-toolsets:
+      - DELEGATE
+      - MEMORY
+    model: ""
+
+# 执行后端配置
+execution:
+  backend:
+    idle-ttl-seconds: 300
+    docker:
+      image: ubuntu:24.04
+      memory: 512m
+      cpus: "1.0"
+      persist-filesystem: false
+      workspace-root: /tmp/husky-sandbox
+    ssh:
+      host: ""
+      port: 22
+      user: ""
+      identity-file: ""
+      workspace-root: ~/husky-workspace
+
+# 工具限制参数
+tool:
+  limits:
+    terminal-max-output-chars: 200000
+    terminal-default-timeout: 120
+    terminal-max-timeout: 600
+    terminal-default-wait-timeout: 300
+    read-file-max-chars: 100000
+    read-file-max-lines: 2000
+    prune-max-tool-result-length: 2000
+    prune-max-arguments-length: 1000
+
+# Context 压缩配置
+context:
+  threshold-percent: 0.75
+  protect-first-n: 3
+  tail-token-budget: 20000
+  max-summary-tokens: 4000
+  context-length: 128000
+  model-context-lengths:
+    gpt-4o: 128000
+    mimo-v2.5-pro: 800000
+    glm-5: 200000
+    glm-5.1: 200000
+  summary-model: ${AUXILIARY_MODEL:${OPENAI_MODEL:gpt-4o}}
+
+# Shared outbound HTTP proxy config
+proxy:
+  enabled: ${PROXY_ENABLED:true}
+  url: ${HUSKY_PROXY_URL:}
+  no-proxy: ${NO_PROXY:${no_proxy:}}
+  env-enabled: ${PROXY_ENV_ENABLED:true}
+  detect-system: ${PROXY_DETECT_SYSTEM:false}
+
+# Web 工具配置
+web:
+  backend: ${WEB_BACKEND:auto}
+  brave-api-key: ${BRAVE_SEARCH_API_KEY:}
+  brave-api-url: https://api.search.brave.com/res/v1/web/search
+  tavily-api-key: ${TAVILY_API_KEY:}
+  tavily-api-url: https://api.tavily.com/search
+  default-search-limit: 5
+  max-search-limit: 20
+  max-fetch-size-bytes: 2000000
+  summarize-threshold-chars: 5000
+  max-output-chars: 5000
+  request-timeout-seconds: 30
+  proxy:
+    enabled: ${WEB_PROXY_ENABLED:}
+    url: ${WEB_PROXY_URL:}
+    no-proxy: ${WEB_NO_PROXY:}
+  blocked-domains: []
+
+# Knowledge 工具配置
+knowledge:
+  enabled: true
+  default-top-k: 5
+  max-top-k: 20
+  max-snippet-chars: 600
+  max-document-chars: 12000
+  max-walk-depth: 6
+  local-sources: []
+
+# Browser 工具配置
+browser:
+  enabled: ${BROWSER_ENABLED:false}
+  headless: true
+  timeout-seconds: 120
+  snapshot-max-chars: 100000
+  compact-snapshot-max-chars: 20000
+  session-idle-timeout-seconds: 600
+  max-sessions: 16
+  viewport-width: 1280
+  viewport-height: 900
+  allow-localhost: true
+  allow-private-network: false
+
+# MCP 配置
+mcp:
+  enabled: ${MCP_ENABLED:false}
+  config-path: ${MCP_CONFIG_PATH:${husky.data.dir}/config/mcp-servers.json}
+
+channel-bindings:
+  default-scene: assistant
+  allow-explicit-scene-override-for:
+    - http
+  bindings:
+    feishu-assistant-bot:
+      channel-type: feishu
+      platform-account-id: ${FEISHU_ASSISTANT_APP_ID:}
+      scene-id: assistant
+      enabled: ${FEISHU_ASSISTANT_ENABLED:false}
+
+    feishu-qa-bot:
+      channel-type: feishu
+      platform-account-id: ${FEISHU_QA_APP_ID:}
+      scene-id: assistant
+      enabled: ${FEISHU_QA_ENABLED:false}
+
+    http-chatbot:
+      channel-type: http
+      platform-account-id: chatbot
+      scene-id: chatbot
+
+# Feishu channel config
+channels:
+  feishu:
+    instances:
+      assistant-bot:
+        enabled: ${FEISHU_ASSISTANT_ENABLED:false}
+        transport: ${FEISHU_ASSISTANT_TRANSPORT:websocket}
+        app-id: ${FEISHU_ASSISTANT_APP_ID:}
+        app-secret: ${FEISHU_ASSISTANT_APP_SECRET:}
+        verification-token: ${FEISHU_ASSISTANT_VERIFICATION_TOKEN:}
+        encrypt-key: ${FEISHU_ASSISTANT_ENCRYPT_KEY:}
+        bot-open-id: ${FEISHU_ASSISTANT_BOT_OPEN_ID:}
+        default-scene: assistant
+        mention-required-in-group: ${FEISHU_ASSISTANT_MENTION_REQUIRED_IN_GROUP:true}
+        group-session-scope: ${FEISHU_ASSISTANT_GROUP_SESSION_SCOPE:THREAD}
+        show-tool-calls: ${FEISHU_ASSISTANT_SHOW_TOOL_CALLS:true}
+        approval-timeout-seconds: ${FEISHU_ASSISTANT_APPROVAL_TIMEOUT_SECONDS:300}
+
+      qa-bot:
+        enabled: ${FEISHU_QA_ENABLED:false}
+        transport: ${FEISHU_QA_TRANSPORT:websocket}
+        app-id: ${FEISHU_QA_APP_ID:}
+        app-secret: ${FEISHU_QA_APP_SECRET:}
+        verification-token: ${FEISHU_QA_VERIFICATION_TOKEN:}
+        encrypt-key: ${FEISHU_QA_ENCRYPT_KEY:}
+        bot-open-id: ${FEISHU_QA_BOT_OPEN_ID:}
+        default-scene: assistant
+        mention-required-in-group: ${FEISHU_QA_MENTION_REQUIRED_IN_GROUP:true}
+        group-session-scope: ${FEISHU_QA_GROUP_SESSION_SCOPE:THREAD}
+        show-tool-calls: ${FEISHU_QA_SHOW_TOOL_CALLS:true}
+        approval-timeout-seconds: ${FEISHU_QA_APPROVAL_TIMEOUT_SECONDS:300}
+
+# Chatbot endpoint switch; runtime behavior is configured by scenes.configs.chatbot.
+chatbot:
+  enabled: true
+
+# Scene 配置
+scenes:
+  default-scene: assistant
+  configs:
+    assistant:
+      system-prompt: ""
+      toolsets:
+        - CORE
+        - SKILLS
+        - TERMINAL
+        - SEARCH
+        - WEB
+        - MEMORY
+        - KNOWLEDGE
+        - EXECUTE
+        - DELEGATE
+        - MCP
+        - BROWSER
+        - VISION
+      denied-tools: []
+      knowledge-sources: [] # empty = all configured knowledge sources
+      allowed-mcp-servers: []
+      denied-mcp-servers: []
+      approval: required
+      backend: local
+      working-dir: inherit
+      memory:
+        scope: session
+      prompt-files: []
+      prompt-file-policy: override
+      audit-enabled: true
+      audit-tags: []
+      rate-limit-enabled: false
+    # Chatbot runtime behavior: prompt, tools, approvals, backend, and memory.
+    chatbot:
+      system-prompt: |
+        你是 Husky，一个智能 AI 助手。
+        你可以使用以下工具来帮助用户：web_search（搜索互联网信息）、web_fetch（抓取网页内容）。
+        当前时间：{{currentDateTime}}
+      toolsets:
+        - CORE
+        - SKILLS
+        - SEARCH
+        - WEB
+        - KNOWLEDGE
+        - MCP
+      allowed-tools: []
+      knowledge-sources: [] # empty = all configured knowledge sources
+      denied-tools:
+        - read_file
+        - write_file
+        - edit_file
+        - delete_file
+        - move_file
+        - apply_patch
+        - search_files
+        - list_files
+        - terminal
+        - process
+        - skill_search
+        - skill_install
+        - skill_manage
+      approval: none
+      backend: local
+      working-dir: inherit
+      memory:
+        scope: session
+      prompt-files: []
+      prompt-file-policy: append
+      audit-enabled: true
+      audit-tags:
+        - chatbot
+      rate-limit-enabled: false
+    feishu-qa:
+      system-prompt: |
+        你是 Husky，一个全能个人助手。
+        当前时间：{{currentDateTime}}
+      toolsets:
+        - SEARCH
+        - SKILLS
+        - WEB
+        - KNOWLEDGE
+        - MCP
+        - MEMORY
+        - TERMINAL
+        - VISION
+      allowed-tools: []
+      knowledge-sources: [] # empty = all configured knowledge sources
+      denied-tools:
+        - read_file
+        - write_file
+        - edit_file
+        - delete_file
+        - move_file
+        - apply_patch
+        - search_files
+        - list_files
+#        - terminal
+        - skill_search
+        - skill_install
+        - skill_manage
+      approval: required
+      backend: local
+      working-dir: inherit
+      memory:
+        scope: session
+      prompt-files: []
+      prompt-file-policy: append
+      audit-enabled: true
+      audit-tags:
+        - feishu
+      rate-limit-enabled: false
+
+# Auth 配置
+auth:
+  enabled: ${AUTH_ENABLED:true}
+  api-keys: ${HUSKY_API_KEYS:husky-dev-key-001}
+
+# Skill 配置
+skill:
+  builtin-dir: builtin-skills
+  # write target for install/create — also scanned as highest-priority source
+  # auto-scanned (lower priority): ~/.claude/skills, ~/.husky/skills, .claude/skills
+  dir: ${husky.data.dir}/skills
+  # skill_manage patch/delete is restricted to skills loaded from these configured writable roots.
+  managed-dirs: ${SKILL_MANAGED_DIRS:${skill.dir}}
+  disabled: []
+
+# SkillHub 配置
+skillhub:
+  enabled: true
+  api-url: https://www.skillhub.club/api/v1
+  api-key: ${SKILLHUB_API_KEY:}
+
+# 可观测性配置
+husky:
+  data:
+    dir: ${HUSKY_DATA_DIR:${user.home}/.husky}
+  observability:
+    audit:
+      enabled: true
+    metrics:
+      enabled: true
+
+# Actuator 配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,husky
+  endpoint:
+    husky:
+      enabled: true
+
+# Server 配置
+server:
+  port: ${HUSKY_PORT:18088}

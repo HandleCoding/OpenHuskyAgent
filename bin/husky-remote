@@ -1,0 +1,140 @@
+#!/bin/bash
+# Husky Agent CLI - Remote Mode
+# Usage:
+#   husky-remote tui          Connect TUI to configured remote service
+#   husky-remote install      Create symlink in /usr/local/bin for global access
+#
+# ── Remote Server Configuration ───────────────────────────────────────────────
+# 修改下面两行配置你的远程服务器地址
+REMOTE_HOST="10.109.214.133"
+REMOTE_PORT="8080"
+# ──────────────────────────────────────────────────────────────────────────────
+# 以下配置一般不需要修改
+REMOTE_WS_URL="ws://${REMOTE_HOST}:${REMOTE_PORT}/api/tui"
+REMOTE_HTTP_URL="http://${REMOTE_HOST}:${REMOTE_PORT}"
+
+set -e
+
+# ── Resolve script location (handle symlinks & relative paths) ────────────
+SOURCE="$0"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# ── Find the Husky Client JAR ──────────────────────────────────────────────
+if [ -f "$PROJECT_DIR/client/target/husky-agent-client-0.0.1-SNAPSHOT.jar" ]; then
+    CLIENT_JAR="$PROJECT_DIR/client/target/husky-agent-client-0.0.1-SNAPSHOT.jar"
+elif [ -f "$PROJECT_DIR/target/husky-agent-client-0.0.1-SNAPSHOT.jar" ]; then
+    CLIENT_JAR="$PROJECT_DIR/target/husky-agent-client-0.0.1-SNAPSHOT.jar"
+else
+    CLIENT_JAR=""
+fi
+
+MVNW="$PROJECT_DIR/mvnw"
+if [ ! -f "$MVNW" ]; then
+    MVNW=""
+fi
+
+# ── Helper: check if remote service is reachable ──────────────────────────
+check_remote() {
+    if curl -sf "${REMOTE_HTTP_URL}/actuator/health" > /dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
+# ── Commands ──────────────────────────────────────────────────────────────
+case "${1:-tui}" in
+    tui)
+        shift
+        SERVER_URL="$REMOTE_WS_URL"
+
+        # Allow --server to override the configured URL
+        while [[ $# -gt 0 ]]; do
+            case $1 in
+                --server)
+                    SERVER_URL="$2"
+                    shift 2
+                    ;;
+                --host)
+                    REMOTE_HOST="$2"
+                    SERVER_URL="ws://${REMOTE_HOST}:${REMOTE_PORT}/api/tui"
+                    REMOTE_HTTP_URL="http://${REMOTE_HOST}:${REMOTE_PORT}"
+                    shift 2
+                    ;;
+                --port)
+                    REMOTE_PORT="$2"
+                    SERVER_URL="ws://${REMOTE_HOST}:${REMOTE_PORT}/api/tui"
+                    REMOTE_HTTP_URL="http://${REMOTE_HOST}:${REMOTE_PORT}"
+                    shift 2
+                    ;;
+                *)
+                    shift
+                    ;;
+            esac
+        done
+
+        echo "🐺 Connecting to remote Husky: $SERVER_URL"
+
+        # 尝试检测服务是否可达（非强制，仅提示）
+        if ! check_remote 2>/dev/null; then
+            echo "  ⚠ 警告: ${REMOTE_HTTP_URL}/actuator/health 不可达，尝试直接连接..."
+        fi
+
+        if [ -n "$CLIENT_JAR" ]; then
+            exec java -jar "$CLIENT_JAR" --server "$SERVER_URL"
+        elif [ -n "$MVNW" ]; then
+            exec "$MVNW" exec:java -pl client \
+                -Dexec.mainClass="io.github.huskyagent.tui.AgentTUI" \
+                -Dexec.args="--server $SERVER_URL"
+        else
+            echo "Error: Cannot find Husky client JAR or mvnw"
+            echo "Please build the project first: ./mvnw clean install -DskipTests"
+            exit 1
+        fi
+        ;;
+    install)
+        TARGET="/usr/local/bin/husky-remote"
+        if [ -L "$TARGET" ]; then
+            existing="$(readlink "$TARGET")"
+            if [ "$existing" = "$SCRIPT_DIR/husky-remote" ]; then
+                echo "✓ Already installed: $TARGET → $SCRIPT_DIR/husky-remote"
+            else
+                echo "⚠ $TARGET exists (→ $existing), updating..."
+                sudo ln -sf "$SCRIPT_DIR/husky-remote" "$TARGET"
+                echo "✓ Updated: $TARGET → $SCRIPT_DIR/husky-remote"
+            fi
+        elif [ -e "$TARGET" ]; then
+            echo "⚠ $TARGET exists and is not a symlink. Remove it first."
+            exit 1
+        else
+            sudo ln -s "$SCRIPT_DIR/husky-remote" "$TARGET"
+            echo "✓ Installed: $TARGET → $SCRIPT_DIR/husky-remote"
+        fi
+        echo ""
+        echo "Now you can run 'husky-remote tui' from anywhere!"
+        ;;
+    *)
+        echo "Usage: husky-remote {tui|install}"
+        echo ""
+        echo "Commands:"
+        echo "  tui      Connect TUI client to remote service"
+        echo "           (currently configured: $REMOTE_WS_URL)"
+        echo "  install  Create symlink in /usr/local/bin for global access"
+        echo ""
+        echo "TUI options:"
+        echo "  --server URL    Override WebSocket URL completely"
+        echo "  --host   HOST   Override remote host (keep configured port)"
+        echo "  --port   PORT   Override remote port (keep configured host)"
+        echo ""
+        echo "Configuration (edit this file to change defaults):"
+        echo "  REMOTE_HOST = $REMOTE_HOST"
+        echo "  REMOTE_PORT = $REMOTE_PORT"
+        exit 1
+        ;;
+esac
+

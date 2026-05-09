@@ -1,0 +1,91 @@
+spring:
+  application:
+    name: husky-test
+  ai:
+    openai:
+      api-key: sk-test-key
+      base-url: https://api.openai.com
+      chat:
+        options:
+          model: test-model
+          temperature: 0.5
+  datasource:
+    url: jdbc:sqlite:data/test-sessions.db?journal_mode=WAL
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 2
+      minimum-idle: 1
+      connection-timeout: 10000
+      idle-timeout: 300000
+      max-lifetime: 600000
+
+# Agent 配置
+agent:
+  graph:
+    max-react-loops: 10
+  llm:
+    max-retries: 1
+    initial-backoff-ms: 100
+    connect-timeout-seconds: 10
+    read-timeout-minutes: 1
+    call-block-timeout-minutes: 1
+  tool:
+    max-retries: 1
+  checkpoint:
+    enabled: false
+  delegation:
+    enabled: false
+
+# 工具限制参数
+tool:
+  limits:
+    terminal-max-output-chars: 50000
+    terminal-default-timeout: 60
+    terminal-max-timeout: 300
+    terminal-default-wait-timeout: 120
+    read-file-max-chars: 50000
+    read-file-max-lines: 1000
+    prune-max-tool-result-length: 1000
+    prune-max-arguments-length: 500
+
+# Context 压缩配置
+context:
+  threshold-percent: 0.75
+  protect-first-n: 3
+  tail-token-budget: 20000
+  max-summary-tokens: 4000
+  context-length: 128000
+  model-context-lengths:
+    test-model: 64000
+  summary-model: test-model
+
+# Web 工具配置（测试环境不启用）
+web:
+  backend: none
+  brave-api-key: test-key
+
+# MCP 配置（测试环境不启用）
+mcp:
+  enabled: false
+
+# Chatbot 配置（测试环境不启用）
+chatbot:
+  enabled: false
+
+# Auth 配置（测试环境不启用）
+auth:
+  enabled: false
+
+# 可观测性配置（测试环境关闭审计，保留 metrics）
+husky:
+  observability:
+    audit:
+      enabled: false
+    metrics:
+      enabled: true
+
+# 日志配置
+logging:
+  level:
+    io.github.huskyagent: DEBUG
+    org.springframework.ai: INFO

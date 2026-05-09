@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a reproducible problem in Husky
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please remove secrets, API keys, tokens, and private prompts from logs before posting.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Husky version, commit SHA, or branch.
+      placeholder: main @ abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Runtime mode
+      options:
+        - TUI
+        - Chatbot HTTP API
+        - Feishu
+        - CLI/install
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Exact steps, commands, request payloads, or scene config needed to reproduce.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs
+      description: Paste only logs with secrets, tokens, file paths, and private data removed.
+      render: text
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Java version, deployment method, LLM provider, enabled toolsets/MCP/browser if relevant.

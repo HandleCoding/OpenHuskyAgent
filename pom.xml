@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.0.5</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>io.github.huskyagent</groupId>
+    <artifactId>husky-agent</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>husky-agent</name>
+    <description>husky-agent parent</description>
+
+    <modules>
+        <module>infra</module>
+        <module>domain</module>
+        <module>application</module>
+        <module>service</module>
+        <module>client</module>
+    </modules>
+
+    <properties>
+        <java.version>17</java.version>
+        <spring-ai.version>2.0.0-M4</spring-ai.version>
+        <langgraph4j.version>1.8.12</langgraph4j.version>
+        <playwright.version>1.51.0</playwright.version>
+        <junit.excluded.groups>live-api,browser</junit.excluded.groups>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- 内部模块 -->
+            <dependency>
+                <groupId>io.github.huskyagent</groupId>
+                <artifactId>husky-agent-infra</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.huskyagent</groupId>
+                <artifactId>husky-agent-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.huskyagent</groupId>
+                <artifactId>husky-agent-application</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.huskyagent</groupId>
+                <artifactId>husky-agent-client</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- 外部依赖 -->
+            <dependency>
+                <groupId>org.java-websocket</groupId>
+                <artifactId>Java-WebSocket</artifactId>
+                <version>1.5.4</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bsc.langgraph4j</groupId>
+                <artifactId>langgraph4j-core</artifactId>
+                <version>${langgraph4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.bsc.langgraph4j</groupId>
+                <artifactId>langgraph4j-spring-ai</artifactId>
+                <version>${langgraph4j.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludedGroups>${junit.excluded.groups}</excludedGroups>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>live-api-tests</id>
+            <properties>
+                <junit.excluded.groups>browser</junit.excluded.groups>
+            </properties>
+        </profile>
+        <profile>
+            <id>browser-tests</id>
+            <properties>
+                <junit.excluded.groups>live-api</junit.excluded.groups>
+            </properties>
+        </profile>
+    </profiles>
+
+</project>
