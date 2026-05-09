@@ -11,37 +11,23 @@ import org.springframework.stereotype.Component;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * 场景配置解析器 — 从 application.yml 加载场景配置，按 sceneId 返回 SceneConfig。
- *
- * <p>SceneConfig is the runtime source for prompt, tools, approval, backend,
- * memory, and other execution behavior.</p>
- */
 @Slf4j
 @Data
 @Component
 @ConfigurationProperties(prefix = "scenes")
 public class ConfigSceneResolver implements SceneResolver {
 
-    /** 默认场景 ID，未指定 scene 时的 fallback */
     private String defaultScene = "assistant";
 
-    /** 各场景配置，key = sceneId */
     private Map<String, SceneProperties> configs = new LinkedHashMap<>();
 
-    /** 已解析的 SceneConfig 缓存 */
     private final ConcurrentHashMap<String, SceneConfig> resolved = new ConcurrentHashMap<>();
 
-    /**
-     * 按 sceneId 获取解析后的 SceneConfig。
-     * 未找到时 fallback 到 defaultScene。
-     */
     public SceneConfig resolve(String sceneId) {
         String effectiveSceneId = sceneId != null && configs.containsKey(sceneId) ? sceneId : defaultScene;
         return resolved.computeIfAbsent(effectiveSceneId, this::buildSceneConfig);
     }
 
-    /** 获取默认场景配置 */
     public SceneConfig resolveDefault() {
         return resolve(defaultScene);
     }
@@ -79,8 +65,7 @@ public class ConfigSceneResolver implements SceneResolver {
             config.setStoragePolicy(toStoragePolicy(props.getStorage()));
             config.setStorageSpec(toStorageSpec(props));
         } else if ("assistant".equals(sceneId)) {
-            // assistant 默认 = 全量工具、需审批、本地执行、继承目录
-            config.setSystemPrompt(null); // 使用 PromptBuilder 默认 identity
+            config.setSystemPrompt(null);
             config.setAllowedToolsets(Set.of(Toolset.values()));
             config.setAllowedTools(Set.of());
             config.setDeniedTools(Set.of());
@@ -93,7 +78,7 @@ public class ConfigSceneResolver implements SceneResolver {
             config.setMemoryPolicy(SceneConfig.LegacyMemoryPolicy.SESSION);
         }
 
-        log.info("解析场景配置: sceneId={}, toolsets={}, allowedTools={}, denied={}, approval={}, backend={}, workDir={}",
+        log.info("Resolved scene configuration: sceneId={}, toolsets={}, allowedTools={}, denied={}, approval={}, backend={}, workDir={}",
                 sceneId, config.getAllowedToolsets(), config.getAllowedTools(), config.getDeniedTools(),
                 config.getApprovalPolicy(), config.getBackendPolicy(), config.getWorkingDirectoryPolicy());
         return config;
@@ -106,7 +91,7 @@ public class ConfigSceneResolver implements SceneResolver {
             try {
                 result.add(Toolset.valueOf(name.toUpperCase().replace("-", "_")));
             } catch (IllegalArgumentException e) {
-                log.warn("未知 Toolset 名称: {}", name);
+                log.warn("Unknown Toolset name: {}", name);
             }
         }
         return result.isEmpty() ? Set.of(Toolset.values()) : result;
@@ -285,9 +270,6 @@ public class ConfigSceneResolver implements SceneResolver {
         return spec;
     }
 
-    /**
-     * application.yml 中单个场景的原始属性映射。
-     */
     @Data
     public static class SceneProperties {
         private String systemPrompt;
@@ -316,13 +298,11 @@ public class ConfigSceneResolver implements SceneResolver {
         private Integer rateLimitRequestsPerMinute;
         private Integer rateLimitBurst;
         private Set<String> skills;
-        // Docker backend 参数
         private String dockerImage;
         private String dockerMemory;
         private String dockerCpus;
         private Boolean dockerPersistFilesystem;
         private String dockerWorkdir;
-        // SSH backend 参数
         private String sshHost;
         private Integer sshPort;
         private String sshUser;

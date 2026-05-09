@@ -6,9 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.AsyncCommandAction;
 import org.bsc.langgraph4j.action.Command;
 
-/**
- * dispatchAction 边：读取 NEXT_ACTION 字段路由到对应节点。
- */
 @Slf4j
 public class DispatchEdge {
 

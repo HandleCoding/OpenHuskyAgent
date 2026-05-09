@@ -12,81 +12,41 @@ import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-/**
- * 工具定义
- * 参考 Hermes ToolEntry 的设计
- */
 public record ToolDefinition(
 
-    /**
-     * 工具名称（唯一标识）
-     */
     String name,
 
-    /**
-     * 工具描述
-     */
     String description,
 
-    /**
-     * 工具分组
-     */
     Toolset toolset,
 
-    /**
-     * JSON Schema 定义（用于 LLM 调用）
-     */
+    /** JSON Schema exposed to the model and UI for tool arguments. */
     JsonNode parametersSchema,
 
-    /**
-     * 工具处理器
-     */
+    /** Non-contextual tool handler for tools that do not need runtime scope. */
     Function<Map<String, Object>, ToolResult> handler,
 
-    /**
-     * 带执行上下文的工具处理器（可选）
-     */
+    /** Context-aware tool handler for tools that depend on session/runtime state. */
     BiFunction<Map<String, Object>, ToolExecutionContext, ToolResult> contextualHandler,
 
-    /**
-     * 审批检查器（可选）
-     * 返回 ApprovalRequest 表示需要审批，返回 null 表示不需要审批
-     */
+    /** Returns an approval request when the current arguments require confirmation. */
     Function<Map<String, Object>, ApprovalRequest> approvalChecker,
 
-    /**
-     * 是否启用
-     */
     boolean enabled,
 
-    /**
-     * 环境变量依赖（可选）
-     */
     String[] requiredEnvVars,
 
-    /**
-     * emoji 标识（用于 UI 展示）
-     */
     String emoji,
 
-    /**
-     * 最大结果大小（字符数）
-     */
     int maxResultSizeChars,
 
-    /**
-     * 工具调用超时解析器（可按参数动态返回超时时间；返回 null 表示使用全局默认）
-     */
+    /** Resolves the per-call timeout from arguments when a tool needs dynamic limits. */
     Function<Map<String, Object>, Duration> timeoutResolver
 
 ) {
 
-    /** 共享 ObjectMapper，仅用于将 Spring AI 生成的 JSON Schema 字符串解析为 JsonNode */
     private static final ObjectMapper SCHEMA_MAPPER = new ObjectMapper();
 
-    /**
-     * 创建简单工具定义（无需审批）
-     */
     public static ToolDefinition of(String name, String description, Toolset toolset,
                                     JsonNode parametersSchema,
                                     Function<Map<String, Object>, ToolResult> handler) {
@@ -101,23 +61,6 @@ public record ToolDefinition(
             null, handler, null, true, null, null, Integer.MAX_VALUE, null);
     }
 
-    /**
-     * 从 Java 类型自动生成 JSON Schema，创建简单工具定义。
-     *
-     * <p>使用 Spring AI 的 {@link JsonSchemaGenerator#generateForType} 将参数类
-     * 的字段、类型和 {@code @JsonPropertyDescription} 注解自动转换为标准 JSON Schema，
-     * 无需手写 {@code ObjectNode}。</p>
-     *
-     * <p>示例：</p>
-     * <pre>{@code
-     * record MyArgs(
-     *     @JsonPropertyDescription("文件路径") String path,
-     *     @JsonPropertyDescription("可选偏移量") Integer offset
-     * ) {}
-     *
-     * ToolDefinition.of("my_tool", "description", Toolset.CORE, MyArgs.class, this::handle);
-     * }</pre>
-     */
     public static ToolDefinition of(String name, String description, Toolset toolset,
                                     Class<?> argsType,
                                     Function<Map<String, Object>, ToolResult> handler) {
@@ -125,9 +68,6 @@ public record ToolDefinition(
             handler, null, null, true, null, null, Integer.MAX_VALUE, null);
     }
 
-    /**
-     * 从 Java 类型自动生成 JSON Schema，创建带审批检查的工具定义。
-     */
     public static ToolDefinition withApproval(String name, String description, Toolset toolset,
                                               Class<?> argsType,
                                               Function<Map<String, Object>, ToolResult> handler,
@@ -136,9 +76,6 @@ public record ToolDefinition(
             handler, null, approvalChecker, true, null, null, Integer.MAX_VALUE, null);
     }
 
-    /**
-     * 创建带审批检查的工具
-     */
     public static ToolDefinition withApproval(String name, String description, Toolset toolset,
                                               JsonNode parametersSchema,
                                               Function<Map<String, Object>, ToolResult> handler,
@@ -147,9 +84,6 @@ public record ToolDefinition(
             handler, null, approvalChecker, true, null, null, Integer.MAX_VALUE, null);
     }
 
-    /**
-     * 创建带执行上下文和审批检查的工具。
-     */
     public static ToolDefinition withApprovalContextual(String name, String description, Toolset toolset,
                                                         JsonNode parametersSchema,
                                                         BiFunction<Map<String, Object>, ToolExecutionContext, ToolResult> handler,
@@ -158,9 +92,7 @@ public record ToolDefinition(
             null, handler, approvalChecker, true, null, null, Integer.MAX_VALUE, null);
     }
 
-    /**
-     * 使用 Spring AI JsonSchemaGenerator 从 Java 类型生成 JSON Schema JsonNode。
-     */
+    /** Generates a JSON Schema from a typed argument class for Spring AI tool wiring. */
     private static JsonNode schemaFromType(Class<?> argsType) {
         try {
             String schemaJson = JsonSchemaGenerator.generateForType(argsType);
@@ -171,9 +103,6 @@ public record ToolDefinition(
         }
     }
 
-    /**
-     * 创建带动态超时的工具定义
-     */
     public ToolDefinition withTimeout(Function<Map<String, Object>, Duration> timeoutResolver) {
         return new ToolDefinition(name, description, toolset, parametersSchema, handler,
             contextualHandler, approvalChecker, enabled, requiredEnvVars, emoji, maxResultSizeChars, timeoutResolver);
@@ -212,16 +141,10 @@ public record ToolDefinition(
         return timeout == null || timeout.isZero() || timeout.isNegative() ? defaultTimeout : timeout;
     }
 
-    /**
-     * 是否需要审批
-     */
     public boolean requiresApproval() {
         return approvalChecker != null;
     }
 
-    /**
-     * 检查是否需要审批，返回审批请求（如果需要）
-     */
     public ApprovalRequest checkApproval(Map<String, Object> args) {
         if (approvalChecker == null) {
             return null;
@@ -236,9 +159,6 @@ public record ToolDefinition(
         return handler.apply(args);
     }
 
-    /**
-     * 转换为 Spring AI ToolCallback 格式
-     */
     public String toToolSchema() {
         StringBuilder sb = new StringBuilder();
         sb.append("{\n");

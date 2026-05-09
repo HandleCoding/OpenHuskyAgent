@@ -19,12 +19,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.*;
 
-/**
- * SQLite 持久化 Checkpoint 存储。
- *
- * <p>进程重启后可从数据库恢复 graph state，实现会话崩溃恢复。
- * 每个 thread_id（即 sessionId）对应一组有序的 checkpoint 记录。</p>
- */
 @Slf4j
 public class SqliteCheckpointSaver extends AbstractCheckpointSaver {
 
@@ -50,13 +44,12 @@ public class SqliteCheckpointSaver extends AbstractCheckpointSaver {
                     }
                 }
             }
-            log.debug("checkpoint schema 初始化完成");
+            log.debug("checkpoint schema initialized");
         } catch (Exception e) {
-            log.warn("checkpoint schema 初始化失败（可能已存在）: {}", e.getMessage());
+            log.warn("checkpoint schema initialization failed, possibly already exists: {}", e.getMessage());
         }
     }
 
-    // ── AbstractCheckpointSaver 实现 ─────────────────────────────────────────
 
     @Override
     protected LinkedList<Checkpoint> loadCheckpoints(RunnableConfig config) throws Exception {
@@ -124,11 +117,7 @@ public class SqliteCheckpointSaver extends AbstractCheckpointSaver {
     }
 
     /**
-     * 保留指定 checkpoint（含），删除同一 session 中 rowid 更大的所有后续 checkpoint。
-     * 用于 /rewind：找到 user message 对应的 checkpoint_id，删掉它之后写入的所有 checkpoint。
-     *
-     * @param sessionId    thread_id（即 sessionId）
-     * @param checkpointId 要保留的最新 checkpoint 的 id，删除 rowid 更大的所有记录
+     * Drops checkpoints newer than the rewind anchor while preserving the anchor itself.
      */
     public void deleteCheckpointsAfter(String sessionId, String checkpointId) {
         String findRowidSql = "SELECT rowid FROM checkpoints WHERE thread_id = ? AND checkpoint_id = ?";
@@ -155,7 +144,6 @@ public class SqliteCheckpointSaver extends AbstractCheckpointSaver {
         }
     }
 
-    // ── 序列化辅助 ────────────────────────────────────────────────────────────
 
     private String serialize(Checkpoint cp) throws IOException {
         Map<String, Object> wrapper = new LinkedHashMap<>();
@@ -180,7 +168,7 @@ public class SqliteCheckpointSaver extends AbstractCheckpointSaver {
                     .nextNodeId(nextNodeId)
                     .build();
         } catch (Exception e) {
-            log.warn("[checkpoint] 反序列化失败 id={}: {}", checkpointId, e.getMessage());
+            log.warn("[checkpoint] deserialization failed id={}: {}", checkpointId, e.getMessage());
             return null;
         }
     }

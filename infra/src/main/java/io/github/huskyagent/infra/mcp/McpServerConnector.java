@@ -19,14 +19,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * MCP 服务器连接器 — 管理 McpSyncClient 生命周期
- *
- * <p>特性：
- * <ul>
- *   <li>重连：定时 ping 健康检查，断连后指数退避重连（最多 5 次）</li>
- *   <li>熔断：连续 3 次调用失败后熔断，30s 后半开探测恢复</li>
- *   <li>变更监听：注册 toolsChangeConsumer，工具变更时通知 McpToolProvider 刷新</li>
- * </ul>
+ * Owns MCP client lifecycles, reconnection, tool discovery, and circuit-breaker state.
  */
 @Slf4j
 @Component
@@ -46,15 +39,12 @@ public class McpServerConnector {
     private final Map<String, List<McpSchema.Tool>> discoveredTools = new ConcurrentHashMap<>();
     private final Map<String, ServerStatus> statuses = new ConcurrentHashMap<>();
 
-    // 熔断状态
     private final Map<String, Integer> failureCounts = new ConcurrentHashMap<>();
     private final Map<String, Long> circuitOpenTimes = new ConcurrentHashMap<>();
 
-    // 重连调度
     private ScheduledExecutorService scheduler;
     private final Set<String> reconnectingServers = ConcurrentHashMap.newKeySet();
 
-    // 工具变更监听器
     private volatile Runnable toolsChangeListener;
 
     public McpServerConnector(McpConnectionProvider connectionProvider) {
@@ -84,23 +74,16 @@ public class McpServerConnector {
         long connected = statuses.values().stream().filter(s -> s == ServerStatus.CONNECTED).count();
         log.info("MCP connector: {} of {} servers connected successfully", connected, servers.size());
 
-        // 启动健康检查
         if (!clients.isEmpty()) {
             scheduler.scheduleAtFixedRate(this::healthCheck,
                     HEALTH_CHECK_INTERVAL_MS, HEALTH_CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS);
         }
     }
 
-    /**
-     * 设置工具变更监听器。McpToolProvider 注册此回调以刷新工具列表。
-     */
     public void setToolsChangeListener(Runnable listener) {
         this.toolsChangeListener = listener;
     }
 
-    /**
-     * 连接单个服务器。失败时 log warn 并跳过，不抛异常。
-     */
     public McpSyncClient connectServer(String name, McpServerConfig config) {
         serverConfigs.put(name, config);
         try {
@@ -129,10 +112,6 @@ public class McpServerConnector {
         }
     }
 
-    /**
-     * 执行工具调用（带熔断保护）。
-     * McpToolProvider 的 handler 应通过此方法调用，而非直接调用 client。
-     */
     public McpSchema.CallToolResult callTool(String serverName, McpSchema.CallToolRequest request) {
         if (isCircuitOpen(serverName)) {
             throw new CircuitOpenException("MCP server '" + serverName + "' is circuit-broken");
@@ -153,9 +132,6 @@ public class McpServerConnector {
         }
     }
 
-    /**
-     * 判断服务器是否处于熔断状态
-     */
     public boolean isCircuitOpen(String serverName) {
         Integer failures = failureCounts.get(serverName);
         if (failures == null || failures < CIRCUIT_BREAKER_THRESHOLD) {
@@ -165,7 +141,6 @@ public class McpServerConnector {
         if (openTime == null) {
             return false;
         }
-        // 冷却期过后，半开：允许一次探测
         if (System.currentTimeMillis() - openTime > CIRCUIT_BREAKER_COOLDOWN_MS) {
             log.info("MCP server '{}' circuit breaker half-open, allowing probe", serverName);
             return false;
@@ -173,9 +148,6 @@ public class McpServerConnector {
         return true;
     }
 
-    /**
-     * 刷新指定服务器的工具列表。由 toolsChangeConsumer 触发。
-     */
     public void refreshTools(String serverName) {
         McpSyncClient client = clients.get(serverName);
         if (client == null) return;
@@ -196,7 +168,6 @@ public class McpServerConnector {
                         newNames.stream().filter(n -> !oldNames.contains(n)).toList(),
                         oldNames.stream().filter(n -> !newNames.contains(n)).toList());
 
-                // 通知 McpToolProvider 刷新
                 if (toolsChangeListener != null) {
                     toolsChangeListener.run();
                 }
@@ -312,7 +283,6 @@ public class McpServerConnector {
         return Collections.unmodifiableMap(statuses);
     }
 
-    // ── 健康检查与重连 ──────────────────────────────────────────────────
 
     private ConnectionSnapshot openConnection(String name, McpServerConfig config) {
         McpSyncClient client = buildClient(name, config);
@@ -369,7 +339,7 @@ public class McpServerConnector {
 
     private void scheduleReconnect(String serverName) {
         if (!reconnectingServers.add(serverName)) {
-            return; // 已在重连中
+            return;
         }
         McpServerConfig config = serverConfigs.get(serverName);
         if (config == null) return;
@@ -397,7 +367,7 @@ public class McpServerConnector {
             return;
         }
 
-        long delay = INITIAL_RECONNECT_DELAY_MS * (1L << (attempt - 1)); // 指数退避
+        long delay = INITIAL_RECONNECT_DELAY_MS * (1L << (attempt - 1));
         log.info("MCP server '{}' reconnect attempt {} in {}ms", serverName, attempt, delay);
 
         try {
@@ -424,7 +394,6 @@ public class McpServerConnector {
 
             log.info("MCP server '{}' reconnected: {} tools discovered", serverName, tools.size());
 
-            // 通知工具刷新
             if (toolsChangeListener != null) {
                 toolsChangeListener.run();
             }
@@ -434,7 +403,6 @@ public class McpServerConnector {
         }
     }
 
-    // ── 熔断 ──────────────────────────────────────────────────────────
 
     private void onFailure(String serverName) {
         int count = failureCounts.merge(serverName, 1, Integer::sum);
@@ -449,7 +417,6 @@ public class McpServerConnector {
         circuitOpenTimes.remove(serverName);
     }
 
-    // ── 客户端构建 ──────────────────────────────────────────────────
 
     private McpSyncClient buildClient(String name, McpServerConfig config) {
         Duration timeout = Duration.ofSeconds(config.getTimeout());
@@ -493,6 +460,7 @@ public class McpServerConnector {
         }
 
         // Streamable-HTTP forced or auto (auto falls back to SSE on NoClassDefFoundError)
+        // Prefer streamable HTTP when available, but keep SSE for gateways that expose only an event endpoint.
         try {
             log.debug("MCP server '{}': using Streamable-HTTP transport", name);
             var transport = HttpClientStreamableHttpTransport.builder(config.url()).build();
@@ -534,7 +502,6 @@ public class McpServerConnector {
     }
 
     private void handleToolsChange(McpServerConfig config, List<McpSchema.Tool> newTools) {
-        // 找到对应的服务器名
         for (Map.Entry<String, McpServerConfig> entry : serverConfigs.entrySet()) {
             if (entry.getValue() == config) {
                 String serverName = entry.getKey();
@@ -549,7 +516,6 @@ public class McpServerConnector {
         }
     }
 
-    // ── 关闭 ──────────────────────────────────────────────────────────
 
     @PreDestroy
     public void shutdownAll() {
@@ -572,7 +538,6 @@ public class McpServerConnector {
         circuitOpenTimes.clear();
     }
 
-    // ── 异常类型 ──────────────────────────────────────────────────────
 
     public static class CircuitOpenException extends RuntimeException {
         public CircuitOpenException(String message) { super(message); }

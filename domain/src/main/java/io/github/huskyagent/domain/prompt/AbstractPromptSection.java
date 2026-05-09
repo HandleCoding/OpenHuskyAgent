@@ -1,10 +1,5 @@
 package io.github.huskyagent.domain.prompt;
 
-/**
- * Prompt Section 抽象基类
- *
- * 提供基础实现和便捷方法
- */
 public abstract class AbstractPromptSection implements PromptSection {
 
     private boolean enabled = true;
@@ -18,9 +13,6 @@ public abstract class AbstractPromptSection implements PromptSection {
         this.enabled = enabled;
     }
 
-    /**
-     * 构建带标题的 Section
-     */
     protected String buildWithTitle(String title, String content) {
         if (content == null || content.isBlank()) {
             return "";
@@ -32,9 +24,6 @@ public abstract class AbstractPromptSection implements PromptSection {
         return sb.toString();
     }
 
-    /**
-     * 构建 XML 标签包裹的 Section
-     */
     protected String buildWithTag(String tag, String content) {
         if (content == null || content.isBlank()) {
             return "";

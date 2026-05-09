@@ -6,10 +6,6 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.stereotype.Component;
 
-/**
- * AI 客户端提供者 - 基础设施层
- * 封装 ChatClient 的创建
- */
 @Component
 @RequiredArgsConstructor
 public class ChatClientProvider {

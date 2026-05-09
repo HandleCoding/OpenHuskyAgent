@@ -11,9 +11,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * 测试 TUI 推理内容(reasoning)事件流 — 从 TextEvent 到 JSON-RPC 事件的完整链路。
- */
 class TuiReasoningEventTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -28,10 +25,8 @@ class TuiReasoningEventTest {
         sentMessages = new CopyOnWriteArrayList<>();
         dispatcher = new JsonRpcDispatcher(sentMessages::add);
         emitter = new JsonRpcEventEmitter(dispatcher);
-        // 本测试只测 TUI text event 到 JSON-RPC 事件的等价逻辑
     }
 
-    // ── 辅助方法：模拟 TuiSessionService.handleTextEvent 的逻辑 ──────────────
 
     private void simulateHandleTextEvent(TextEvent event, JsonRpcEventEmitter emitter) {
         if (event.isTokenEvent()) {
@@ -39,10 +34,9 @@ class TuiReasoningEventTest {
         }
     }
 
-    // ── 解析发出的 JSON-RPC 事件 ──────────────────────────────────────────────
 
     private JsonNode parseLastEvent() throws Exception {
-        assertFalse(sentMessages.isEmpty(), "应该发送了事件");
+        assertFalse(sentMessages.isEmpty(), "should have sent events");
         String last = sentMessages.get(sentMessages.size() - 1);
         return MAPPER.readTree(last);
     }
@@ -55,17 +49,15 @@ class TuiReasoningEventTest {
         return events;
     }
 
-    // ── 测试用例 ─────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("reasoning token → emitMessageDelta(reasoning=true)")
     void reasoningToken_emitsDeltaWithReasoningTrue() throws Exception {
-        TextEvent event = TextEvent.ofReasoning("让我想想这个问题");
+        TextEvent event = TextEvent.ofReasoning("let me think about this problem");
 
         simulateHandleTextEvent(event, emitter);
 
         JsonNode eventNode = parseLastEvent();
-        // 验证 JSON-RPC 通知结构
         assertEquals("2.0", eventNode.get("jsonrpc").asText());
         assertEquals("event", eventNode.get("method").asText());
 
@@ -73,101 +65,94 @@ class TuiReasoningEventTest {
         assertEquals("message.delta", params.get("type").asText());
 
         JsonNode payload = params.get("payload");
-        assertEquals("让我想想这个问题", payload.get("token").asText());
-        assertTrue(payload.get("reasoning").asBoolean(), "reasoning 字段应为 true");
+        assertEquals("let me think about this problem", payload.get("token").asText());
+        assertTrue(payload.get("reasoning").asBoolean(), "reasoning field should be true");
     }
 
     @Test
     @DisplayName("text token → emitMessageDelta(reasoning=false)")
     void textToken_emitsDeltaWithReasoningFalse() throws Exception {
-        TextEvent event = TextEvent.ofToken("你好世界");
+        TextEvent event = TextEvent.ofToken("hello world");
 
         simulateHandleTextEvent(event, emitter);
 
         JsonNode eventNode = parseLastEvent();
         JsonNode payload = eventNode.get("params").get("payload");
-        assertEquals("你好世界", payload.get("token").asText());
-        assertFalse(payload.get("reasoning").asBoolean(), "reasoning 字段应为 false");
+        assertEquals("hello world", payload.get("token").asText());
+        assertFalse(payload.get("reasoning").asBoolean(), "reasoning field should be false");
     }
 
     @Test
-    @DisplayName("intermediate message → TuiSessionService 不再发事件")
+    @DisplayName("intermediate message -> TuiSessionService no longer emits events")
     void intermediateMessage_emitsNothingFromSessionService() {
-        TextEvent event = TextEvent.ofMessage("我需要使用工具", true, List.of());
+        TextEvent event = TextEvent.ofMessage("I need to use tools", true, List.of());
 
         simulateHandleTextEvent(event, emitter);
 
-        assertTrue(sentMessages.isEmpty(), "整段消息应由 TuiChannelAdapter 负责转发");
+        assertTrue(sentMessages.isEmpty(), "whole message should be forwarded by TuiChannelAdapter");
     }
 
     @Test
-    @DisplayName("完整流：reasoning → text，整段消息由其他通路负责")
+    @DisplayName("full flow: reasoning -> text, full message handled by another path")
     void fullSequence_reasoningTextOnly() throws Exception {
-        simulateHandleTextEvent(TextEvent.ofReasoning("分析用户需求..."), emitter);
-        simulateHandleTextEvent(TextEvent.ofReasoning("需要读取文件"), emitter);
-        simulateHandleTextEvent(TextEvent.ofToken("我来"), emitter);
-        simulateHandleTextEvent(TextEvent.ofToken("帮你"), emitter);
-        simulateHandleTextEvent(TextEvent.ofToken("处理"), emitter);
-        simulateHandleTextEvent(TextEvent.ofMessage("我来帮你处理", true, List.of()), emitter);
+        simulateHandleTextEvent(TextEvent.ofReasoning("analyzing user needs..."), emitter);
+        simulateHandleTextEvent(TextEvent.ofReasoning("need to read file"), emitter);
+        simulateHandleTextEvent(TextEvent.ofToken("I will "), emitter);
+        simulateHandleTextEvent(TextEvent.ofToken("help you "), emitter);
+        simulateHandleTextEvent(TextEvent.ofToken("handle it"), emitter);
+        simulateHandleTextEvent(TextEvent.ofMessage("I will help you handle it", true, List.of()), emitter);
 
         List<JsonNode> events = parseAllEvents();
-        assertEquals(5, events.size(), "TuiSessionService 只应发送 token 事件");
+        assertEquals(5, events.size(), "TuiSessionService should only emit token events");
 
         for (int i = 0; i < 2; i++) {
             JsonNode payload = events.get(i).get("params").get("payload");
             assertEquals("message.delta", events.get(i).get("params").get("type").asText());
             assertTrue(payload.get("reasoning").asBoolean(),
-                    "事件 " + i + " 应该是 reasoning=true");
+                    "event " + i + " should be reasoning=true");
         }
 
         for (int i = 2; i < 5; i++) {
             JsonNode payload = events.get(i).get("params").get("payload");
             assertEquals("message.delta", events.get(i).get("params").get("type").asText());
             assertFalse(payload.get("reasoning").asBoolean(),
-                    "事件 " + i + " 应该是 reasoning=false");
+                    "event " + i + " should be reasoning=false");
         }
     }
 
     @Test
-    @DisplayName("reasoning token 空 token → 发送空字符串而非 null")
+    @DisplayName("reasoning token with empty token sends empty string instead of null")
     void reasoningToken_nullToken_emitsEmptyString() throws Exception {
-        // TextEvent.ofReasoning 不可能传 null，但防御性测试
         TextEvent event = new TextEvent(null, false, null, true, List.of());
 
-        // token=null, isTokenEvent() 返回 false（因为 token==null），所以走 intermediate 路径
-        // 这暴露了一个问题：reasoning=true 但 token=null 时 isTokenEvent()=false
-        assertFalse(event.isTokenEvent(), "token=null 时 isTokenEvent() 应为 false");
-        // 这意味着 reasoning-only event 如果 token=null 会走错误的路径
+        assertFalse(event.isTokenEvent(), "isTokenEvent() should be false when token=null");
     }
 
     @Test
-    @DisplayName("TextEvent.ofReasoning 的 reasoning 字段为 true")
+    @DisplayName("TextEvent.ofReasoning has reasoning=true")
     void ofReasoning_hasReasoningTrue() {
-        TextEvent event = TextEvent.ofReasoning("思考内容");
-        assertTrue(event.reasoning(), "ofReasoning() 的 reasoning 应为 true");
-        assertTrue(event.isTokenEvent(), "ofReasoning() 应为 token 事件");
-        assertEquals("思考内容", event.token());
-        assertNull(event.text(), "ofReasoning() 的 text 应为 null");
+        TextEvent event = TextEvent.ofReasoning("reasoning content");
+        assertTrue(event.reasoning(), "ofReasoning() reasoning should be true");
+        assertTrue(event.isTokenEvent(), "ofReasoning() should be a token event");
+        assertEquals("reasoning content", event.token());
+        assertNull(event.text(), "ofReasoning() text should be null");
     }
 
     @Test
-    @DisplayName("TextEvent.ofToken 的 reasoning 字段为 false")
+    @DisplayName("TextEvent.ofToken has reasoning=false")
     void ofToken_hasReasoningFalse() {
-        TextEvent event = TextEvent.ofToken("正文内容");
-        assertFalse(event.reasoning(), "ofToken() 的 reasoning 应为 false");
-        assertTrue(event.isTokenEvent(), "ofToken() 应为 token 事件");
-        assertEquals("正文内容", event.token());
+        TextEvent event = TextEvent.ofToken("textContent");
+        assertFalse(event.reasoning(), "ofToken() reasoning should be false");
+        assertTrue(event.isTokenEvent(), "ofToken() should be a token event");
+        assertEquals("textContent", event.token());
     }
 
-    // ── 客户端解析模拟测试 ────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("客户端解析 message.delta reasoning=true → handleToken(reasoning=true)")
+    @DisplayName("client parses message.delta reasoning=true -> handleToken(reasoning=true)")
     void clientParsing_reasoningDelta_routesToReasoning() throws Exception {
-        // 模拟服务端发送
-        emitter.emitMessageDelta("思考中...", true);
+        emitter.emitMessageDelta("reasoning...", true);
 
-        // 模拟客户端解析
         JsonNode eventNode = parseLastEvent();
         JsonNode params = eventNode.get("params");
         JsonNode payload = params.get("payload");
@@ -175,32 +160,32 @@ class TuiReasoningEventTest {
         String token = payload.has("token") ? payload.get("token").asText() : "";
         boolean reasoning = payload.has("reasoning") && payload.get("reasoning").asBoolean();
 
-        assertEquals("思考中...", token);
-        assertTrue(reasoning, "客户端应解析出 reasoning=true");
+        assertEquals("reasoning...", token);
+        assertTrue(reasoning, "client should parse reasoning=true");
     }
 
     @Test
-    @DisplayName("客户端解析 message.delta reasoning=false → handleToken(reasoning=false)")
+    @DisplayName("client parses message.delta reasoning=false -> handleToken(reasoning=false)")
     void clientParsing_textDelta_routesToText() throws Exception {
-        emitter.emitMessageDelta("正文", false);
+        emitter.emitMessageDelta("text", false);
 
         JsonNode payload = parseLastEvent().get("params").get("payload");
         String token = payload.has("token") ? payload.get("token").asText() : "";
         boolean reasoning = payload.has("reasoning") && payload.get("reasoning").asBoolean();
 
-        assertEquals("正文", token);
-        assertFalse(reasoning, "客户端应解析出 reasoning=false");
+        assertEquals("text", token);
+        assertFalse(reasoning, "client should parse reasoning=false");
     }
 
     @Test
-    @DisplayName("客户端解析 message.intermediate → handleIntermediate(intermediate=true)")
+    @DisplayName("client parses message.intermediate -> handleIntermediate(intermediate=true)")
     void clientParsing_intermediateEvent() throws Exception {
-        emitter.emitMessageIntermediate("中间消息", true);
+        emitter.emitMessageIntermediate("intermediate message", true);
 
         JsonNode payload = parseLastEvent().get("params").get("payload");
         boolean intermediate = payload.has("intermediate") && payload.get("intermediate").asBoolean();
 
-        assertTrue(intermediate, "客户端应解析出 intermediate=true");
+        assertTrue(intermediate, "client should parse intermediate=true");
     }
 
 }

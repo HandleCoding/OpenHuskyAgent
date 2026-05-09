@@ -12,12 +12,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-/**
- * MCP 服务器配置加载器
- *
- * <p>读取 mcp-servers.json，过滤 enabled 服务器。
- * 文件不存在或格式错误时返回空 map，不崩溃。</p>
- */
 @Slf4j
 @Component
 @ConditionalOnProperty(name = "mcp.enabled", havingValue = "true")
@@ -33,9 +27,6 @@ public class McpConfigLoader {
                 ? Path.of(configPathStr) : null;
     }
 
-    /**
-     * 加载仅 enabled 的服务器配置
-     */
     public ConfigLoadResult loadEnabledServersResult() {
         ConfigLoadResult all = loadAllServersResult();
         if (!all.success()) {
@@ -56,9 +47,6 @@ public class McpConfigLoader {
         return loadEnabledServersResult().servers();
     }
 
-    /**
-     * 加载全部服务器配置（含 disabled，用于状态展示）
-     */
     public ConfigLoadResult loadAllServersResult() {
         if (configPath == null) {
             log.debug("No MCP config path configured, skipping MCP server discovery");
@@ -105,9 +93,6 @@ public class McpConfigLoader {
         return loadAllServersResult().servers();
     }
 
-    /**
-     * 配置文件路径（用于状态展示）
-     */
     public Path getConfigPath() {
         return configPath;
     }

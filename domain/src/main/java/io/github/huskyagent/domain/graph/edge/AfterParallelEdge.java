@@ -8,10 +8,6 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 
 import java.util.List;
 
-/**
- * afterParallel 边：parallel_executor 节点后的路由。
- * 安全工具有失败 → end（回 model 反思）；审批队列非空 → continue（交 dispatcher）；否则 → end（回 model）。
- */
 @Slf4j
 public class AfterParallelEdge {
 
@@ -21,15 +17,15 @@ public class AfterParallelEdge {
     public AsyncCommandAction<ReActAgentState> build() {
         return AsyncCommandAction.command_async((state, config) -> {
             if (state.lastToolFailed()) {
-                log.info("[afterParallel] 安全工具有失败 → model 反思");
+                log.info("[afterParallel] Safe tool failed -> model reflection");
                 return new Command(LABEL_END);
             }
             List<AssistantMessage.ToolCall> remaining = state.toolExecutionRequests();
             if (!remaining.isEmpty()) {
-                log.debug("[afterParallel] 审批队列剩余 {} 个工具 → dispatcher", remaining.size());
+                log.debug("[afterParallel] Approval queue has {} remaining tools -> dispatcher", remaining.size());
                 return new Command(LABEL_CONTINUE);
             }
-            log.debug("[afterParallel] 所有工具完成 → model");
+            log.debug("[afterParallel] All tools completed -> model");
             return new Command(LABEL_END);
         });
     }

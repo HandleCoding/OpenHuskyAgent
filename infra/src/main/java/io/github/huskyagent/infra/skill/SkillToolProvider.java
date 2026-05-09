@@ -17,16 +17,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Skill 工具提供者 — 三层渐进式披露 + skill 管理 + SkillHub 集成：
- *
- * 1. skill_list → 名称+摘要
- * 2. skill_view(name) → SKILL.md 全文 + linked_files 概览
- * 3. skill_view(name, file_path) → 加载具体关联文件
- * 4. skill_manage(action, ...) → create / patch / delete
- * 5. skill_search(query) → 搜索 SkillHub 社区 skill
- * 6. skill_install(slug) → 安装 SkillHub skill 到本地
- */
 @Component
 public class SkillToolProvider implements ToolProvider {
 
@@ -150,8 +140,6 @@ public class SkillToolProvider implements ToolProvider {
                         if (detail == null) return ToolResult.failure("Failed to fetch skill content for: " + slug
                                 + ". The skill may not exist or SkillHub API is unavailable.");
 
-                        // 直接将 SkillHub 返回的原始 SKILL.md 写入磁盘，不重新构建 frontmatter
-                        // 这样避免 YAML 解析问题（社区 skill 的 frontmatter 格式可能包含特殊字符）
                         String result = skillLoader.installSkillFromRaw(slug, detail.skillMdRaw());
 
                         if (result == null) return ToolResult.failure("Failed to install skill: " + slug);

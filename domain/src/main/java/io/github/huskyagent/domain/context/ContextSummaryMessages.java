@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class ContextSummaryMessages {
-    public static final String SUMMARY_PREFIX = "[对话历史摘要]";
+    public static final String SUMMARY_PREFIX = "[Conversation History Summary]";
 
     private ContextSummaryMessages() {
     }

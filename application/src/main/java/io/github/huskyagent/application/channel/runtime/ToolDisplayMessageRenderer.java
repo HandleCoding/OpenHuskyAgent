@@ -20,7 +20,7 @@ public class ToolDisplayMessageRenderer {
         }
         return switch (event.status()) {
             case STARTED -> renderStarted(event);
-            case COMPLETED -> "工具完成：" + event.toolName() + renderDuration(event.durationMs());
+            case COMPLETED -> "Tool completed: " + event.toolName() + renderDuration(event.durationMs());
             case FAILED -> renderFailed(event);
         };
     }
@@ -28,18 +28,18 @@ public class ToolDisplayMessageRenderer {
     private String renderStarted(ToolDisplayEvent event) {
         String preview = clean(event.argsPreview());
         if (preview == null || preview.isBlank()) {
-            return "正在调用工具：" + event.toolName();
+            return "Calling tool: " + event.toolName();
         }
-        return "正在调用工具：" + event.toolName() + "\n参数：" + truncate(redact(preview), MAX_PREVIEW_CHARS);
+        return "Calling tool: " + event.toolName() + "\nArguments: " + truncate(redact(preview), MAX_PREVIEW_CHARS);
     }
 
     private String renderFailed(ToolDisplayEvent event) {
-        String message = "工具失败：" + event.toolName() + renderDuration(event.durationMs());
+        String message = "Tool failed: " + event.toolName() + renderDuration(event.durationMs());
         String error = clean(event.error());
         if (error == null || error.isBlank()) {
             return message;
         }
-        return message + "\n原因：" + truncate(redact(error), MAX_ERROR_CHARS);
+        return message + "\nReason: " + truncate(redact(error), MAX_ERROR_CHARS);
     }
 
     private String renderDuration(long durationMs) {
@@ -47,10 +47,10 @@ public class ToolDisplayMessageRenderer {
             return "";
         }
         if (durationMs < 1000) {
-            return "（" + durationMs + "ms）";
+            return " (" + durationMs + "ms)";
         }
         double seconds = durationMs / 1000.0;
-        return "（" + String.format(Locale.ROOT, "%.1fs", seconds) + "）";
+        return " (" + String.format(Locale.ROOT, "%.1fs", seconds) + ")";
     }
 
     private String clean(String value) {

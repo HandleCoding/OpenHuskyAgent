@@ -13,11 +13,7 @@ import org.springframework.stereotype.Component;
 import java.util.Set;
 
 /**
- * Metrics Hook — Micrometer 指标记录。
- *
- * <p>记录工具调用次数/耗时、LLM 调用次数/耗时、会话数、审批比率、上下文压缩次数等。</p>
- *
- * <p>仅在 Actuator (MeterRegistry) 可用时激活。</p>
+ * Records runtime counters and timers when Micrometer is present.
  */
 @Slf4j
 @Component

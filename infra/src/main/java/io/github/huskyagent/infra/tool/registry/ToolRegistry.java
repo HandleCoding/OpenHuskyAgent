@@ -9,15 +9,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-/**
- * 工具注册中心
- *
- * 特性：
- * 1. ToolProvider 自动发现 - 注入所有 ToolProvider bean，@PostConstruct 统一注册
- * 2. 工具分组 - 按 Toolset 组织
- * 3. 工具路由 - 按 name 查找 handler
- * 4. 线程安全 - ConcurrentHashMap
- */
 @Slf4j
 @Component
 public class ToolRegistry {
@@ -26,6 +17,7 @@ public class ToolRegistry {
     private final Map<String, ToolDefinition> tools = new ConcurrentHashMap<>();
     private final Map<Toolset, Set<String>> toolsetTools = new ConcurrentHashMap<>();
     private final Map<String, String> toolsetAliases = new ConcurrentHashMap<>();
+    /** Tracks which tool names belong to each provider so dynamic providers can replace their own tools safely. */
     private final Map<String, Set<String>> providerTools = new ConcurrentHashMap<>();
 
     public ToolRegistry(List<ToolProvider> toolProviders) {
@@ -49,13 +41,9 @@ public class ToolRegistry {
             tools.size(), toolProviders.size());
     }
 
-    /**
-     * 注册工具
-     */
     public synchronized void register(ToolDefinition tool) {
         String name = tool.name();
 
-        // 检查是否已存在
         ToolDefinition existing = tools.get(name);
         if (existing != null && existing.toolset() != tool.toolset()) {
             log.warn("Tool '{}' from toolset '{}' would shadow existing tool from toolset '{}'. Rejecting.",
@@ -69,9 +57,6 @@ public class ToolRegistry {
         log.debug("Registered tool '{}' in toolset '{}'", name, tool.toolset());
     }
 
-    /**
-     * 注销工具
-     */
     public synchronized void deregister(String name) {
         ToolDefinition removed = tools.remove(name);
         if (removed != null) {
@@ -99,32 +84,20 @@ public class ToolRegistry {
         log.info("Replaced {} tools for provider '{}'", current.size(), providerKey);
     }
 
-    /**
-     * 获取工具定义
-     */
     public ToolDefinition get(String name) {
         return tools.get(name);
     }
 
-    /**
-     * 获取所有工具
-     */
     public List<ToolDefinition> getAll() {
         return new ArrayList<>(tools.values());
     }
 
-    /**
-     * 获取所有启用的工具
-     */
     public List<ToolDefinition> getAllEnabled() {
         return tools.values().stream()
             .filter(ToolDefinition::enabled)
             .collect(Collectors.toList());
     }
 
-    /**
-     * 获取指定 Toolset 的工具
-     */
     public List<ToolDefinition> getByToolset(Toolset toolset) {
         Set<String> names = toolsetTools.getOrDefault(toolset, Set.of());
         return names.stream()
@@ -134,38 +107,23 @@ public class ToolRegistry {
             .collect(Collectors.toList());
     }
 
-    /**
-     * 获取所有 Toolset 名称
-     */
     public Set<Toolset> getRegisteredToolsets() {
         return new HashSet<>(toolsetTools.keySet());
     }
 
-    /**
-     * 注册 Toolset 别名
-     */
     public void registerToolsetAlias(String alias, Toolset toolset) {
         toolsetAliases.put(alias, toolset.getName());
         log.debug("Registered alias '{}' for toolset '{}'", alias, toolset);
     }
 
-    /**
-     * 检查工具是否存在
-     */
     public boolean hasTool(String name) {
         return tools.containsKey(name);
     }
 
-    /**
-     * 获取工具数量
-     */
     public int size() {
         return tools.size();
     }
 
-    /**
-     * 获取工具统计信息
-     */
     public Map<String, Object> getStats() {
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("totalTools", tools.size());

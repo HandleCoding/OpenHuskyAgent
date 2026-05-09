@@ -381,7 +381,6 @@ public class SessionRepository {
         String insertSql = "INSERT INTO messages (session_id, role, content, checkpoint_id) VALUES (?, ?, ?, ?)";
         String updateSql = "UPDATE sessions SET updated_at = CURRENT_TIMESTAMP WHERE id = ?";
         try (Connection conn = dataSource.getConnection()) {
-            // 插入消息
             try (PreparedStatement pstmt = conn.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
                 pstmt.setString(1, sessionId);
                 pstmt.setString(2, role);
@@ -394,7 +393,6 @@ public class SessionRepository {
                 if (rs.next()) {
                     id = rs.getLong(1);
                 }
-                // 在同一连接内更新 session 时间戳，避免嵌套获取连接导致死锁
                 try (PreparedStatement updateStmt = conn.prepareStatement(updateSql)) {
                     updateStmt.setString(1, sessionId);
                     updateStmt.executeUpdate();
@@ -437,7 +435,6 @@ public class SessionRepository {
         }
     }
 
-    /** 只返回 role='user' 的消息，按 id 升序，用于 /rewind 展示选择列表 */
     public List<MessageEntity> findUserMessagesBySessionId(String sessionId) {
         String sql = "SELECT * FROM messages WHERE session_id = ? AND role = 'user' ORDER BY id ASC";
         List<MessageEntity> messages = new ArrayList<>();
@@ -455,7 +452,6 @@ public class SessionRepository {
         }
     }
 
-    /** 删除 id > afterMessageId 的所有消息（含对应 tool_calls，CASCADE 自动处理） */
     public void deleteMessagesAfter(String sessionId, long afterMessageId) {
         String sql = "DELETE FROM messages WHERE session_id = ? AND id > ?";
         try (Connection conn = dataSource.getConnection();
@@ -597,7 +593,6 @@ public class SessionRepository {
 
     private static final DateTimeFormatter SQLITE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    /** SQLite CURRENT_TIMESTAMP 存储 UTC 字符串，读出后转为系统本地时区 */
     private static LocalDateTime parseUtcToLocal(String s) {
         if (s == null || s.isBlank()) return null;
         return LocalDateTime.parse(s, SQLITE_FMT)

@@ -11,29 +11,18 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * 运行时作用域 — 单次执行边界。
- *
- * <p>由 Principal + ChannelIdentity + RuntimePolicy + sessionId 组合推导。
- * 运行过程不得再读取全局可变状态；所有行为从 RuntimeScope 推导。</p>
- */
 @Value
 @Builder
 public class RuntimeScope {
 
-    /** 持久化会话 ID */
     String sessionId;
 
-    /** 已认证主体 */
     Principal principal;
 
-    /** 渠道身份 */
     ChannelIdentity channelIdentity;
 
-    /** 由 SceneConfig 和全局 catalog/defaults 推导出的运行时策略（唯一权威源） */
     RuntimePolicy runtimePolicy;
 
-    /** 本次执行的工作目录（由 RuntimePolicy.workingDirectoryPolicy 推导） */
     Path workingDirectory;
 
     public RuntimeScope withWorkingDirectory(Path workingDirectory) {

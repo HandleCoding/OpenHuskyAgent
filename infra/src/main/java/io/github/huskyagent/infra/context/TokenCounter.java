@@ -10,10 +10,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * Token 计数器
- * 使用 jtokkit（Java tiktoken 实现）进行精确计数，正确处理 CJK 字符
- */
 @Component
 public class TokenCounter {
 
@@ -21,13 +17,9 @@ public class TokenCounter {
     private final Encoding encoding;
 
     public TokenCounter() {
-        // 使用 cl100k_base 编码（GPT-4/GLM 等模型通用），对中文友好
         this.encoding = registry.getEncoding(EncodingType.CL100K_BASE);
     }
 
-    /**
-     * 精确计算消息列表的 token 数
-     */
     public int countTokens(List<Message> messages) {
         if (messages == null || messages.isEmpty()) {
             return 0;
@@ -37,20 +29,14 @@ public class TokenCounter {
             .sum();
     }
 
-    /**
-     * 精确计算单条消息的 token 数
-     */
     public int countMessageTokens(Message message) {
         String content = message.getText();
         if (content == null || content.isEmpty()) {
             return 0;
         }
-        return encoding.countTokens(content) + 4; // 角色开销约 4 tokens
+        return encoding.countTokens(content) + 4;
     }
 
-    /**
-     * 精确计算文本的 token 数
-     */
     public int countTextTokens(String text) {
         if (text == null || text.isEmpty()) {
             return 0;
@@ -58,9 +44,6 @@ public class TokenCounter {
         return encoding.countTokens(text);
     }
 
-    /**
-     * 计算 token 预算下能容纳多少消息（从后往前）
-     */
     public int countMessagesWithinBudget(List<Message> messages, int tokenBudget) {
         int accumulated = 0;
         int count = 0;
@@ -77,9 +60,6 @@ public class TokenCounter {
         return count;
     }
 
-    /**
-     * 找到 token 预算下的边界位置（从后往前累积）
-     */
     public int findBoundaryByTokens(List<Message> messages, int startIndex, int tokenBudget) {
         int accumulated = 0;
         int boundary = messages.size();

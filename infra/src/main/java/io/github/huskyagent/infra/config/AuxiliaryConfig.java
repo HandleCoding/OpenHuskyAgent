@@ -5,9 +5,6 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * 辅助客户端配置 — 使用 AgentConfig.auxiliary 的统一配置
- */
 @Configuration
 public class AuxiliaryConfig {
 

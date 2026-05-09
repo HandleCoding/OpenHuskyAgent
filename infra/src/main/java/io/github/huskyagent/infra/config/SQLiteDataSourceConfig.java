@@ -22,12 +22,6 @@ import javax.sql.DataSource;
 import java.io.File;
 import java.io.IOException;
 
-/**
- * SQLite DataSource 配置
- *
- * SQLite WAL 模式支持并发读，写操作由 SQLite 内部写锁串行化。
- * HikariCP 参数由 spring.datasource.hikari.* 配置项驱动。
- */
 @Configuration
 public class SQLiteDataSourceConfig {
 
@@ -53,7 +47,6 @@ public class SQLiteDataSourceConfig {
     public ObjectMapper checkpointObjectMapper() {
         var serializer = new SpringAIJacksonStateSerializer<>(AgentState::new);
 
-        // 注册 TokenUsage 序列化器，写入 @type 字段供反序列化时识别
         serializer.typeMapper().register(new TypeMapper.Reference<TokenUsage>(TokenUsage.class.getName()) {});
 
         var module = new SimpleModule();
@@ -85,7 +78,6 @@ public class SQLiteDataSourceConfig {
 
     @Bean
     public DataSource dataSource() {
-        // 从 jdbcUrl 提取数据目录，确保父目录存在
         String path = jdbcUrl.replace("jdbc:sqlite:", "").split("\\?")[0];
         File dataDir = new File(path).getParentFile();
         if (dataDir != null && !dataDir.exists()) {

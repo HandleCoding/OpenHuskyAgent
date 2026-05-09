@@ -11,11 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
-/**
- * TUI 自动补全器
- *
- * 支持命令补全和路径补全
- */
 public class AgentCompleter implements Completer {
 
     private static final List<String> COMMANDS = List.of(
@@ -49,11 +44,9 @@ public class AgentCompleter implements Completer {
     public void complete(LineReader reader, ParsedLine line, List<Candidate> candidates) {
         String buffer = line.line();
 
-        // 命令补全
         if (buffer.startsWith("/")) {
             completeCommand(buffer, candidates);
         }
-        // 路径补全（用于 /cd 命令）
         else if (buffer.startsWith("/cd ")) {
             completePath(buffer.substring(4), candidates);
         }

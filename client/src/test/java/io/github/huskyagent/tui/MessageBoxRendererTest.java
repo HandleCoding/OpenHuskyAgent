@@ -7,12 +7,6 @@ import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * 测试 MessageBoxRenderer 状态机 — 验证 reasoning/text token 渲染逻辑。
- *
- * <p>由于 JLine Terminal 难以在单元测试中 mock 输出，
- * 本测试直接反射读取内部状态（inReasoning, boxOpen, lineStarted）来验证状态转换。</p>
- */
 class MessageBoxRendererTest {
 
     private MessageBoxRenderer renderer;
@@ -21,7 +15,6 @@ class MessageBoxRendererTest {
     @BeforeEach
     void setUp() throws Exception {
         stringWriter = new StringWriter();
-        // 创建 dumb terminal
         var terminal = org.jline.terminal.TerminalBuilder.builder()
                 .system(false)
                 .type("dumb")
@@ -31,7 +24,6 @@ class MessageBoxRendererTest {
         renderer = new MessageBoxRenderer(terminal);
     }
 
-    // 反射读取内部状态
     private boolean getInReasoning() throws Exception {
         var f = MessageBoxRenderer.class.getDeclaredField("inReasoning");
         f.setAccessible(true);
@@ -52,108 +44,105 @@ class MessageBoxRendererTest {
 
     private Runnable noOp = () -> {};
 
-    // ── 基础状态转换测试 ────────────────────────────────────────────────────
 
     @Test
     @DisplayName("reasoning token → inReasoning=true")
     void reasoningToken_setsInReasoningTrue() throws Exception {
-        renderer.handleToken("思考内容", true, noOp);
-        assertTrue(getInReasoning(), "reasoning token 后 inReasoning 应为 true");
-        assertTrue(getBoxOpen(), "reasoning token 应自动开框");
-        assertTrue(getLineStarted(), "reasoning token 应标记 lineStarted");
+        renderer.handleToken("reasoning content", true, noOp);
+        assertTrue(getInReasoning(), "inReasoning should be true after reasoning token");
+        assertTrue(getBoxOpen(), "reasoning token should open the box automatically");
+        assertTrue(getLineStarted(), "reasoning token should mark lineStarted");
     }
 
     @Test
-    @DisplayName("连续 reasoning token → inReasoning 保持 true")
+    @DisplayName("consecutive reasoning tokens keep inReasoning true")
     void consecutiveReasoningTokens_stayInReasoning() throws Exception {
-        renderer.handleToken("第一段", true, noOp);
-        renderer.handleToken("第二段", true, noOp);
-        assertTrue(getInReasoning(), "连续 reasoning 后 inReasoning 应保持 true");
+        renderer.handleToken("first chunk", true, noOp);
+        renderer.handleToken("second chunk", true, noOp);
+        assertTrue(getInReasoning(), "inReasoning should stay true after consecutive reasoning tokens");
     }
 
     @Test
     @DisplayName("text token → inReasoning=false")
     void textToken_clearsInReasoning() throws Exception {
-        renderer.handleToken("思考", true, noOp);
+        renderer.handleToken("reasoning", true, noOp);
         assertTrue(getInReasoning());
 
-        renderer.handleToken("正文", false, noOp);
-        assertFalse(getInReasoning(), "text token 后 inReasoning 应为 false");
+        renderer.handleToken("text", false, noOp);
+        assertFalse(getInReasoning(), "inReasoning should be false after text token");
     }
 
     @Test
-    @DisplayName("text → reasoning 切换 → 重新进入 reasoning")
+    @DisplayName("text to reasoning transition re-enters reasoning")
     void textToReasoning_reEntersReasoning() throws Exception {
-        renderer.handleToken("正文", false, noOp);
+        renderer.handleToken("text", false, noOp);
         assertFalse(getInReasoning());
 
-        renderer.handleToken("再思考", true, noOp);
-        assertTrue(getInReasoning(), "text → reasoning 后应重新进入 reasoning 模式");
+        renderer.handleToken("reason again", true, noOp);
+        assertTrue(getInReasoning(), "should re-enter reasoning mode after text to reasoning transition");
     }
 
     @Test
-    @DisplayName("reasoning → text 切换 → 离开 reasoning")
+    @DisplayName("reasoning to text transition leaves reasoning")
     void reasoningToText_exitsReasoning() throws Exception {
-        renderer.handleToken("思考中", true, noOp);
+        renderer.handleToken("reasoning", true, noOp);
         assertTrue(getInReasoning());
 
-        renderer.handleToken("正文", false, noOp);
-        assertFalse(getInReasoning(), "reasoning → text 后应离开 reasoning 模式");
+        renderer.handleToken("text", false, noOp);
+        assertFalse(getInReasoning(), "should leave reasoning mode after reasoning to text transition");
     }
 
-    // ── intermediate 测试 ───────────────────────────────────────────────────
 
     @Test
-    @DisplayName("intermediate=true → inReasoning=false（重置 reasoning 状态）")
+    @DisplayName("intermediate=true resets inReasoning to false")
     void intermediateTrue_resetsReasoning() throws Exception {
-        renderer.handleToken("思考", true, noOp);
+        renderer.handleToken("reasoning", true, noOp);
         assertTrue(getInReasoning());
 
         renderer.handleIntermediate(true);
-        assertFalse(getInReasoning(), "intermediate=true 应重置 inReasoning");
+        assertFalse(getInReasoning(), "intermediate=true should reset inReasoning");
     }
 
     @Test
     @DisplayName("intermediate=false → inReasoning=false")
     void intermediateFalse_resetsReasoning() throws Exception {
-        renderer.handleToken("思考", true, noOp);
+        renderer.handleToken("reasoning", true, noOp);
         assertTrue(getInReasoning());
 
         renderer.handleIntermediate(false);
-        assertFalse(getInReasoning(), "intermediate=false 应重置 inReasoning");
+        assertFalse(getInReasoning(), "intermediate=false should reset inReasoning");
     }
 
     @Test
-    @DisplayName("intermediate 后继续 text → 正常显示")
+    @DisplayName("text after intermediate renders normally")
     void afterIntermediate_textWorks() throws Exception {
-        renderer.handleToken("正文1", false, noOp);
+        renderer.handleToken("text 1", false, noOp);
         renderer.handleIntermediate(true);
-        renderer.handleToken("正文2", false, noOp);
-        assertFalse(getInReasoning(), "intermediate 后 text 应保持 inReasoning=false");
-        assertTrue(getBoxOpen(), "框应仍然打开");
+        renderer.handleToken("text 2", false, noOp);
+        assertFalse(getInReasoning(), "text after intermediate should keep inReasoning=false");
+        assertTrue(getBoxOpen(), "box should remain open");
     }
 
-    // ── 框管理测试 ───────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("首个 token 自动开框")
+    @DisplayName("first token opens the box automatically")
     void firstToken_opensBox() throws Exception {
-        assertFalse(getBoxOpen(), "初始 boxOpen 应为 false");
+        assertFalse(getBoxOpen(), "initial boxOpen should be false");
         renderer.handleToken("hello", false, noOp);
-        assertTrue(getBoxOpen(), "首个 token 后 boxOpen 应为 true");
+        assertTrue(getBoxOpen(), "boxOpen should be true after first token");
     }
 
     @Test
-    @DisplayName("closeBox 关闭框")
+    @DisplayName("closeBox closes the box")
     void closeBox_closesBox() throws Exception {
         renderer.handleToken("hello", false, noOp);
         assertTrue(getBoxOpen());
         renderer.closeBox(100);
-        assertFalse(getBoxOpen(), "closeBox 后 boxOpen 应为 false");
+        assertFalse(getBoxOpen(), "boxOpen should be false after closeBox");
     }
 
     @Test
-    @DisplayName("reset 后可重新开框")
+    @DisplayName("box can reopen after reset")
     void reset_allowsReopenBox() throws Exception {
         renderer.handleToken("hello", false, noOp);
         renderer.closeBox(100);
@@ -161,44 +150,41 @@ class MessageBoxRendererTest {
         assertFalse(getBoxOpen());
 
         renderer.handleToken("new session", false, noOp);
-        assertTrue(getBoxOpen(), "reset 后应能重新开框");
+        assertTrue(getBoxOpen(), "should reopen after reset");
     }
 
-    // ── 完整流状态测试 ──────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("完整流：reasoning → text → intermediate → reasoning → text")
+    @DisplayName("full flow: reasoning -> text -> intermediate -> reasoning -> text")
     void fullFlow_stateTransitions() throws Exception {
         // 1. reasoning
-        renderer.handleToken("分析需求...", true, noOp);
+        renderer.handleToken("Analyzing request...", true, noOp);
         assertTrue(getInReasoning());
         assertTrue(getBoxOpen());
 
         // 2. text
-        renderer.handleToken("我来处理", false, noOp);
+        renderer.handleToken("I will handle it", false, noOp);
         assertFalse(getInReasoning());
 
         // 3. intermediate (tool calls coming)
         renderer.handleIntermediate(true);
         assertFalse(getInReasoning());
 
-        // 4. tool 结果后继续 reasoning
-        renderer.handleToken("再分析", true, noOp);
+        renderer.handleToken("analyze again", true, noOp);
         assertTrue(getInReasoning());
 
-        // 5. 最终 text
-        renderer.handleToken("完成", false, noOp);
+        renderer.handleToken("done", false, noOp);
         assertFalse(getInReasoning());
     }
 
     @Test
-    @DisplayName("多个 reasoning/text 循环")
+    @DisplayName("multiple reasoning/text cycles")
     void multipleReasoningTextCycles() throws Exception {
         for (int i = 0; i < 5; i++) {
             renderer.handleToken("reasoning " + i, true, noOp);
-            assertTrue(getInReasoning(), "第 " + i + " 轮 reasoning 后应为 true");
+            assertTrue(getInReasoning(), "row " + i + " should be true after reasoning");
             renderer.handleToken("text " + i, false, noOp);
-            assertFalse(getInReasoning(), "第 " + i + " 轮 text 后应为 false");
+            assertFalse(getInReasoning(), "row " + i + " should be false after text");
         }
     }
 }

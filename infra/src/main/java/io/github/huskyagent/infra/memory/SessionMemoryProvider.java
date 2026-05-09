@@ -13,12 +13,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 会话记忆提供者
- *
- * Hybrid FTS5 + LIKE 搜索：先尝试 FTS5 MATCH（英文高效、bm25 评分），
- * 空结果 + CJK 字符 → LIKE fallback（中文兼容）
- */
 @Slf4j
 @Component
 public class SessionMemoryProvider implements ScopedMemoryProvider {
@@ -80,9 +74,6 @@ public class SessionMemoryProvider implements ScopedMemoryProvider {
         return MemoryResult.of(searchMessages(query, options, scope), NAME);
     }
 
-    /**
-     * Hybrid 搜索：FTS5 MATCH → 空结果 + CJK → LIKE fallback
-     */
     List<MemoryEntry> searchMessages(String query, MemorySearchOptions options, MemoryScope scope) {
         if (scope == null || scope.getCurrentSessionId() == null) {
             log.warn("session_search called without session scope, returning empty");
@@ -97,9 +88,6 @@ public class SessionMemoryProvider implements ScopedMemoryProvider {
         return ftsResults;
     }
 
-    /**
-     * FTS5 MATCH 搜索（英文高效，bm25 评分）
-     */
     private List<MemoryEntry> searchWithFts5(String rawQuery, MemorySearchOptions options,
                                               MemoryScope scope) {
         List<MemoryEntry> entries = new ArrayList<>();
@@ -159,9 +147,6 @@ public class SessionMemoryProvider implements ScopedMemoryProvider {
         return entries;
     }
 
-    /**
-     * LIKE 搜索（CJK fallback，关键词出现次数评分）
-     */
     private List<MemoryEntry> searchWithLike(String query, MemorySearchOptions options,
                                               MemoryScope scope) {
         List<MemoryEntry> entries = new ArrayList<>();

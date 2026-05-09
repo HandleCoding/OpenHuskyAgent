@@ -5,11 +5,11 @@
 #   husky-remote install      Create symlink in /usr/local/bin for global access
 #
 # ── Remote Server Configuration ───────────────────────────────────────────────
-# 修改下面两行配置你的远程服务器地址
+# Change the following two lines to configure your remote server.
 REMOTE_HOST="10.109.214.133"
 REMOTE_PORT="8080"
 # ──────────────────────────────────────────────────────────────────────────────
-# 以下配置一般不需要修改
+# The settings below usually do not need changes.
 REMOTE_WS_URL="ws://${REMOTE_HOST}:${REMOTE_PORT}/api/tui"
 REMOTE_HTTP_URL="http://${REMOTE_HOST}:${REMOTE_PORT}"
 
@@ -80,9 +80,9 @@ case "${1:-tui}" in
 
         echo "🐺 Connecting to remote Husky: $SERVER_URL"
 
-        # 尝试检测服务是否可达（非强制，仅提示）
+        # Check service reachability as a non-blocking warning.
         if ! check_remote 2>/dev/null; then
-            echo "  ⚠ 警告: ${REMOTE_HTTP_URL}/actuator/health 不可达，尝试直接连接..."
+            echo "  Warning: ${REMOTE_HTTP_URL}/actuator/health is unreachable; trying to connect directly..."
         fi
 
         if [ -n "$CLIENT_JAR" ]; then

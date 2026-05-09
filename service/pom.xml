@@ -11,7 +11,7 @@
 
     <artifactId>husky-agent-service</artifactId>
     <name>husky-agent-service</name>
-    <description>服务层 - 对外暴露接口</description>
+    <description>Service layer - external interfaces</description>
 
     <dependencies>
         <dependency>

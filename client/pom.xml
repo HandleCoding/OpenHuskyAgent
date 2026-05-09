@@ -11,7 +11,7 @@
 
     <artifactId>husky-agent-client</artifactId>
     <name>husky-agent-client</name>
-    <description>TUI客户端 - 独立进程，零服务端依赖</description>
+    <description>TUI client - independent process with no server-side dependencies</description>
 
     <dependencies>
         <!-- JLine for TUI -->

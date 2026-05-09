@@ -5,10 +5,6 @@ import org.jline.terminal.Terminal;
 
 import java.util.List;
 
-/**
- * 消息框状态机：管理 boxOpen / inReasoning / lineStarted 状态，
- * 处理 token 流渲染（reasoning + text + Markdown），以及框的开/关/分隔。
- */
 class MessageBoxRenderer {
 
     private static final String RESET  = "\033[0m";
@@ -23,12 +19,10 @@ class MessageBoxRenderer {
 
     private final Terminal terminal;
 
-    // ── 消息框状态 ───────────────────────────────────────────────────────────────
     private boolean boxOpen      = false;
     private boolean inReasoning  = false;
     private boolean lineStarted  = false;
 
-    // ── Markdown 渲染器 ──────────────────────────────────────────────────────────
     private final MarkdownRenderer markdownRenderer = new MarkdownRenderer();
     private final StringBuilder    currentLineBuffer = new StringBuilder();
     private int lineEchoedLength = 0;
@@ -37,7 +31,6 @@ class MessageBoxRenderer {
         this.terminal = terminal;
     }
 
-    // ── 状态重置（每轮对话开始前调用） ──────────────────────────────────────────
 
     void reset() {
         boxOpen = false;
@@ -50,11 +43,8 @@ class MessageBoxRenderer {
 
     boolean isBoxOpen() { return boxOpen; }
 
-    // ── token 事件处理 ───────────────────────────────────────────────────────────
 
-    /** 处理 reasoning 或 text token，必要时自动开框 */
     void handleToken(String token, boolean reasoning, Runnable clearThinking) {
-        // 每个 token 同步终端宽度，支持用户拖拽调整窗口大小后立即生效
         markdownRenderer.setTerminalWidth(terminal.getWidth());
         if (!boxOpen) {
             clearThinking.run();
@@ -72,7 +62,6 @@ class MessageBoxRenderer {
         }
     }
 
-    /** 处理中间/最终消息（intermediate=true 打分隔线，false 重置状态） */
     void handleIntermediate(boolean intermediate) {
         if (intermediate) {
             flushLineBuffer();
@@ -85,9 +74,7 @@ class MessageBoxRenderer {
         }
     }
 
-    // ── 框管理 ───────────────────────────────────────────────────────────────────
 
-    /** 关闭框并追加耗时 */
     void closeBox(long elapsedMs) {
         if (!boxOpen) return;
         flushLineBuffer();
@@ -98,7 +85,6 @@ class MessageBoxRenderer {
         boxOpen = false;
     }
 
-    /** 若框打开则关闭（无耗时，用于异常/审批场景） */
     void closeBoxIfOpen() {
         if (!boxOpen) return;
         flushLineBuffer();
@@ -109,7 +95,6 @@ class MessageBoxRenderer {
         boxOpen = false;
     }
 
-    /** 整体打印（不走流式时使用）：打开框、写内容、带耗时关闭 */
     void printMessageInBox(String content, long elapsedMs) {
         println("");
         println(BOX_TOP);
@@ -118,7 +103,6 @@ class MessageBoxRenderer {
         println("");
     }
 
-    // ── 私有实现 ─────────────────────────────────────────────────────────────────
 
     private void handleReasoningToken(String token) {
         if (!inReasoning) {

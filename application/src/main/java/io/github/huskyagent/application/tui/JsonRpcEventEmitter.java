@@ -5,11 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 
-/**
- * 将 Agent 事件转为 JSON-RPC 通知推送给 TUI 客户端。
- *
- * <p>每个 TUI WebSocket 连接持有一个实例，通过 JsonRpcDispatcher 发送事件。</p>
- */
 @Slf4j
 public class JsonRpcEventEmitter {
 
@@ -26,7 +21,6 @@ public class JsonRpcEventEmitter {
         ));
     }
 
-    /** 整段消息推送：LLM 输出完一段但后面还有工具调用（intermediate=true）或最终消息（intermediate=false） */
     public void emitMessageIntermediate(String text, boolean intermediate) {
         Map<String, Object> payload = new java.util.LinkedHashMap<>();
         payload.put("intermediate", intermediate);

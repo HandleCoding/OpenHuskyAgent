@@ -23,18 +23,6 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-/**
- * 磁盘 Skill 加载 — 按优先级从低到高扫描多个目录，后加载的同名 skill 覆盖先加载的。
- *
- * <p>扫描顺序（优先级递增）：
- * <ol>
- *   <li>builtin-skills/（内置，git-tracked）</li>
- *   <li>~/.claude/skills/（全局 Claude Code）</li>
- *   <li>~/.husky/skills/（全局 Husky）</li>
- *   <li>.claude/skills/（项目 Claude Code）</li>
- *   <li>.husky/skills/ 或 skill.dir（项目 Husky，write 目标）</li>
- * </ol>
- */
 @Slf4j
 @Component
 public class SkillLoader {
@@ -56,7 +44,6 @@ public class SkillLoader {
     private final SkillManager skillManager;
     private final HuskyDataPaths dataPaths;
 
-    // 存储每个 skill 目录的 Path，用于按需加载关联文件
     private final Map<String, Path> skillDirMap = new HashMap<>();
 
     private static final String ENTRY_FILE = "SKILL.md";
@@ -76,7 +63,6 @@ public class SkillLoader {
         Path userHome = Path.of(System.getProperty("user.home"));
         Path projectDir = Path.of(System.getProperty("user.dir"));
 
-        // 优先级从低到高：后扫描的同名 skill 覆盖前面的
         scanSkillDir(resolveBuiltinSkillDir(),                  "builtin",        skills);
         scanSkillDir(userHome.resolve(".claude").resolve("skills"),   "global-claude",  skills);
         scanSkillDir(userHome.resolve(".husky").resolve("skills"),    "global-husky",   skills);
@@ -99,13 +85,10 @@ public class SkillLoader {
             entries.filter(Files::isDirectory)
                    .sorted()
                    .forEach(skillPath -> {
-                       // builtin-skills 可能含分类子目录（如 software-development/plan）
-                       // 递归扫描：如果子目录不含 SKILL.md 且包含子子目录，则深入一层
                        Path skillMd = skillPath.resolve(ENTRY_FILE);
                        if (Files.exists(skillMd)) {
                            loadSingleSkill(skillPath, skillMd, source, skills);
                        } else {
-                           // 分类子目录：深入扫描
                            try (Stream<Path> subEntries = Files.list(skillPath)) {
                                subEntries.filter(Files::isDirectory)
                                          .sorted()
@@ -139,7 +122,6 @@ public class SkillLoader {
                 log.info("Skipping disabled skill: {}", fullSkill.name());
                 return;
             }
-            // 后加载的（高优先级）覆盖已加载的同名 skill
             if (skills.stream().anyMatch(s -> s.name().equals(fullSkill.name()))) {
                 log.info("[{}] skill '{}' overrides previously loaded skill", source, fullSkill.name());
                 skills.removeIf(s -> s.name().equals(fullSkill.name()));
@@ -156,7 +138,6 @@ public class SkillLoader {
         }
     }
 
-    /** 扫描 skill 目录下的 references/templates/scripts/assets 子目录，收集文件列表 */
     private Map<String, List<String>> scanLinkedFiles(Path skillPath) {
         Map<String, List<String>> result = new LinkedHashMap<>();
         Path skillRoot = realPathOrNormalized(skillPath);
@@ -177,12 +158,10 @@ public class SkillLoader {
         return result;
     }
 
-    /** 查找 skill 目录路径 */
     public Path getSkillDir(String skillName) {
         return skillDirMap.get(skillName);
     }
 
-    /** 加载 skill 的关联文件内容 */
     public String loadLinkedFile(String skillName, String filePath) {
         Path dir = skillDirMap.get(skillName);
         if (dir == null) return null;
@@ -201,6 +180,10 @@ public class SkillLoader {
         }
     }
 
+    /**
+     * Prefers an on-disk built-in skill directory, but falls back to extracting
+     * bundled classpath resources when the packaged runtime has no unpacked copy.
+     */
     private Path resolveBuiltinSkillDir() {
         Path dir = resolveSkillDir(builtinDir);
         if (containsSkillEntry(dir)) {
@@ -236,6 +219,10 @@ public class SkillLoader {
         }
     }
 
+    /**
+     * Copies packaged built-in skills into the managed data directory while
+     * rejecting absolute and path-traversal resource paths.
+     */
     private Path extractBuiltinSkillsFromClasspath() {
         Path targetRoot = dataPaths.rootDirectory().resolve("builtin-skills").toAbsolutePath().normalize();
         PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
@@ -314,9 +301,7 @@ public class SkillLoader {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    // ── Skill 管理操作 ──────────────────────────────────────────────
 
-    /** 创建新 skill — 写入 SKILL.md 并重新加载 */
     public String createSkill(String name, String description, String content) {
         if (!isSafeSkillName(name)) {
             log.error("Invalid skill name: {}", name);
@@ -350,10 +335,6 @@ public class SkillLoader {
         }
     }
 
-    /** 安装社区 skill — 将 SkillHub 返回的原始 SKILL.md 原文写入磁盘，不做 frontmatter 重建。
-     *  避免 YAML 解析问题（社区 skill 的 frontmatter 可能包含冒号等特殊字符）。
-     *  目录名从 frontmatter 的 name 字段解析，解析失败时用 slug。
-     */
     public String installSkillFromRaw(String slug, String rawSkillMd) {
         Path dir = resolveSkillDir(skillDir);
         try {
@@ -363,7 +344,6 @@ public class SkillLoader {
             return null;
         }
 
-        // 从 frontmatter 解析 skill name 作为目录名
         String skillName;
         try {
             Skill parsed = parser.parse(slug, rawSkillMd);
@@ -378,7 +358,6 @@ public class SkillLoader {
             return null;
         }
 
-        // 检查名称冲突
         if (skillManager.getSkill(skillName) != null) {
             log.error("Skill '{}' already exists locally", skillName);
             return null;
@@ -403,7 +382,6 @@ public class SkillLoader {
         }
     }
 
-    /** Patch skill — 更新 SKILL.md 的 Markdown 正文（保留 frontmatter） */
     public String patchSkill(String name, String newContent) {
         Path skillDir = resolveMutableExistingSkillDir(name);
         if (skillDir == null) {
@@ -426,7 +404,6 @@ public class SkillLoader {
         }
     }
 
-    /** Delete skill — 删除整个 skill 目录并重新加载 */
     public String deleteSkill(String name) {
         Path skillDir = resolveMutableExistingSkillDir(name);
         if (skillDir == null) {
@@ -445,12 +422,10 @@ public class SkillLoader {
         }
     }
 
-    /** 构建完整的 SKILL.md 内容（frontmatter + markdown body） */
     private String buildSkillMd(String name, String description, String content) {
         return "---\nname: " + name + "\ndescription: " + description + "\n---\n\n" + content;
     }
 
-    /** 递归删除目录 */
     private void deleteDirectoryRecursive(Path dir) throws IOException {
         Path root = existingRealPath(managedSkillRoot());
         Path target = existingRealPath(dir);
@@ -548,6 +523,10 @@ public class SkillLoader {
         return null;
     }
 
+    /**
+     * Restricts linked files to whitelisted subdirectories under the skill root
+     * and rejects traversal through symlinks or relative path escapes.
+     */
     private Path resolveLinkedFile(Path skillPath, String filePath) {
         if (filePath == null || filePath.isBlank()) return null;
         Path relative = Path.of(filePath);
@@ -587,7 +566,6 @@ public class SkillLoader {
         }
     }
 
-    /** 重新加载所有 skill（操作后刷新 SkillManager） */
     public void reload() {
         load();
     }

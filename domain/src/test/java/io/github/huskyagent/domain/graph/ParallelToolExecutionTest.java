@@ -15,9 +15,6 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * 测试 GraphUtils.requiresApproval 的分组逻辑
- */
 class ParallelToolExecutionTest {
 
     private ToolDefinition safeTool;
@@ -26,32 +23,29 @@ class ParallelToolExecutionTest {
 
     @BeforeEach
     void setUp() {
-        // 安全工具：无 approvalChecker
         safeTool = ToolDefinition.of(
-                "read_file", "读取文件", Toolset.CORE,
+                "read_file", "read file", Toolset.CORE,
                 JsonNodeFactory.instance.objectNode(),
                 args -> null
         );
 
-        // 审批工具：approvalChecker 总是返回 ApprovalRequest（危险命令）
         approvalToolAlways = ToolDefinition.withApproval(
-                "terminal", "执行终端命令", Toolset.TERMINAL,
+                "terminal", "execute terminal command", Toolset.TERMINAL,
                 JsonNodeFactory.instance.objectNode(),
                 args -> null,
-                args -> new ApprovalRequest("req1", "terminal", args, "危险命令", "session1")
+                args -> new ApprovalRequest("req1", "terminal", args, "dangerous command", "session1")
         );
 
-        // 条件审批工具：approvalChecker 根据参数决定（command 包含 "rm" 时需要审批）
         approvalToolConditional = ToolDefinition.withApproval(
-                "terminal_cond", "条件审批终端", Toolset.TERMINAL,
+                "terminal_cond", "conditional approval terminal", Toolset.TERMINAL,
                 JsonNodeFactory.instance.objectNode(),
                 args -> null,
                 args -> {
                     String cmd = String.valueOf(args.getOrDefault("command", ""));
                     if (cmd.contains("rm")) {
-                        return new ApprovalRequest("req2", "terminal_cond", args, "危险删除", "session1");
+                        return new ApprovalRequest("req2", "terminal_cond", args, "dangerous delete", "session1");
                     }
-                    return null; // ls、cat 等安全命令无需审批
+                    return null;
                 }
         );
     }
@@ -60,7 +54,6 @@ class ParallelToolExecutionTest {
         return new AssistantMessage.ToolCall("id-" + name, "function", name, args);
     }
 
-    // ── requiresApproval 测试 ──────────────────────────────────────────────────
 
     @Test
     void safeToolDoesNotRequireApproval() {
@@ -100,8 +93,7 @@ class ParallelToolExecutionTest {
 
     @Test
     void toolNotInApprovalNamesIsAlwaysSafe() {
-        // 工具名不在 approvalNames 集合中，即使 ToolDefinition 有 approvalChecker 也不需要审批
-        Set<String> approvalNames = Set.of(); // 空集合
+        Set<String> approvalNames = Set.of();
         Map<String, ToolDefinition> defMap = Map.of("terminal", approvalToolAlways);
 
         AssistantMessage.ToolCall call = toolCall("terminal", "{\"command\":\"rm -rf /\"}");
@@ -110,7 +102,6 @@ class ParallelToolExecutionTest {
 
     @Test
     void malformedArgsDefaultsToRequiresApproval() {
-        // 参数 JSON 格式错误时，保守判断为需要审批
         Set<String> approvalNames = Set.of("terminal");
         Map<String, ToolDefinition> defMap = Map.of("terminal", approvalToolAlways);
 
@@ -120,15 +111,13 @@ class ParallelToolExecutionTest {
 
     @Test
     void toolDefinitionNotInMapDefaultsToRequiresApproval() {
-        // approvalNames 包含该工具但 defMap 中没有对应定义，保守判断为需要审批
         Set<String> approvalNames = Set.of("unknown_tool");
-        Map<String, ToolDefinition> defMap = Map.of(); // 空
+        Map<String, ToolDefinition> defMap = Map.of();
 
         AssistantMessage.ToolCall call = toolCall("unknown_tool", "{}");
         assertTrue(GraphUtils.requiresApproval(call, approvalNames, defMap));
     }
 
-    // ── 分组逻辑验证（通过 requiresApproval 模拟 parallel_executor 的分组） ───
 
     @Test
     void groupingMixedToolCalls() {
@@ -151,8 +140,8 @@ class ParallelToolExecutionTest {
                 .filter(c -> GraphUtils.requiresApproval(c, approvalNames, defMap))
                 .count();
 
-        assertEquals(2, safeCount,   "应有 2 个安全工具");
-        assertEquals(1, approvalCount, "应有 1 个审批工具");
+        assertEquals(2, safeCount,   "should have 2 safe tools");
+        assertEquals(1, approvalCount, "should have 1 approval tool");
     }
 
     @Test
@@ -168,7 +157,7 @@ class ParallelToolExecutionTest {
         long approvalCount = calls.stream()
                 .filter(c -> GraphUtils.requiresApproval(c, approvalNames, defMap))
                 .count();
-        assertEquals(0, approvalCount, "全是安全工具，审批数应为 0");
+        assertEquals(0, approvalCount, "all tools are safe, approval count should be 0");
     }
 
     @Test
@@ -184,6 +173,6 @@ class ParallelToolExecutionTest {
         long approvalCount = calls.stream()
                 .filter(c -> GraphUtils.requiresApproval(c, approvalNames, defMap))
                 .count();
-        assertEquals(2, approvalCount, "全是审批工具，审批数应为 2");
+        assertEquals(2, approvalCount, "all tools require approval, approval count should be 2");
     }
 }

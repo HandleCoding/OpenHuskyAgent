@@ -7,13 +7,6 @@ import io.github.huskyagent.infra.skill.SkillManager;
 
 import java.util.List;
 
-/**
- * Skill Section — 注入已激活 Skill 的摘要列表到系统 prompt。
- *
- * 两步渐进式披露：
- * 1. SkillSection 注入摘要（让 LLM 知道有哪些 skill 可用）
- * 2. skill_view 工具按需加载完整 SKILL.md 内容
- */
 public class SkillSection extends AbstractPromptSection {
 
     private final SkillManager skillManager;

@@ -20,10 +20,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/**
- * Web 搜索工具
- * 通过 Brave Search API 搜索互联网内容
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor

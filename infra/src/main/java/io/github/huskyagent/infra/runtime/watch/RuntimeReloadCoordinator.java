@@ -10,9 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * 统一协调资源 reload 与缓存失效。
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor

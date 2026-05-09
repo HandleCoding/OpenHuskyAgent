@@ -10,12 +10,6 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 
-/**
- * OpenAI API 配置
- *
- * base-url / api-key / model / temperature 由 spring.ai.openai.* 自动配置处理，
- * 此处仅覆盖 OpenAiApi Bean 以设置自定义超时（Agent 工具调用需要更长时间）。
- */
 @Configuration
 public class OpenAiConfig {
 

@@ -9,12 +9,6 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * 会话白名单自动审批 Hook — 检查工具是否在当前会话的已批准列表中。
- *
- * <p>若工具在白名单中，返回 allowWith("decision", "approved")，
- * ApprovalNode 收到后跳过 interrupt 直接放行。</p>
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -38,7 +32,7 @@ public class SessionWhitelistApprovalHook implements BeforeHook {
         if (toolName == null || sessionId == null) return HookResult.allow();
 
         if (approvalService.isSessionAllowed(sessionId, toolName)) {
-            log.debug("[hook] 工具 {} 在会话 {} 白名单中，自动审批", toolName, sessionId);
+            log.debug("[hook] tool {} is allowlisted in session {}; auto-approving", toolName, sessionId);
             return HookResult.allowWith(Map.of(HookDataKeys.APPROVAL_DECISION, "approved"));
         }
         return HookResult.allow();

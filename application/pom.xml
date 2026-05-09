@@ -11,7 +11,7 @@
 
     <artifactId>husky-agent-application</artifactId>
     <name>husky-agent-application</name>
-    <description>应用层 - 业务流程编排</description>
+    <description>Application layer - business workflow orchestration</description>
 
     <dependencies>
         <dependency>
@@ -34,7 +34,7 @@
             <artifactId>micrometer-core</artifactId>
         </dependency>
 
-        <!-- Jackson JSR310: LocalDateTime 序列化支持 -->
+        <!-- Jackson JSR310: LocalDateTime serialization support -->
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>

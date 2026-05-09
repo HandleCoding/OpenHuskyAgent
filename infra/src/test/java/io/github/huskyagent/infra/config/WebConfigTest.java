@@ -4,9 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * WebConfig 单元测试
- */
 class WebConfigTest {
 
     @Test
@@ -70,7 +67,6 @@ class WebConfigTest {
     @Test
     void testResolveBraveApiKeyEmptyWhenNoEnv() {
         WebConfig config = new WebConfig();
-        // 当 config 字段为空时，回退到环境变量；如果环境变量也不存在才返回空
         String envKey = System.getenv("BRAVE_SEARCH_API_KEY");
         String expected = (envKey != null && !envKey.isBlank()) ? envKey : "";
         assertEquals(expected, config.resolveBraveApiKey());

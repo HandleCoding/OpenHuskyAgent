@@ -14,19 +14,13 @@ import java.util.Set;
 import java.util.StringJoiner;
 
 /**
- * Audit Hook — 结构化审计日志。
- *
- * <p>输出格式为 key=value，便于 logback 过滤和日志分析工具解析。
- * 所有字符串值经 SecretRedactor 处理防止密钥泄漏。</p>
- *
- * <p>默认启用，可通过 {@code husky.observability.audit.enabled=false} 关闭。</p>
+ * Emits structured audit logs for major runtime events with secret redaction.
  */
 @Slf4j
 @Component
 @ConditionalOnProperty(name = "husky.observability.audit.enabled", havingValue = "true", matchIfMissing = true)
 public class AuditHook implements AfterHook {
 
-    /** 独立 logger 名，便于 logback 按名过滤审计日志 */
     private static final org.slf4j.Logger AUDIT_LOG =
             org.slf4j.LoggerFactory.getLogger("io.github.huskyagent.audit");
 

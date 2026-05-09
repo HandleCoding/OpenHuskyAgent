@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 
 /**
- * 应用生命周期 Hook 触发器 — 在应用启动和关闭时触发 STARTUP / SHUTDOWN 事件。
+ * Fires lifecycle hooks when the application starts and shuts down.
  */
 @Slf4j
 @Component

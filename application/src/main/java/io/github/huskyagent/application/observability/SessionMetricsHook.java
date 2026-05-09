@@ -12,13 +12,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.Set;
 
-/**
- * Session Metrics Hook — 将会话 token/duration 数据写入 SQLite sessions 表。
- *
- * <p>在 SESSION_END 事件触发时，从 HookContext 提取 observability 数据并持久化。</p>
- *
- * <p>默认启用，可通过 {@code husky.observability.metrics.enabled=false} 关闭。</p>
- */
 @Slf4j
 @Component
 @ConditionalOnProperty(name = "husky.observability.metrics.enabled", havingValue = "true", matchIfMissing = true)

@@ -14,15 +14,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/**
- * SkillHub API 客户端 — 搜索社区 skill + 获取 skill 详情。
- *
- * API:
- * - POST /skills/search — 搜索 skill（返回 slug, name, description, category）
- * - GET  /skills/{slug} — 获取 skill 详情（含 skill_md_raw, repo_url, skill_path）
- *
- * SkillHub API 需要认证（Bearer token）。
- */
 @Slf4j
 @Component
 public class SkillHubClient {
@@ -39,7 +30,6 @@ public class SkillHubClient {
         this.config = config;
     }
 
-    /** 搜索 SkillHub 社区 skill */
     public SkillHubSearchResponse searchSkills(String query, int limit) {
         if (!config.isEnabled()) {
             return SkillHubSearchResponse.error("SkillHub is disabled. Set skillhub.enabled=true in application.yml.");
@@ -87,7 +77,6 @@ public class SkillHubClient {
         }
     }
 
-    /** 获取 skill 详情 — GET /skills/{slug}，返回 skill_md_raw + repo_url */
     public SkillHubSkillDetail getSkillDetail(String slug) {
         if (!config.isEnabled()) return null;
 
@@ -175,7 +164,6 @@ public class SkillHubClient {
         return s.length() > max ? s.substring(0, max) : s;
     }
 
-    // ── 响应模型 ──────────────────────────────────────────────────────
 
     public record SkillHubSearchResult(
             String name,

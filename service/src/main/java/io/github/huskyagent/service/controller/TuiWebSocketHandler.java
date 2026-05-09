@@ -19,12 +19,6 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * WS 连接处理器 — 通用传输层，TUI 只是一种 channel adapter。
- *
- * <p>每个 WebSocket 连接创建一个 {@link JsonRpcDispatcher} 和 {@link JsonRpcMethods}，
- * 实现 per-connection 隔离的 JSON-RPC 通信。</p>
- */
 @Slf4j
 @Component
 public class TuiWebSocketHandler extends TextWebSocketHandler {
@@ -32,7 +26,6 @@ public class TuiWebSocketHandler extends TextWebSocketHandler {
     private final TuiChannelAdapter channelAdapter;
     private final TuiSessionServiceFactory tuiSessionServiceFactory;
 
-    /** 活跃连接：wsSessionId → ConnectionContext */
     private final ConcurrentHashMap<String, ConnectionContext> connections = new ConcurrentHashMap<>();
 
     public TuiWebSocketHandler(TuiChannelAdapter channelAdapter, TuiSessionServiceFactory tuiSessionServiceFactory) {
@@ -43,7 +36,7 @@ public class TuiWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         String connectionId = session.getId();
-        log.info("WS 连接: connectionId={}", connectionId);
+        log.info("WS connected: connectionId={}", connectionId);
 
         JsonRpcDispatcher dispatcher = new JsonRpcDispatcher(message -> {
             try {
@@ -51,7 +44,7 @@ public class TuiWebSocketHandler extends TextWebSocketHandler {
                     session.sendMessage(new TextMessage(message));
                 }
             } catch (IOException e) {
-                log.error("WebSocket 发送失败: connectionId={}", connectionId, e);
+                log.error("WebSocket send failed: connectionId={}", connectionId, e);
             }
         });
 
@@ -63,7 +56,6 @@ public class TuiWebSocketHandler extends TextWebSocketHandler {
         ConnectionContext ctx = new ConnectionContext(dispatcher, methods);
         connections.put(connectionId, ctx);
 
-        // 发送 ready 通知（包含 connectionId，供客户端标识）
         dispatcher.sendEvent("ready", Map.of(
                 "version", "0.1.0",
                 "mode", "tui",
@@ -80,13 +72,12 @@ public class TuiWebSocketHandler extends TextWebSocketHandler {
         String payload = message.getPayload();
         JsonNode frame = JsonRpcProtocol.deserialize(payload);
         if (frame == null) {
-            log.warn("无效 JSON-RPC 帧: {}", payload.substring(0, Math.min(100, payload.length())));
+            log.warn("Invalid JSON-RPC frame: {}", payload.substring(0, Math.min(100, payload.length())));
             return;
         }
 
         ctx.dispatcher().dispatch(frame);
 
-        // session.create 后，将 emitter 注册到 TuiChannelAdapter
         String agentSessionId = ctx.methods().getSessionService().getCurrentSessionId();
         if (agentSessionId != null) {
             registerEmitter(connectionId, agentSessionId, ctx.methods().getEmitter());
@@ -102,7 +93,7 @@ public class TuiWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         String connectionId = session.getId();
-        log.info("WS 断开: connectionId={}, status={}", connectionId, status);
+        log.info("WS disconnected: connectionId={}, status={}", connectionId, status);
         ConnectionContext ctx = connections.remove(connectionId);
         if (ctx != null) {
             String agentSessionId = ctx.methods().getSessionService().getCurrentSessionId();
@@ -116,7 +107,7 @@ public class TuiWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
-        log.error("WS 传输错误: connectionId={}", session.getId(), exception);
+        log.error("WS transport error: connectionId={}", session.getId(), exception);
     }
 
     private record ConnectionContext(JsonRpcDispatcher dispatcher, JsonRpcMethods methods) {}

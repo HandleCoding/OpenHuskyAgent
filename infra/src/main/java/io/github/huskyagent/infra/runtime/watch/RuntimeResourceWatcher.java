@@ -16,9 +16,6 @@ import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_DELETE;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
 
-/**
- * 统一的运行时资源 watcher。
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor

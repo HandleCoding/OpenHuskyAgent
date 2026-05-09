@@ -11,12 +11,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * 内置记忆工具提供者
- *
- * 将 BuiltinMemoryProvider 的写能力暴露为 Agent 可调用的工具。
- * 读取能力保留在 provider 内部，避免模型在普通对话中为了查看已注入的记忆而额外调用工具。
- */
 @Component
 public class BuiltinMemoryToolProvider implements ToolProvider {
 

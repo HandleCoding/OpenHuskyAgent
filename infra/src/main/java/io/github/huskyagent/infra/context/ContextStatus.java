@@ -1,8 +1,5 @@
 package io.github.huskyagent.infra.context;
 
-/**
- * Context 压缩状态
- */
 public record ContextStatus(
     int lastPromptTokens,
     int thresholdTokens,

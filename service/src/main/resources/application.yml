@@ -31,14 +31,14 @@ spring:
       max-lifetime: 1800000
 
 
-# TUI 配置
+# TUI configuration
 tui:
   in-process: false
   ws:
     path: ${TUI_WS_PATH:/api/tui}
     allowed-origins: ${TUI_WS_ALLOWED_ORIGINS:*}
 
-# Agent 配置
+# Agent configuration
 agent:
   auxiliary:
     model: ${AUXILIARY_MODEL:${OPENAI_MODEL:gpt-4o}}
@@ -79,7 +79,7 @@ agent:
       - MEMORY
     model: ""
 
-# 执行后端配置
+# Execution backend configuration
 execution:
   backend:
     idle-ttl-seconds: 300
@@ -96,7 +96,7 @@ execution:
       identity-file: ""
       workspace-root: ~/husky-workspace
 
-# 工具限制参数
+# Tool limit parameters
 tool:
   limits:
     terminal-max-output-chars: 200000
@@ -108,7 +108,7 @@ tool:
     prune-max-tool-result-length: 2000
     prune-max-arguments-length: 1000
 
-# Context 压缩配置
+# Context compression configuration
 context:
   threshold-percent: 0.75
   protect-first-n: 3
@@ -130,7 +130,7 @@ proxy:
   env-enabled: ${PROXY_ENV_ENABLED:true}
   detect-system: ${PROXY_DETECT_SYSTEM:false}
 
-# Web 工具配置
+# Web tool configuration
 web:
   backend: ${WEB_BACKEND:auto}
   brave-api-key: ${BRAVE_SEARCH_API_KEY:}
@@ -149,7 +149,7 @@ web:
     no-proxy: ${WEB_NO_PROXY:}
   blocked-domains: []
 
-# Knowledge 工具配置
+# Knowledge tool configuration
 knowledge:
   enabled: true
   default-top-k: 5
@@ -159,7 +159,7 @@ knowledge:
   max-walk-depth: 6
   local-sources: []
 
-# Browser 工具配置
+# Browser tool configuration
 browser:
   enabled: ${BROWSER_ENABLED:false}
   headless: true
@@ -173,7 +173,7 @@ browser:
   allow-localhost: true
   allow-private-network: false
 
-# MCP 配置
+# MCP configuration
 mcp:
   enabled: ${MCP_ENABLED:false}
   config-path: ${MCP_CONFIG_PATH:${husky.data.dir}/config/mcp-servers.json}
@@ -236,7 +236,7 @@ channels:
 chatbot:
   enabled: true
 
-# Scene 配置
+# Scene configuration
 scenes:
   default-scene: assistant
   configs:
@@ -272,9 +272,9 @@ scenes:
     # Chatbot runtime behavior: prompt, tools, approvals, backend, and memory.
     chatbot:
       system-prompt: |
-        你是 Husky，一个智能 AI 助手。
-        你可以使用以下工具来帮助用户：web_search（搜索互联网信息）、web_fetch（抓取网页内容）。
-        当前时间：{{currentDateTime}}
+        You are Husky, an intelligent AI assistant.
+        You can use the following tools to help users: web_search for internet search and web_fetch for webpage retrieval.
+        Current time: {{currentDateTime}}
       toolsets:
         - CORE
         - SKILLS
@@ -311,8 +311,8 @@ scenes:
       rate-limit-enabled: false
     feishu-qa:
       system-prompt: |
-        你是 Husky，一个全能个人助手。
-        当前时间：{{currentDateTime}}
+        You are Husky, a capable personal assistant.
+        Current time: {{currentDateTime}}
       toolsets:
         - SEARCH
         - SKILLS
@@ -349,12 +349,12 @@ scenes:
         - feishu
       rate-limit-enabled: false
 
-# Auth 配置
+# Auth configuration
 auth:
   enabled: ${AUTH_ENABLED:true}
   api-keys: ${HUSKY_API_KEYS:husky-dev-key-001}
 
-# Skill 配置
+# Skill configuration
 skill:
   builtin-dir: builtin-skills
   # write target for install/create — also scanned as highest-priority source
@@ -364,13 +364,13 @@ skill:
   managed-dirs: ${SKILL_MANAGED_DIRS:${skill.dir}}
   disabled: []
 
-# SkillHub 配置
+# SkillHub configuration
 skillhub:
   enabled: true
   api-url: https://www.skillhub.club/api/v1
   api-key: ${SKILLHUB_API_KEY:}
 
-# 可观测性配置
+# Observability configuration
 husky:
   data:
     dir: ${HUSKY_DATA_DIR:${user.home}/.husky}
@@ -380,7 +380,7 @@ husky:
     metrics:
       enabled: true
 
-# Actuator 配置
+# Actuator configuration
 management:
   endpoints:
     web:
@@ -390,6 +390,6 @@ management:
     husky:
       enabled: true
 
-# Server 配置
+# Server configuration
 server:
   port: ${HUSKY_PORT:18088}

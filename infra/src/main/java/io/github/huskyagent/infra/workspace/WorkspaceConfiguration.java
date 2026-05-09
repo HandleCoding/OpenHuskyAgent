@@ -5,11 +5,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
-/**
- * Workspace 配置注册。
- *
- * <p>当没有其他 Workspace 实现时注册基于本地文件系统的 LocalWorkspace。</p>
- */
 @Configuration
 public class WorkspaceConfiguration {
 

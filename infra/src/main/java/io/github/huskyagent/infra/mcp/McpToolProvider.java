@@ -19,13 +19,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
-/**
- * MCP 工具提供者 — 将 MCP 工具转换为 ToolDefinition
- *
- * <p>核心设计：MCP 工具 = 普通 ToolDefinition，通过 Toolset.MCP 分组，
- * handler 闭包委托给 McpServerConnector.callTool()（带熔断保护）。
- * 支持 toolsChangeConsumer 触发的动态工具刷新。</p>
- */
 @Slf4j
 @Component
 @ConditionalOnProperty(name = "mcp.enabled", havingValue = "true")
@@ -45,10 +38,8 @@ public class McpToolProvider implements DynamicToolProvider {
 
     @PostConstruct
     public void init() {
-        // 注册工具变更监听器
         connector.setToolsChangeListener(this::refreshAllTools);
 
-        // 初始加载
         loadAllTools();
     }
 
@@ -67,9 +58,6 @@ public class McpToolProvider implements DynamicToolProvider {
         this.toolsChangedListener = listener;
     }
 
-    /**
-     * 从所有已连接服务器加载工具
-     */
     private void loadAllTools() {
         for (String serverName : connector.getConnectedServerNames()) {
             List<McpSchema.Tool> mcpTools = connector.getTools(serverName);
@@ -90,9 +78,6 @@ public class McpToolProvider implements DynamicToolProvider {
                 tools.size(), connector.getConnectedServerNames().size());
     }
 
-    /**
-     * 工具变更时全量刷新。重新构建所有工具（因为工具可能新增或删除）。
-     */
     private void refreshAllTools() {
         Map<String, ToolDefinition> newTools = new ConcurrentHashMap<>();
 
@@ -125,7 +110,6 @@ public class McpToolProvider implements DynamicToolProvider {
 
         JsonNode parametersSchema = convertSchema(mcpTool.inputSchema());
 
-        // handler 通过 connector 间接调用，享受熔断保护
         String originalToolName = mcpTool.name();
         Function<Map<String, Object>, ToolResult> handler =
                 args -> executeMcpTool(serverName, originalToolName, args);
@@ -149,8 +133,6 @@ public class McpToolProvider implements DynamicToolProvider {
             return ToolResult.success(content);
 
         } catch (McpServerConnector.CircuitOpenException e) {
-            // 熔断拦截已由 McpCircuitBreakerHook 在 TOOL_CALL_BEFORE 阶段处理
-            // 此处为兜底：若绕过 Hook 直接调用 connector，仍返回熔断错误
             return ToolResult.failure(e.getMessage(), true, "Wait a moment and retry");
         } catch (McpServerConnector.ServerNotConnectedException e) {
             return ToolResult.failure(e.getMessage(), true, "Server may reconnect soon");
@@ -179,9 +161,6 @@ public class McpToolProvider implements DynamicToolProvider {
         return objectMapper.valueToTree(inputSchema);
     }
 
-    /**
-     * 生成带前缀的工具名：mcp_{server}_{tool}
-     */
     public static String prefixName(String serverName, String toolName) {
         return McpToolNames.prefixName(serverName, toolName);
     }

@@ -8,11 +8,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
-/**
- * 日期时间 Section
- *
- * 提供当前日期时间信息，帮助 Agent 理解时间上下文
- */
 public class DateTimeSection extends AbstractPromptSection {
 
     private final ZoneId timeZone;
@@ -32,12 +27,12 @@ public class DateTimeSection extends AbstractPromptSection {
 
     @Override
     public int getPriority() {
-        return 900;  // 最后加载
+        return 900;
     }
 
     @Override
     public boolean isDynamic() {
-        return true;  // 每次对话都更新
+        return true;
     }
 
     @Override

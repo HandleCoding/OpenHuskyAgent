@@ -1,8 +1,5 @@
 package io.github.huskyagent.infra.runtime.watch;
 
-/**
- * 单次 reload 的结果与后续失效动作。
- */
 public record RuntimeReloadOutcome(
         RuntimeResourceType type,
         boolean success,

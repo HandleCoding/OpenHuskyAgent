@@ -23,9 +23,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * SqliteCheckpointSaver.deleteCheckpointsAfter — 按 checkpoint_id 精确删除后续记录。
- */
 class SqliteCheckpointSaverRewindTest {
 
     @TempDir
@@ -80,7 +77,6 @@ class SqliteCheckpointSaverRewindTest {
         }
     }
 
-    // ── deleteCheckpointsAfter 核心逻辑 ───────────────────────────────────────
 
     @Test
     void deleteCheckpointsAfter_deletesOnlySubsequentCheckpoints() throws Exception {
@@ -91,7 +87,6 @@ class SqliteCheckpointSaverRewindTest {
 
         saver.deleteCheckpointsAfter("sess", "cp-1");
 
-        // cp-1 保留，cp-2 / cp-3 删除
         assertEquals(1, countCheckpoints("sess"));
         Collection<Checkpoint> remaining = saver.list(config("sess"));
         assertEquals(1, remaining.size());
@@ -126,7 +121,7 @@ class SqliteCheckpointSaverRewindTest {
         saver.deleteCheckpointsAfter("sess-A", "cp-1");
 
         assertEquals(1, countCheckpoints("sess-A"));
-        assertEquals(2, countCheckpoints("sess-B")); // sess-B 不受影响
+        assertEquals(2, countCheckpoints("sess-B"));
     }
 
     @Test
@@ -134,7 +129,6 @@ class SqliteCheckpointSaverRewindTest {
         insertCheckpoint("sess", "cp-1");
         insertCheckpoint("sess", "cp-2");
 
-        // cp-2 是最新的，删它之后没有更新的，数量不变
         saver.deleteCheckpointsAfter("sess", "cp-2");
 
         assertEquals(2, countCheckpoints("sess"));
@@ -150,7 +144,6 @@ class SqliteCheckpointSaverRewindTest {
         assertDoesNotThrow(() -> saver.deleteCheckpointsAfter("no-such-session", "cp-1"));
     }
 
-    // ── get() 返回最新 checkpoint ─────────────────────────────────────────────
 
     @Test
     void get_afterDelete_returnsCorrectLatest() throws Exception {

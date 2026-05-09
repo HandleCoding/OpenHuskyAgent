@@ -7,11 +7,6 @@ import java.net.UnknownHostException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * UrlSafety 单元测试
- *
- * testAllowsPublicURLs 使用子类覆盖 resolveHost，避免依赖真实 DNS 解析。
- */
 class UrlSafetyTest {
 
     @Test

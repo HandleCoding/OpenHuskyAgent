@@ -10,10 +10,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-/**
- * SessionManager rewind 相关方法的单元测试。
- * 使用 Mockito mock SessionRepository，不依赖真实 DB。
- */
 class SessionManagerRewindTest {
 
     private SessionRepository repo;
@@ -53,18 +49,15 @@ class SessionManagerRewindTest {
         assertNull(manager.getCheckpointIdForMessage("s1", 5L));
     }
 
-    // ── rewindTo — 正常截断 ───────────────────────────────────────────────────
 
     @Test
     void rewindTo_deletesMessagesFromNextUserRound() {
-        // 4 轮：user1(id=1), assistant(id=2), user2(id=3), assistant(id=4)
         MessageEntity u1 = entity(1L, "user",      "q1", "cp-1");
         MessageEntity a1 = entity(2L, "assistant", "a1", null);
         MessageEntity u2 = entity(3L, "user",      "q2", "cp-2");
         MessageEntity a2 = entity(4L, "assistant", "a2", null);
         when(repo.findMessagesBySessionId("s1")).thenReturn(List.of(u1, a1, u2, a2));
 
-        // rewind 到第一轮（u1），期望从 u2（id=3）开始删除，即 deleteMessagesAfter(s1, 2)
         boolean truncated = manager.rewindTo("s1", 1L);
 
         assertTrue(truncated);
@@ -79,7 +72,6 @@ class SessionManagerRewindTest {
         MessageEntity a2 = entity(4L, "assistant", "a2", null);
         when(repo.findMessagesBySessionId("s1")).thenReturn(List.of(u1, a1, u2, a2));
 
-        // 选最后一轮 u2，没有后续 user，不删
         boolean truncated = manager.rewindTo("s1", 3L);
 
         assertFalse(truncated);
@@ -104,14 +96,12 @@ class SessionManagerRewindTest {
         MessageEntity a3 = entity(6L, "assistant", "a3", null);
         when(repo.findMessagesBySessionId("s1")).thenReturn(List.of(u1, a1, u2, a2, u3, a3));
 
-        // rewind 到第二轮 u2，期望从 u3（id=5）开始删，即 deleteMessagesAfter(s1, 4)
         boolean truncated = manager.rewindTo("s1", 3L);
 
         assertTrue(truncated);
         verify(repo).deleteMessagesAfter("s1", 4L);
     }
 
-    // ── saveUserMessage 参数透传 ──────────────────────────────────────────────
 
     @Test
     void saveUserMessage_passesCheckpointIdToRepository() {
@@ -127,7 +117,6 @@ class SessionManagerRewindTest {
         verify(repo).saveMessage("s1", "user", "text", null);
     }
 
-    // ── listUserMessages 包含 checkpoint_id ──────────────────────────────────
 
     @Test
     void listUserMessages_returnsEntitiesWithCheckpointId() {

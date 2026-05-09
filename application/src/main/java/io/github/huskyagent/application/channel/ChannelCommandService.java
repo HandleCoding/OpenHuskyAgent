@@ -18,16 +18,16 @@ public class ChannelCommandService {
     public OutboundMessage execute(ChannelCommand command, InboundMessage inbound, String sceneId) {
         String name = command.name();
         return switch (name) {
-            case "new", "newsession", "新会话" -> newSession(inbound, sceneId);
-            case "session", "会话" -> currentSession(inbound, sceneId);
-            case "help", "帮助" -> help(inbound);
+            case "new", "newsession", "new-session" -> newSession(inbound, sceneId);
+            case "session", "session-info" -> currentSession(inbound, sceneId);
+            case "help" -> help(inbound);
             default -> unknown(command, inbound);
         };
     }
 
     public boolean supports(ChannelCommand command) {
         return switch (command.name()) {
-            case "new", "newsession", "新会话", "session", "会话", "help", "帮助" -> true;
+            case "new", "newsession", "new-session", "session", "session-info", "help" -> true;
             default -> false;
         };
     }
@@ -38,7 +38,7 @@ public class ChannelCommandService {
                 inbound.getChannelIdentity(),
                 sceneId
         );
-        return reply(inbound, scope.getSessionId(), "已创建新会话：" + scope.getSessionId());
+        return reply(inbound, scope.getSessionId(), "Created new session: " + scope.getSessionId());
     }
 
     private OutboundMessage currentSession(InboundMessage inbound, String sceneId) {
@@ -48,17 +48,17 @@ public class ChannelCommandService {
                 sceneId
         );
         String text = sessionId
-                .map(id -> "当前会话：" + id)
-                .orElse("当前入口还没有 active 会话，发送普通消息或 /new 会创建一个。");
+                .map(id -> "Current session: " + id)
+                .orElse("This entry has no active session yet. Send a normal message or /new to create one.");
         return reply(inbound, sessionId.orElse(null), text);
     }
 
     private OutboundMessage help(InboundMessage inbound) {
-        return reply(inbound, null, "可用命令：\n/new 新建会话\n/session 查看当前会话\n/help 查看帮助");
+        return reply(inbound, null, "Available commands:\n/new Create a new session\n/session Show current session\n/help Show help");
     }
 
     private OutboundMessage unknown(ChannelCommand command, InboundMessage inbound) {
-        return reply(inbound, null, "未知命令：/" + command.name() + "\n发送 /help 查看可用命令。");
+        return reply(inbound, null, "Unknown command: /" + command.name() + "\nSend /help to view available commands.");
     }
 
     private OutboundMessage reply(InboundMessage inbound, String sessionId, String text) {

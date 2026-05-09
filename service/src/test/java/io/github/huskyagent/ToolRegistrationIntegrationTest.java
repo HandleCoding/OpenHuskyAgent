@@ -21,7 +21,7 @@ class ToolRegistrationIntegrationTest extends AbstractIntegrationTest {
     @Test
     @Order(1)
     void testAllToolsRegistered() {
-        System.out.println("\n📋 测试: 工具注册验证");
+        System.out.println("\n📋 Test: tool registration validation");
 
         assertNotNull(toolRegistry, "ToolRegistry should be injected");
         assertTrue(toolRegistry.size() >= 7, "At least 7 tools should be registered");
@@ -38,20 +38,20 @@ class ToolRegistrationIntegrationTest extends AbstractIntegrationTest {
         assertNotNull(toolRegistry.get("browser_navigate"), "browser_navigate should exist when browser.enabled=true");
 
         List<ToolDefinition> tools = toolRegistry.getAll();
-        System.out.println("✅ 已注册 " + tools.size() + " 个工具:");
+        System.out.println("✅ Registered " + tools.size() + " tools:");
         tools.forEach(t -> System.out.println("   - " + t.name() + " [" + t.toolset().getName() + "]"));
     }
 
     @Test
     @Order(2)
     void testToolsetEnabled() {
-        System.out.println("\n📋 测试: 工具集状态");
+        System.out.println("\n📋 Test: toolset status");
 
         var toolsets = toolRegistry.getRegisteredToolsets();
         assertTrue(toolsets.size() >= 3, "At least 3 toolsets should exist");
         assertEquals(7, toolRegistry.getByToolset(Toolset.BROWSER).size(), "Browser toolset should expose 7 V1 tools");
 
-        System.out.println("✅ 工具集:");
+        System.out.println("✅ Toolsets:");
         toolsets.forEach(t -> {
             var toolsInSet = toolRegistry.getByToolset(t);
             System.out.println("   - " + t.getName() + ": " + toolsInSet.size() + " tools");
@@ -61,13 +61,13 @@ class ToolRegistrationIntegrationTest extends AbstractIntegrationTest {
     @Test
     @Order(3)
     void testToolRegistryStats() {
-        System.out.println("\n📋 测试: 工具注册统计");
+        System.out.println("\n📋 Test: tool registration stats");
 
         var stats = toolRegistry.getStats();
 
-        System.out.println("✅ 工具统计:");
-        System.out.println("   总工具数: " + stats.get("totalTools"));
-        System.out.println("   启用工具数: " + stats.get("enabledTools"));
-        System.out.println("   工具集分布: " + stats.get("toolsets"));
+        System.out.println("✅ Tool stats:");
+        System.out.println("   Total tools: " + stats.get("totalTools"));
+        System.out.println("   Enabled tools: " + stats.get("enabledTools"));
+        System.out.println("   Toolset distribution: " + stats.get("toolsets"));
     }
 }

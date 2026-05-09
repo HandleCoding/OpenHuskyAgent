@@ -19,20 +19,20 @@ class SkillManagerTest {
     void setUp() {
         skillManager = new SkillManager();
         skillManager.setSkills(List.of(
-                Skill.ofDirectory("web_research", "深度网络调研",
+                Skill.ofDirectory("web_research", "Deep web research",
                         Set.of(Toolset.WEB, Toolset.SEARCH), Set.of("macos", "linux"),
                         "content1", Path.of("/skills/web_research"),
                         Map.of("references", List.of("references/report-template.md"))),
-                Skill.ofDirectory("code_review", "代码审查",
+                Skill.ofDirectory("code_review", "Code review",
                         Set.of(Toolset.CORE, Toolset.SEARCH), Set.of(),
                         "content2", Path.of("/skills/code_review"),
                         Map.of("references", List.of("references/owasp-quickref.md"))),
-                Skill.ofDirectory("debugging", "系统化调试",
+                Skill.ofDirectory("debugging", "Systematic debugging",
                         Set.of(Toolset.CORE, Toolset.TERMINAL, Toolset.SEARCH), Set.of("macos", "linux"),
                         "content3", Path.of("/skills/debugging"),
                         Map.of("scripts", List.of("scripts/env-diagnose.sh"),
                                "references", List.of("references/java-exceptions.md"))),
-                Skill.ofSimple("simple", "无条件 skill", Set.of(), Set.of(), "content4")
+                Skill.ofSimple("simple", "Unconditional skill", Set.of(), Set.of(), "content4")
         ));
     }
 
@@ -40,7 +40,7 @@ class SkillManagerTest {
     void getSkillByName() {
         Skill skill = skillManager.getSkill("web_research");
         assertNotNull(skill);
-        assertEquals("深度网络调研", skill.description());
+        assertEquals("Deep web research", skill.description());
     }
 
     @Test

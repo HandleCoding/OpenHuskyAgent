@@ -18,10 +18,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * Context 管理器
- * 负责编排压缩流程，是上下文管理的核心入口
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -34,12 +30,6 @@ public class ContextManager {
     private final HookRegistry hookRegistry;
     private final ContextManagementStrategyResolver strategyResolver;
 
-    /**
-     * 加载消息并压缩（核心入口）
-     *
-     * @param sessionId 会话ID
-     * @return 适合 context 的消息列表
-     */
     public List<Message> loadMessagesForContext(String sessionId) {
         return loadMessagesForContext(sessionId, null, null);
     }
@@ -129,12 +119,6 @@ public class ContextManager {
         return (int) (policy.getContextLength() * policy.getThresholdPercent());
     }
 
-    /**
-     * 更新 token 使用情况
-     *
-     * @param sessionId 会话ID
-     * @param usage     token 使用情况
-     */
     public void updateTokenUsage(String sessionId, TokenUsage usage) {
         if (engine instanceof DefaultContextEngine dce) {
             dce.updateFromResponse(sessionId, usage);
@@ -145,9 +129,6 @@ public class ContextManager {
             sessionId, usage.promptTokens());
     }
 
-    /**
-     * 获取当前上下文状态
-     */
     public ContextStatus getStatus(String sessionId) {
         if (engine instanceof DefaultContextEngine dce) {
             return dce.getStatus(sessionId);
@@ -155,9 +136,6 @@ public class ContextManager {
         return engine.getStatus();
     }
 
-    /**
-     * 获取当前上下文状态（无 sessionId）
-     */
     public ContextStatus getStatus() {
         return engine.getStatus();
     }
@@ -172,16 +150,10 @@ public class ContextManager {
         log.debug("Context engine finalized for session: {}", sessionId);
     }
 
-    /**
-     * 获取配置
-     */
     public ContextConfig getConfig() {
         return config;
     }
 
-    /**
-     * 估算消息的 token 数
-     */
     public int estimateTokens(List<Message> messages) {
         return tokenCounter.countTokens(messages);
     }

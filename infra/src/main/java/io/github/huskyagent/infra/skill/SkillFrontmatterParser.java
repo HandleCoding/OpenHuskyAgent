@@ -7,17 +7,6 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * 解析 SKILL.md 的 YAML frontmatter + Markdown 正文。
- *
- * Frontmatter 格式：
- * ---
- * name: web_research
- * description: 深度网络调研
- * requires_toolsets: [WEB, SEARCH]
- * platforms: [macos, linux]
- * ---
- */
 public class SkillFrontmatterParser {
 
     private static final Pattern FRONTMATTER_PATTERN =

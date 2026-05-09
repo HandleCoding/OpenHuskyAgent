@@ -24,11 +24,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-/**
- * 探索性测试：对比 ChatClient.call() 与 .stream() 在普通对话和工具调用场景下的行为差异
- *
- * <p>需要环境变量 OPENAI_API_KEY、OPENAI_BASE_URL、OPENAI_MODEL 才能运行（否则 skip）。</p>
- */
 @EnabledIf("isApiConfigured")
 class ChatClientStreamingTest {
 
@@ -48,12 +43,12 @@ class ChatClientStreamingTest {
     private ChatClient chatClientWithTools;
 
     private static final String TOOL_NAME = "get_weather";
-    private static final String TOOL_DESC = "获取指定城市的天气信息";
+    private static final String TOOL_DESC = "Get weather information for the specified city";
     private static final String TOOL_SCHEMA = """
             {
               "type": "object",
               "properties": {
-                "city": { "type": "string", "description": "城市名称" }
+                "city": { "type": "string", "description": "city name" }
               },
               "required": ["city"]
             }
@@ -96,30 +91,30 @@ class ChatClientStreamingTest {
     @Test
     void scenario1a_normalChat_call() {
         System.out.println("\n════════════════════════════════════════");
-        System.out.println("场景 1a：普通对话 — .call()");
+        System.out.println("Scenario 1a: normal chat — .call()");
         System.out.println("════════════════════════════════════════");
 
         long start = System.currentTimeMillis();
 
         ChatResponse response = chatClient.prompt()
-                .messages(new UserMessage("请用一句话介绍一下 Java 语言"))
+                .messages(new UserMessage("Describe the Java language in one sentence."))
                 .call()
                 .chatResponse();
 
         long elapsed = System.currentTimeMillis() - start;
         AssistantMessage output = response.getResult().getOutput();
 
-        System.out.println("✅ 响应耗时（等待完整结果）: " + elapsed + "ms");
+        System.out.println("✅ Response time (waiting for full result): " + elapsed + "ms");
         System.out.println("   hasToolCalls: " + output.hasToolCalls());
-        System.out.println("   text 长度   : " + (output.getText() != null ? output.getText().length() : 0));
-        System.out.println("   text 内容   : " + output.getText());
+        System.out.println("   text length   : " + (output.getText() != null ? output.getText().length() : 0));
+        System.out.println("   text Content   : " + output.getText());
         System.out.println("   finishReason: " + response.getResult().getMetadata().getFinishReason());
     }
 
     @Test
     void scenario1b_normalChat_stream() {
         System.out.println("\n════════════════════════════════════════");
-        System.out.println("场景 1b：普通对话 — .stream()");
+        System.out.println("Scenario 1b: normal chat — .stream()");
         System.out.println("════════════════════════════════════════");
 
         AtomicInteger chunkCount         = new AtomicInteger(0);
@@ -132,7 +127,7 @@ class ChatClientStreamingTest {
         long start = System.currentTimeMillis();
 
         Flux<ChatResponse> flux = chatClient.prompt()
-                .messages(new UserMessage("请用一句话介绍一下 Java 语言"))
+                .messages(new UserMessage("Describe the Java language in one sentence."))
                 .stream()
                 .chatResponse();
 
@@ -169,13 +164,13 @@ class ChatClientStreamingTest {
 
         long elapsed = System.currentTimeMillis() - start;
 
-        System.out.println("\n✅ 流式完成，总耗时: " + elapsed + "ms");
-        System.out.println("   chunk 总数        : " + chunkCount.get());
-        System.out.println("   推理内容 chunk 数  : " + reasoningChunkCount.get());
-        System.out.println("   正文 chunk 数      : " + textChunkCount.get());
+        System.out.println("\n✅ Streaming completed, total time: " + elapsed + "ms");
+        System.out.println("   chunk count        : " + chunkCount.get());
+        System.out.println("   reasoning content chunk count  : " + reasoningChunkCount.get());
+        System.out.println("   text chunk count      : " + textChunkCount.get());
         System.out.println("   finishReason      : " + finishReason.get());
-        System.out.println("   完整正文           : " + fullText);
-        System.out.println("   推理内容（前200字）: "
+        System.out.println("   full text           : " + fullText);
+        System.out.println("   reasoning content (first 200 chars): "
                 + (fullReasoning.length() > 200
                    ? fullReasoning.substring(0, 200) + "..."
                    : fullReasoning));
@@ -184,22 +179,22 @@ class ChatClientStreamingTest {
     @Test
     void scenario2a_toolCall_call() {
         System.out.println("\n════════════════════════════════════════");
-        System.out.println("场景 2a：工具调用 — .call()");
+        System.out.println("Scenario 2a: tool call — .call()");
         System.out.println("════════════════════════════════════════");
 
         long start = System.currentTimeMillis();
 
         ChatResponse response = chatClientWithTools.prompt()
-                .messages(new UserMessage("北京今天天气怎么样？"))
+                .messages(new UserMessage("What is the weather in Beijing today?"))
                 .call()
                 .chatResponse();
 
         long elapsed = System.currentTimeMillis() - start;
         AssistantMessage output = response.getResult().getOutput();
 
-        System.out.println("✅ 响应耗时: " + elapsed + "ms");
+        System.out.println("✅ Response time: " + elapsed + "ms");
         System.out.println("   hasToolCalls: " + output.hasToolCalls());
-        System.out.println("   text 内容   : " + output.getText());
+        System.out.println("   text Content   : " + output.getText());
         System.out.println("   finishReason: " + response.getResult().getMetadata().getFinishReason());
 
         if (output.hasToolCalls()) {
@@ -215,7 +210,7 @@ class ChatClientStreamingTest {
     @Test
     void scenario2b_toolCall_stream() {
         System.out.println("\n════════════════════════════════════════");
-        System.out.println("场景 2b：工具调用 — .stream()  ← 核心探索");
+        System.out.println("Scenario 2b: tool call — .stream()  ← core exploration");
         System.out.println("════════════════════════════════════════");
 
         AtomicInteger chunkCount = new AtomicInteger(0);
@@ -226,7 +221,7 @@ class ChatClientStreamingTest {
         long start = System.currentTimeMillis();
 
         Flux<ChatResponse> flux = chatClientWithTools.prompt()
-                .messages(new UserMessage("北京今天天气怎么样？"))
+                .messages(new UserMessage("What is the weather in Beijing today?"))
                 .stream()
                 .chatResponse();
 
@@ -272,14 +267,14 @@ class ChatClientStreamingTest {
 
         long elapsed = System.currentTimeMillis() - start;
 
-        System.out.println("\n✅ 流式工具调用完成，总耗时: " + elapsed + "ms");
-        System.out.println("   chunk 总数         : " + chunkCount.get());
-        System.out.println("   累积 text          : " + accumulatedText);
-        System.out.println("   累积 tool arguments: " + accumulatedArgs);
+        System.out.println("\n✅ Streaming tool call completed, total time: " + elapsed + "ms");
+        System.out.println("   chunk count         : " + chunkCount.get());
+        System.out.println("   accumulated text          : " + accumulatedText);
+        System.out.println("   accumulated tool arguments: " + accumulatedArgs);
 
         AssistantMessage last = lastToolCallChunk.get();
         if (last != null) {
-            System.out.println("\n📌 含 toolCalls 的最后一个 chunk 详情：");
+            System.out.println("\n📌 Last chunk with toolCalls details:");
             System.out.println("   hasToolCalls: " + last.hasToolCalls());
             last.getToolCalls().forEach(tc -> {
                 System.out.println("   toolCall.id       : " + tc.id());
@@ -287,20 +282,20 @@ class ChatClientStreamingTest {
                 System.out.println("   toolCall.arguments: " + tc.arguments());
             });
         } else {
-            System.out.println("\n⚠️  没有任何 chunk 携带 toolCalls —— 说明该模型在 stream 模式下不返回 tool_calls！");
+            System.out.println("\n⚠️  no chunks contained toolCalls; this model/API does not return tool_calls in stream mode");
         }
     }
 
     @Test
     void scenario2c_toolCall_stream_aggregate() {
         System.out.println("\n════════════════════════════════════════");
-        System.out.println("场景 2c：工具调用 — .stream() + collect 聚合");
+        System.out.println("Scenario 2c: tool call — .stream() + collect aggregation");
         System.out.println("════════════════════════════════════════");
 
         long start = System.currentTimeMillis();
 
         List<ChatResponse> allChunks = chatClientWithTools.prompt()
-                .messages(new UserMessage("北京今天天气怎么样？"))
+                .messages(new UserMessage("What is the weather in Beijing today?"))
                 .stream()
                 .chatResponse()
                 .collectList()
@@ -309,11 +304,11 @@ class ChatClientStreamingTest {
         long elapsed = System.currentTimeMillis() - start;
 
         if (allChunks == null || allChunks.isEmpty()) {
-            System.out.println("⚠️  未收到任何 chunk！");
+            System.out.println("⚠️  no chunks received");
             return;
         }
 
-        System.out.println("✅ 聚合完成，总耗时: " + elapsed + "ms，共 " + allChunks.size() + " 个 chunk");
+        System.out.println("✅ aggregation completed, total time: " + elapsed + "ms, total " + allChunks.size() + " chunks");
 
         StringBuilder fullText = new StringBuilder();
         List<AssistantMessage.ToolCall> allToolCalls = new ArrayList<>();
@@ -330,11 +325,11 @@ class ChatClientStreamingTest {
             if (!"null".equals(fr) && !"NONE".equals(fr)) finalFinishReason = fr;
         }
 
-        System.out.println("\n📊 聚合结果：");
-        System.out.println("   完整 text        : " + fullText);
+        System.out.println("\n📊 Aggregation result:");
+        System.out.println("   full text        : " + fullText);
         System.out.println("   hasToolCalls     : " + !allToolCalls.isEmpty());
-        System.out.println("   toolCalls 总数   : " + allToolCalls.size());
-        System.out.println("   最终 finishReason: " + finalFinishReason);
+        System.out.println("   toolCalls count   : " + allToolCalls.size());
+        System.out.println("   final finishReason: " + finalFinishReason);
 
         allToolCalls.forEach(tc -> {
             System.out.println("   ── tool_call ──");
@@ -343,12 +338,12 @@ class ChatClientStreamingTest {
             System.out.println("      arguments: " + tc.arguments());
         });
 
-        System.out.println("\n💡 结论：");
+        System.out.println("\n💡 Conclusion:");
         if (!allToolCalls.isEmpty()) {
-            System.out.println("   ✅ stream 模式下可以完整获取 tool_calls，聚合后与 .call() 等价");
-            System.out.println("   ✅ 改造方案可行：用 .stream() 做 token 实时推送，最后聚合完整 AssistantMessage 存入 state");
+            System.out.println("   ✅ stream mode can retrieve complete tool_calls and aggregate to match .call()");
+            System.out.println("   ✅ migration is feasible: use .stream() for real-time token push, then aggregate the full AssistantMessage into state");
         } else {
-            System.out.println("   ⚠️  stream 模式下 tool_calls 为空，说明该模型/API 不支持流式工具调用");
+            System.out.println("   ⚠️  stream mode returned empty tool_calls; this model/API does not support streaming tool calls");
         }
     }
 
@@ -372,7 +367,7 @@ class ChatClientStreamingTest {
 
             @Override
             public String call(String toolInput) {
-                return "{\"weather\":\"晴天，20°C\",\"city\":\"北京\"}";
+                return "{\"weather\":\"sunny, 20°C\",\"city\":\"Beijing\"}";
             }
         };
     }

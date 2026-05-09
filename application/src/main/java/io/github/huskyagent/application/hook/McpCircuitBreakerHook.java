@@ -9,11 +9,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.Set;
 
-/**
- * MCP 熔断器 Hook — 在 TOOL_CALL_BEFORE 中检查 MCP server 的熔断状态。
- *
- * <p>若目标 MCP server 熔断器开启，返回 block() 阻止工具执行。</p>
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -40,7 +35,7 @@ public class McpCircuitBreakerHook implements BeforeHook {
         if (serverName == null) return HookResult.allow();
 
         if (connector.isCircuitOpen(serverName)) {
-            log.info("[hook] MCP server '{}' 熔断开启，阻塞工具 {}", serverName, toolName);
+            log.info("[hook] MCP server '{}' circuit breaker is open; blocking tool {}", serverName, toolName);
             return HookResult.block(
                     "MCP server '" + serverName + "' is temporarily unavailable (circuit breaker open)");
         }

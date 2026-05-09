@@ -17,12 +17,6 @@ import org.springframework.web.client.RestClient;
 import java.time.Duration;
 import java.util.List;
 
-/**
- * 辅助 LLM 客户端 — 用于摘要生成、标题生成、Web 摘要等辅助任务
- *
- * 若 auxiliary.baseUrl/apiKey 有独立配置 → 构建独立 ChatModel；
- * 否则 → 复用主 ChatModel，仅切换 model name 和温度。
- */
 @Slf4j
 public class AuxiliaryClient {
 
@@ -37,11 +31,9 @@ public class AuxiliaryClient {
         ChatModel effectiveChatModel;
         if (config.getBaseUrl() != null && !config.getBaseUrl().isBlank()
                 && config.getApiKey() != null && !config.getApiKey().isBlank()) {
-            // 独立模型：自建 OpenAiApi + OpenAiChatModel
             log.info("Auxiliary model uses independent endpoint: {}", config.getBaseUrl());
             effectiveChatModel = buildIndependentChatModel(config);
         } else {
-            // 复用主模型
             log.info("Auxiliary model shares main endpoint, model={}", modelName);
             effectiveChatModel = mainChatModel;
         }

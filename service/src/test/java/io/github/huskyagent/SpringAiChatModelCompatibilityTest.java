@@ -46,7 +46,7 @@ class SpringAiChatModelCompatibilityTest extends AbstractIntegrationTest {
         ChatClient chatClient = ChatClient.builder(chatModel).build();
 
         List<ChatResponse> chunks = chatClient.prompt()
-                .messages(new UserMessage("只回复 ok"))
+                .messages(new UserMessage("reply only with ok"))
                 .stream()
                 .chatResponse()
                 .collectList()
@@ -80,7 +80,7 @@ class SpringAiChatModelCompatibilityTest extends AbstractIntegrationTest {
                 .build();
 
         List<ChatResponse> chunks = chatClient.prompt()
-                .messages(new UserMessage("请调用 get_weather 查询北京天气，不要直接回答。"))
+                .messages(new UserMessage("Call get_weather to query Beijing weather. Do not answer directly."))
                 .stream()
                 .chatResponse()
                 .collectList()
@@ -112,12 +112,12 @@ class SpringAiChatModelCompatibilityTest extends AbstractIntegrationTest {
     private ToolCallback buildWeatherTool() {
         ToolDefinition toolDefinition = ToolDefinition.builder()
                 .name("get_weather")
-                .description("获取指定城市的天气信息")
+                .description("Get weather information for the specified city")
                 .inputSchema("""
                         {
                           "type": "object",
                           "properties": {
-                            "city": { "type": "string", "description": "城市名称" }
+                            "city": { "type": "string", "description": "city name" }
                           },
                           "required": ["city"]
                         }
@@ -137,7 +137,7 @@ class SpringAiChatModelCompatibilityTest extends AbstractIntegrationTest {
 
             @Override
             public String call(String toolInput) {
-                return "{\"weather\":\"晴天，20°C\",\"city\":\"北京\"}";
+                return "{\"weather\":\"sunny, 20°C\",\"city\":\"Beijing\"}";
             }
         };
     }

@@ -18,7 +18,7 @@ class ToolDisplayMessageRendererTest {
 
         String text = renderer.render(event);
 
-        assertEquals("正在调用工具：web_search\n参数：query=test", text);
+        assertEquals("Calling tool: web_search\nArguments: query=test", text);
     }
 
     @Test
@@ -27,7 +27,7 @@ class ToolDisplayMessageRendererTest {
                 "s1", "call-1", "web_search", null, null,
                 ToolDisplayStatus.COMPLETED, 1016, null, Instant.now());
 
-        assertEquals("工具完成：web_search（1.0s）", renderer.render(event));
+        assertEquals("Tool completed: web_search (1.0s)", renderer.render(event));
     }
 
     @Test
@@ -38,7 +38,7 @@ class ToolDisplayMessageRendererTest {
 
         String text = renderer.render(event);
 
-        assertEquals("工具失败：web_search（12ms）\n原因：api_key=*** timed out", text);
+        assertEquals("Tool failed: web_search (12ms)\nReason: api_key=*** timed out", text);
     }
 
     @Test
@@ -51,7 +51,7 @@ class ToolDisplayMessageRendererTest {
         String text = renderer.render(event);
 
         assertTrue(text.endsWith("..."));
-        assertTrue(text.length() < 190);
+        assertTrue(text.length() <= "Calling tool: terminal\nArguments: ".length() + 160);
     }
 
     @Test

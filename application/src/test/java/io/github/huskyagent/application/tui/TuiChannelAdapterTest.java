@@ -47,7 +47,7 @@ class TuiChannelAdapterTest {
         adapter.onEvent(new ChannelEvent(
                 "s1",
                 HookEvent.LLM_CALL_AFTER,
-                Map.of(HookDataKeys.LLM_RESPONSE, new AssistantMessage("我需要调用工具")),
+                Map.of(HookDataKeys.LLM_RESPONSE, new AssistantMessage("I need to call tools")),
                 Instant.now()
         ));
 
@@ -57,8 +57,8 @@ class TuiChannelAdapterTest {
         assertEquals("message.intermediate", params.get("type").asText());
         JsonNode payload = params.get("payload");
         assertTrue(payload.has("text"));
-        assertEquals("我需要调用工具", payload.get("text").asText());
-        assertFalse(payload.get("intermediate").asBoolean(), "无 tool calls 时 intermediate 应为 false");
+        assertEquals("I need to call tools", payload.get("text").asText());
+        assertFalse(payload.get("intermediate").asBoolean(), "intermediate should be false when there are no tool calls");
     }
 
     @Test

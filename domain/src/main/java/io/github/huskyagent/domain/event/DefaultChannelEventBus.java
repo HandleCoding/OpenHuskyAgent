@@ -21,7 +21,6 @@ public class DefaultChannelEventBus implements ChannelEventBus {
     private final ConcurrentHashMap<String, TokenSubscription> tokenSubscriptions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ChannelLane> lanes = new ConcurrentHashMap<>();
 
-    // ── 生命周期事件 ──────────────────────────────────────────────────────────
 
     @Override
     public void publish(ChannelEvent event) {
@@ -56,7 +55,6 @@ public class DefaultChannelEventBus implements ChannelEventBus {
         log.info("ChannelEventBus: channel '{}' unsubscribed", channelName);
     }
 
-    // ── Token 流（高频，直连，不经 Hook）────────────────────────────────────
 
     @Override
     public void streamToken(String sessionId, String token, boolean reasoning) {

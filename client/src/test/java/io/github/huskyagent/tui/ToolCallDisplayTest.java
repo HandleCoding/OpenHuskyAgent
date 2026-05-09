@@ -46,7 +46,7 @@ class ToolCallDisplayTest {
     }
 
     @Test
-    @DisplayName("并发 started 按 toolCallId 分别跟踪")
+    @DisplayName("concurrent started events are tracked by toolCallId")
     void startedLinesTrackedByToolCallId() throws Exception {
         StringWriter output = new StringWriter();
         PrintWriter out = new PrintWriter(output);
@@ -67,7 +67,7 @@ class ToolCallDisplayTest {
     }
 
     @Test
-    @DisplayName("并发 completed 不使用 ANSI 回写上一行")
+    @DisplayName("concurrent completed events do not overwrite previous lines with ANSI")
     void concurrentCompletionDoesNotOverwritePreviousLine() {
         StringWriter output = new StringWriter();
         PrintWriter out = new PrintWriter(output);
@@ -76,44 +76,44 @@ class ToolCallDisplayTest {
         ToolCallDisplay.printStatus("COMPLETED", "read_file", "a.txt", 10, null, "call-a", out, out::flush);
 
         String rendered = output.toString();
-        assertFalse(rendered.contains("\033[A\r"), "并发完成事件不应使用上一行覆盖");
-        assertTrue(rendered.contains("⏳"), "应保留 started 行");
-        assertTrue(rendered.contains("✓"), "应追加 completed 行");
+        assertFalse(rendered.contains("\033[A\r"), "concurrent completed events should not overwrite the previous line");
+        assertTrue(rendered.contains("⏳"), "started line should be retained");
+        assertTrue(rendered.contains("✓"), "completed line should be appended");
     }
 
     @Test
-    @DisplayName("子 agent 完成摘要压成单行")
+    @DisplayName("sub-agent completion summary is collapsed to one line")
     void subAgentSummaryCollapsedToSingleLine() {
         StringWriter output = new StringWriter();
         PrintWriter out = new PrintWriter(output);
 
-        ToolCallDisplay.printSubAgentStart(0, "查询北京天气", out, out::flush);
+        ToolCallDisplay.printSubAgentStart(0, "query Beijing weather", out, out::flush);
         ToolCallDisplay.printSubAgentEnd(0, "completed", 32400,
-                "## 任务完成总结\n### 执行的操作\n1. web_search", out, out::flush);
+                "## Task completion summary\n### Executed actions\n1. web_search", out, out::flush);
 
         String rendered = output.toString();
-        assertTrue(rendered.contains("## 任务完成总结 ### 执行的操作 1. web_search"));
-        assertFalse(rendered.contains("\n### 执行的操作"));
+        assertTrue(rendered.contains("## Task completion summary ### Executed actions 1."));
+        assertFalse(rendered.contains("\n### Executed actions"));
     }
 
     @Test
-    @DisplayName("子 agent 面板缩小时清理旧行")
+    @DisplayName("sub-agent panel clears stale lines when shrinking")
     void subAgentRerenderClearsShrunkenPanelTail() {
         StringWriter output = new StringWriter();
         PrintWriter out = new PrintWriter(output);
 
-        ToolCallDisplay.printSubAgentStart(0, "查询北京天气", out, out::flush);
+        ToolCallDisplay.printSubAgentStart(0, "query Beijing weather", out, out::flush);
         ToolCallDisplay.printSubAgentToolEvent(0, "STARTED", "web_search", "{}", 0, null, out, out::flush);
         ToolCallDisplay.printSubAgentToolEvent(0, "COMPLETED", "web_search", "{}", 1100, null, out, out::flush);
         ToolCallDisplay.printSubAgentEnd(0, "completed", 32400, "done", out, out::flush);
 
         String rendered = output.toString();
-        assertTrue(rendered.contains("\033[3A"), "缩容重绘应回到面板顶部");
-        assertTrue(rendered.contains("\r\033[K\n"), "缩容重绘应清理旧尾行");
+        assertTrue(rendered.contains("\033[3A"), "shrink redraw should move back to panel top");
+        assertTrue(rendered.contains("\r\033[K\n"), "shrink redraw should clear stale tail lines");
     }
 
     @Test
-    @DisplayName("参数预览展示多个短字段")
+    @DisplayName("argument preview shows multiple short fields")
     void argsPreviewShowsMultipleFields() {
         String preview = ToolCallDisplay.argsPreview("web_fetch",
                 "{\"url\":\"https://example.com\",\"useJina\":true,\"summarize\":false}");
@@ -124,7 +124,7 @@ class ToolCallDisplayTest {
     }
 
     @Test
-    @DisplayName("大文本字段展示截断后的值")
+    @DisplayName("large text field shows truncated value")
     void argsPreviewTruncatesLargeTextFields() {
         String preview = ToolCallDisplay.argsPreview("write_file",
                 "{\"path\":\"a.txt\",\"content\":\"" + "x".repeat(120) + "\"}");

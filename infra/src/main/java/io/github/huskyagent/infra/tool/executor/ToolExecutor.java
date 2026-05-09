@@ -13,13 +13,6 @@ import jakarta.annotation.PreDestroy;
 import java.util.Map;
 import java.util.concurrent.*;
 
-/**
- * 工具执行器（纯执行版）
- *
- * <p>负责工具的直接调用和结果处理。
- * 审批逻辑已迁移至 {@code AgentGraph.ApprovalNode}，由 LangGraph4j interrupt/resume 机制管理，
- * 本类不再包含任何审批检查代码。</p>
- */
 @Slf4j
 @Component("toolExecutorService")
 public class ToolExecutor {
@@ -27,7 +20,7 @@ public class ToolExecutor {
     private final ToolRegistry registry;
     private final ExecutorService executorService;
 
-    // 后台任务追踪
+    /** Tracks background tool tasks by task id for polling, waiting, and cancellation. */
     private final Map<String, Future<ToolResult>> backgroundTasks = new ConcurrentHashMap<>();
 
     public ToolExecutor(ToolRegistry registry,
@@ -36,13 +29,6 @@ public class ToolExecutor {
         this.executorService = executorService;
     }
 
-    /**
-     * 执行工具（同步）
-     *
-     * @param name 工具名称
-     * @param args 工具参数
-     * @return 执行结果
-     */
     public ToolResult execute(String name, Map<String, Object> args) {
         return execute(name, args, ToolExecutionContext.minimal(null, registry.getAll()));
     }
@@ -79,14 +65,6 @@ public class ToolExecutor {
         }
     }
 
-    /**
-     * 执行工具（后台）
-     *
-     * @param name    工具名称
-     * @param args    工具参数
-     * @param taskId  任务ID（用于追踪）
-     * @return Future 用于后续获取结果
-     */
     public Future<ToolResult> executeAsync(String name, Map<String, Object> args, String taskId) {
         Future<ToolResult> future = executorService.submit(() -> execute(name, args));
         backgroundTasks.put(taskId, future);
@@ -94,12 +72,6 @@ public class ToolExecutor {
         return future;
     }
 
-    /**
-     * 查询后台任务状态
-     *
-     * @param taskId 任务ID
-     * @return 任务状态
-     */
     public TaskStatus getTaskStatus(String taskId) {
         Future<ToolResult> future = backgroundTasks.get(taskId);
         if (future == null) {
@@ -114,23 +86,10 @@ public class ToolExecutor {
         return TaskStatus.RUNNING;
     }
 
-    /**
-     * 获取后台任务结果（带默认 5 分钟超时）
-     *
-     * @param taskId 任务ID
-     * @return 执行结果
-     */
     public ToolResult getTaskResult(String taskId) {
         return waitTask(taskId, 300);
     }
 
-    /**
-     * 等待后台任务完成（带超时）
-     *
-     * @param taskId  任务ID
-     * @param timeout 超时时间（秒）
-     * @return 执行结果
-     */
     public ToolResult waitTask(String taskId, int timeout) {
         Future<ToolResult> future = backgroundTasks.get(taskId);
         if (future == null) {
@@ -145,12 +104,6 @@ public class ToolExecutor {
         }
     }
 
-    /**
-     * 取消后台任务
-     *
-     * @param taskId 任务ID
-     * @return 是否成功取消
-     */
     public boolean cancelTask(String taskId) {
         Future<ToolResult> future = backgroundTasks.get(taskId);
         if (future == null) {
@@ -164,16 +117,10 @@ public class ToolExecutor {
         return cancelled;
     }
 
-    /**
-     * 清理已完成的后台任务
-     */
     public void cleanupCompletedTasks() {
         backgroundTasks.entrySet().removeIf(e -> e.getValue().isDone() || e.getValue().isCancelled());
     }
 
-    /**
-     * 任务状态枚举
-     */
     public enum TaskStatus {
         NOT_FOUND,
         RUNNING,

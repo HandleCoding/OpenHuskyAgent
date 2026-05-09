@@ -28,58 +28,57 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class TerminalTool implements ToolProvider {
 
-    // ── 危险命令正则模式（参考 Hermes approval.py）────────────────────────────
     private static final List<DangerousPattern> DANGEROUS_PATTERNS = List.of(
         new DangerousPattern(Pattern.compile("\\brm\\s+(-[^\\s]*\\s+)*(-r|-R|--recursive)"),
-            "rm -r: 递归删除文件"),
+            "rm -r: recursively delete files"),
         new DangerousPattern(Pattern.compile("\\brm\\s+(-[^\\s]*\\s+)*(-f|--force)"),
-            "rm -f: 强制删除文件"),
+            "rm -f: forcibly delete files"),
         new DangerousPattern(Pattern.compile("\\brm\\s+(-[^\\s]*\\s+)*/"),
-            "rm /: 删除根路径下内容"),
+            "rm /: delete content under the root path"),
         new DangerousPattern(Pattern.compile("\\bchmod\\s+(-R\\s+)?[0-7]*7[0-7]{2}\\b"),
-            "chmod: 赋予 world-writable 权限"),
+            "chmod: grant world-writable permissions"),
         new DangerousPattern(Pattern.compile("\\bchmod\\s+(-R\\s+)?777\\b"),
-            "chmod 777: 开放所有权限"),
+            "chmod 777: grant all permissions"),
         new DangerousPattern(Pattern.compile("\\bchown\\b"),
-            "chown: 修改文件所有权"),
+            "chown: change file ownership"),
         new DangerousPattern(Pattern.compile("\\bdd\\b"),
-            "dd: 直接读写磁盘设备"),
+            "dd: directly read or write disk devices"),
         new DangerousPattern(Pattern.compile("\\bmkfs\\b"),
-            "mkfs: 格式化文件系统"),
+            "mkfs: format a filesystem"),
         new DangerousPattern(Pattern.compile("\\bfdisk\\b|\\bparted\\b|\\bdiskutil\\b"),
-            "磁盘分区工具"),
+            "disk partitioning tool"),
         new DangerousPattern(Pattern.compile("\\bshutdown\\b|\\breboot\\b|\\bhalt\\b|\\bpoweroff\\b"),
-            "系统关机/重启命令"),
+            "system shutdown or reboot command"),
         new DangerousPattern(Pattern.compile("\\binit\\s+[0-6]\\b"),
-            "init: 切换运行级别"),
+            "init: switch runlevel"),
         new DangerousPattern(Pattern.compile("\\bsystemctl\\s+(stop|disable|mask|kill)\\b"),
-            "systemctl: 停止/禁用系统服务"),
+            "systemctl: stop or disable system services"),
         new DangerousPattern(Pattern.compile("\\bservice\\s+\\S+\\s+(stop|restart)\\b"),
-            "service: 停止/重启服务"),
+            "service: stop or restart services"),
         new DangerousPattern(Pattern.compile("\\biptables\\b|\\bufw\\s+(disable|reset)\\b"),
-            "防火墙规则修改"),
+            "firewall rule modification"),
         new DangerousPattern(Pattern.compile("\\bsudo\\b"),
-            "sudo: 以 root 权限执行"),
+            "sudo: execute as root"),
         new DangerousPattern(Pattern.compile("\\bsu\\s+-\\b|\\bsu\\s+root\\b"),
-            "su: 切换到 root"),
+            "su: switch to root"),
         new DangerousPattern(Pattern.compile("(curl|wget|fetch)\\b.*\\|\\s*(bash|sh|zsh|python|perl|ruby)\\b"),
-            "远程脚本执行: curl/wget 管道到 shell"),
+            "remote script execution: curl/wget piped to shell"),
         new DangerousPattern(Pattern.compile(">\\s*/etc/"),
-            "重定向覆盖 /etc/ 下的系统配置文件"),
+            "redirect overwrite of system configuration files under /etc/"),
         new DangerousPattern(Pattern.compile(">\\s*/boot/"),
-            "重定向覆盖 /boot/ 下的引导文件"),
+            "redirect overwrite of boot files under /boot/"),
         new DangerousPattern(Pattern.compile("\\bgit\\s+(push\\s+.*--force|push\\s+.*-f)\\b"),
-            "git push --force: 强制覆盖远程分支"),
+            "git push --force: forcibly overwrite remote branches"),
         new DangerousPattern(Pattern.compile("\\bgit\\s+reset\\s+--hard\\b"),
-            "git reset --hard: 丢弃本地修改"),
+            "git reset --hard: discard local changes"),
         new DangerousPattern(Pattern.compile("\\bgit\\s+clean\\s+(-[^\\s]*f|-f)"),
-            "git clean -f: 删除未追踪文件"),
+            "git clean -f: delete untracked files"),
         new DangerousPattern(Pattern.compile(":\\s*\\(\\s*\\)\\s*\\{"),
-            "Fork bomb: 进程炸弹"),
+            "Fork bomb: process bomb"),
         new DangerousPattern(Pattern.compile("\\btruncate\\s+.*-s\\s*0\\b"),
-            "truncate: 清空文件内容"),
+            "truncate: empty file contents"),
         new DangerousPattern(Pattern.compile("\\bhistory\\s+-[cw]\\b"),
-            "history -c/-w: 清除命令历史")
+            "history -c/-w: clear command history")
     );
 
     private final ToolLimitsConfig limitsConfig;
@@ -132,7 +131,7 @@ public class TerminalTool implements ToolProvider {
         if (command == null || command.isBlank()) return null;
         for (DangerousPattern dp : DANGEROUS_PATTERNS) {
             if (dp.pattern().matcher(command).find()) {
-                String reason = "危险操作: " + dp.reason() + "。命令: `" + command + "`";
+                String reason = "Dangerous operation: " + dp.reason() + ". Command: `" + command + "`";
                 return ApprovalRequest.of(UUID.randomUUID().toString(), "terminal", args, reason, "default");
             }
         }
@@ -290,6 +289,7 @@ public class TerminalTool implements ToolProvider {
 
     private String defaultWorkdirFor(ExecutionBackend backend) {
         if (backend instanceof DockerBackend) {
+            // Containers define their own working directory contract.
             return null;
         }
         var scope = SessionContext.getScope();

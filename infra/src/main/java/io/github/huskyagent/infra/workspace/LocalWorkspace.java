@@ -10,9 +10,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 
-/**
- * 本地文件系统 Workspace — 委托 java.nio.file.Files，行为与改动前完全一致。
- */
 public class LocalWorkspace implements Workspace {
 
     @Override

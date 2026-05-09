@@ -19,11 +19,6 @@ import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * TUI 渠道适配器 — 统一消费 Hook 事件，推送到 WebSocket JSON-RPC 客户端。
- *
- * <p>替代 TuiEventBridge + TuiLlmEventHook + TuiToolEventHook2 + TuiHookRegistry。</p>
- */
 @Slf4j
 @Component
 public class TuiChannelAdapter implements ChannelSubscriber, TokenSubscriber {
@@ -52,9 +47,7 @@ public class TuiChannelAdapter implements ChannelSubscriber, TokenSubscriber {
         eventBus.subscribeTokens("tui", this);
     }
 
-    // ── Emitter 管理 ──────────────────────────────────────────────────────────
 
-    /** 按 connectionId:sessionId 绑定，防止跨连接串扰 */
     public void registerEmitter(String connectionId, String sessionId, JsonRpcEventEmitter emitter) {
         if (connectionId == null || sessionId == null || emitter == null) {
             return;
@@ -69,7 +62,7 @@ public class TuiChannelAdapter implements ChannelSubscriber, TokenSubscriber {
         bindings.put(key, binding);
         sessionBindings.computeIfAbsent(sessionId, ignored -> new ConcurrentHashMap<>()).put(key, binding);
         activeSessionBindings.put(sessionId, binding);
-        log.info("[TuiChannelAdapter] 注册 emitter: key={}, total={}", key, bindings.size());
+        log.info("[TuiChannelAdapter] registered emitter: key={}, total={}", key, bindings.size());
     }
 
     public void unregisterEmitter(String connectionId, String sessionId) {
@@ -79,10 +72,9 @@ public class TuiChannelAdapter implements ChannelSubscriber, TokenSubscriber {
         String key = bindingKey(connectionId, sessionId);
         connectionBindings.remove(connectionId, key);
         removeBinding(key);
-        log.info("[TuiChannelAdapter] 注销 emitter: key={}, total={}", key, bindings.size());
+        log.info("[TuiChannelAdapter] unregistered emitter: key={}, total={}", key, bindings.size());
     }
 
-    /** 按 sessionId 查找 emitter（事件路由仍按 sessionId） */
     private JsonRpcEventEmitter findEmitterBySessionId(String sessionId) {
         EmitterBinding binding = activeSessionBindings.get(sessionId);
         return binding != null ? binding.emitter() : null;
@@ -152,7 +144,6 @@ public class TuiChannelAdapter implements ChannelSubscriber, TokenSubscriber {
         }
     }
 
-    // ── 事件处理（逻辑来自原 TuiLlmEventHook + TuiToolEventHook2）────────────
 
     private void handleLlmAfter(Map<String, Object> data, JsonRpcEventEmitter emitter) {
         Object responseObj = data.get(HookDataKeys.LLM_RESPONSE);
@@ -192,7 +183,7 @@ public class TuiChannelAdapter implements ChannelSubscriber, TokenSubscriber {
 
     private void handleSubAgentStart(Map<String, Object> data, JsonRpcEventEmitter emitter) {
         String goal = (String) data.get(HookDataKeys.SUBAGENT_GOAL);
-        emitter.emitStatusUpdate("subagent", goal != null ? goal : "子 Agent 执行中");
+        emitter.emitStatusUpdate("subagent", goal != null ? goal : "Sub-agent running");
     }
 
     private void handleSubAgentProgress(Map<String, Object> data, JsonRpcEventEmitter emitter) {
@@ -220,7 +211,7 @@ public class TuiChannelAdapter implements ChannelSubscriber, TokenSubscriber {
                         ? String.valueOf(data.get(HookDataKeys.SUBAGENT_ERROR)) : "";
                 emitter.emitSubAgentCompleted(taskIndex, "failed", 0, error);
             }
-            case "timeout" -> emitter.emitSubAgentCompleted(taskIndex, "timeout", 0, "执行超时");
+            case "timeout" -> emitter.emitSubAgentCompleted(taskIndex, "timeout", 0, "Execution timed out");
             case "tool_started" -> {
                 String toolName = data.get(HookDataKeys.TOOL_NAME) != null
                         ? String.valueOf(data.get(HookDataKeys.TOOL_NAME)) : "unknown";
@@ -241,7 +232,6 @@ public class TuiChannelAdapter implements ChannelSubscriber, TokenSubscriber {
                 emitter.emitSubAgentToolCompleted(taskIndex, toolName, durationMs, success, error);
             }
             default -> {
-                // text 等其他进度类型暂不展示
             }
         }
     }
@@ -251,7 +241,7 @@ public class TuiChannelAdapter implements ChannelSubscriber, TokenSubscriber {
                 ? String.valueOf(data.get(HookDataKeys.SUBAGENT_STATUS)) : "completed";
         long durationMs = data.containsKey(HookDataKeys.SUBAGENT_DURATION_MS)
                 ? ((Number) data.get(HookDataKeys.SUBAGENT_DURATION_MS)).longValue() : 0;
-        emitter.emitStatusUpdate("subagent", "子 Agent 已完成: status=" + status + ", duration=" + durationMs + "ms");
+        emitter.emitStatusUpdate("subagent", "Sub-agent completed: status=" + status + ", duration=" + durationMs + "ms");
     }
 
     private void scheduleTodoUpdate(String sessionId, JsonRpcEventEmitter emitter) {
@@ -268,7 +258,7 @@ public class TuiChannelAdapter implements ChannelSubscriber, TokenSubscriber {
             try {
                 emitter.emitTodoUpdated(todoStore.list(sessionId));
             } catch (Exception e) {
-                log.debug("[TuiChannelAdapter] todo.updated 发送失败: sessionId={}", sessionId, e);
+                log.debug("[TuiChannelAdapter] todo.updated send failed: sessionId={}", sessionId, e);
             } finally {
                 pendingTodoRenders.remove(sessionId);
             }

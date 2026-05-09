@@ -22,12 +22,6 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
 
-/**
- * TUI 模式编排服务 — per-connection scope。
- *
- * <p>每个 WebSocket 连接持有一个实例。
- * Session 生命周期完全走 {@link SessionResolver}，与 HTTP chatbot 路径对称。</p>
- */
 @Slf4j
 public class TuiSessionService {
 
@@ -39,21 +33,16 @@ public class TuiSessionService {
     private final String connectionId;
     private final String queueKey;
 
-    /** TUI 固定身份 — per-connection，不可变 */
     private final Principal principal;
     private final ChannelIdentity channelIdentity;
 
-    /** 当前会话 ID */
     private volatile String currentSessionId;
-    /** 本连接的工作目录（不再影响其他连接） */
     private volatile Path workingDirectory = Path.of(System.getProperty("user.dir"));
 
     private volatile boolean closed = false;
 
-    /** 待响应的审批请求：requestId → ApprovalWait */
     private final ConcurrentHashMap<String, ApprovalWait> pendingApprovals = new ConcurrentHashMap<>();
 
-    /** 待响应的澄清请求：requestId → ClarifyWait */
     private final ConcurrentHashMap<String, ClarifyWait> pendingClarifications = new ConcurrentHashMap<>();
 
     public TuiSessionService(RuntimeExecutionService runtimeExecutionService,
@@ -81,7 +70,6 @@ public class TuiSessionService {
                 .build();
     }
 
-    // ── 会话管理 ────────────────────────────────────────────────────────────
 
     public String createSession() {
         RuntimeScope scope = sessionResolver.createSession(principal, channelIdentity, null);
@@ -107,18 +95,17 @@ public class TuiSessionService {
     }
 
     public void rewindTo(long afterMessageId) {
-        if (currentSessionId == null) throw new IllegalStateException("没有活动会话");
+        if (currentSessionId == null) throw new IllegalStateException("No active session");
         sessionOperationsService.rewindTo(currentSessionId, afterMessageId);
     }
 
-    /** 切换到已有会话，返回切换后的 sessionId；若 sessionId 不存在则抛异常 */
     public String switchSession(String sessionId) {
         try {
             RuntimeScope scope = sessionResolver.resolveOrCreateSession(principal, channelIdentity, null, sessionId);
             this.currentSessionId = scope.getSessionId();
             return currentSessionId;
         } catch (SecurityException e) {
-            throw new IllegalArgumentException("会话不可访问: " + sessionId, e);
+            throw new IllegalArgumentException("Session is not accessible: " + sessionId, e);
         }
     }
 
@@ -136,17 +123,15 @@ public class TuiSessionService {
         return workingDirectory;
     }
 
-    /** 切换工作目录 — 只影响本连接，不影响其他连接 */
     public Path changeDirectory(String dir) {
         Path newDir = workingDirectory.resolve(dir).normalize();
         if (!java.nio.file.Files.isDirectory(newDir)) {
-            throw new IllegalArgumentException("目录不存在: " + newDir);
+            throw new IllegalArgumentException("Directory does not exist: " + newDir);
         }
         workingDirectory = newDir;
         return workingDirectory;
     }
 
-    // ── 对话执行 ────────────────────────────────────────────────────────────
 
     public ChatResult submitPrompt(String message, JsonRpcEventEmitter emitter) {
         return submitPrompt(message, emitter, null);
@@ -193,7 +178,7 @@ public class TuiSessionService {
 
             return result;
         } catch (Exception e) {
-            log.error("TUI 对话执行异常", e);
+            log.error("TUI chat execution failed", e);
             emitter.emitError(e.getMessage());
             return ChatResult.failure(e.getMessage());
         } finally {
@@ -202,12 +187,11 @@ public class TuiSessionService {
         }
     }
 
-    // ── 审批响应 ────────────────────────────────────────────────────────────
 
     public boolean respondApproval(String requestId, String choice, boolean always) {
         ApprovalWait wait = pendingApprovals.get(requestId);
         if (wait == null) {
-            log.warn("未找到审批请求: requestId={}, connectionId={}", requestId, connectionId);
+            log.warn("Approval request not found: requestId={}, connectionId={}", requestId, connectionId);
             return false;
         }
         wait.setChoice(choice, always);
@@ -218,7 +202,7 @@ public class TuiSessionService {
     public boolean respondClarify(String requestId, String answer) {
         ClarifyWait wait = pendingClarifications.get(requestId);
         if (wait == null) {
-            log.warn("未找到澄清请求: requestId={}, connectionId={}", requestId, connectionId);
+            log.warn("Clarification request not found: requestId={}, connectionId={}", requestId, connectionId);
             return false;
         }
         wait.setAnswer(answer);
@@ -231,7 +215,6 @@ public class TuiSessionService {
         cancelPendingApprovals();
     }
 
-    /** 取消所有待审批（连接断开时调用） */
     public void cancelPendingApprovals() {
         pendingApprovals.values().forEach(wait -> {
             wait.setChoice("deny", false);
@@ -245,7 +228,6 @@ public class TuiSessionService {
         pendingClarifications.clear();
     }
 
-    // ── 私有方法 ────────────────────────────────────────────────────────────
 
     private io.github.huskyagent.infra.channel.InboundMessage buildInboundMessage(String message, String sessionId) {
         return io.github.huskyagent.infra.channel.InboundMessage.builder()
@@ -267,8 +249,8 @@ public class TuiSessionService {
         try {
             boolean completed = wait.latch().await(5, TimeUnit.MINUTES);
             if (!completed) {
-                log.warn("审批超时: requestId={}, tool={}, connectionId={}", requestId, ctx.toolName(), connectionId);
-                emitter.emitError("审批超时，已自动拒绝");
+                log.warn("Approval timed out: requestId={}, tool={}, connectionId={}", requestId, ctx.toolName(), connectionId);
+                emitter.emitError("Approval timed out and was automatically rejected");
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -292,8 +274,8 @@ public class TuiSessionService {
         try {
             boolean completed = wait.latch().await(5, TimeUnit.MINUTES);
             if (!completed) {
-                log.warn("澄清超时: requestId={}, connectionId={}", requestId, connectionId);
-                emitter.emitError("澄清超时");
+                log.warn("Clarification timed out: requestId={}, connectionId={}", requestId, connectionId);
+                emitter.emitError("Clarification timed out");
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -304,7 +286,6 @@ public class TuiSessionService {
         ctx.respond(wait.answer());
     }
 
-    // ── 内嵌类型 ────────────────────────────────────────────────────────────
 
     private record PreparedPrompt(String message, String sessionId, Path workingDirectory) {}
 

@@ -282,8 +282,8 @@ class FeishuInstanceAdapterTest {
         verify(apiClient).sendText(argThat(message ->
                 "oc_chat".equals(message.getChatId())
                         && "om_1".equals(message.getMessageId())
-                        && message.getText().contains("正在调用工具：web_search")
-                        && message.getText().contains("参数：query=test")
+                        && message.getText().contains("Calling tool: web_search")
+                        && message.getText().contains("Arguments: query=test")
         ));
     }
 

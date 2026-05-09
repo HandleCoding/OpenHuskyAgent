@@ -1,8 +1,5 @@
 package io.github.huskyagent.infra.mcp;
 
-/**
- * 本地 MCP 连接配置 — 委托 McpConfigLoader 从本地文件读取，行为与改动前完全一致。
- */
 class LocalMcpConnectionProvider implements McpConnectionProvider {
 
     private final McpConfigLoader configLoader;

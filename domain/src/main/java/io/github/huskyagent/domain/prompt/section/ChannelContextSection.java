@@ -5,16 +5,6 @@ import io.github.huskyagent.domain.prompt.PromptContext;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.Principal;
 
-/**
- * 渠道上下文 Section — 告诉 LLM 当前所在渠道、对话类型、发送者身份。
- * Priority 150：在 Gateway scene prompt 之后、Memory 之前。
- *
- * <p>从 PromptContext 的 channelIdentity / principal / sceneId 渲染，
- * 不再依赖已删除的 ChannelContext 包装层。</p>
- *
- * <p>标记为 dynamic，确保每次 LLM 调用都刷新渠道身份，
- * 而非固化在 graph 构建时的 stable prompt 里。</p>
- */
 public class ChannelContextSection extends AbstractPromptSection {
 
     @Override
@@ -82,9 +72,9 @@ public class ChannelContextSection extends AbstractPromptSection {
 
     private String friendlyConvType(String convType) {
         return switch (convType.toUpperCase()) {
-            case "DIRECT" -> "私聊";
-            case "GROUP" -> "群聊";
-            case "THREAD" -> "话题";
+            case "DIRECT" -> "Direct chat";
+            case "GROUP" -> "Group chat";
+            case "THREAD" -> "Thread";
             default -> convType;
         };
     }

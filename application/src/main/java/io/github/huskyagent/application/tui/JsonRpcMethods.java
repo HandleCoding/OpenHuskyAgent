@@ -11,11 +11,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 注册所有 TUI JSON-RPC 方法。
- *
- * <p>每个 WebSocket 连接创建一个实例，绑定到该连接的 {@link TuiSessionService} 和 {@link JsonRpcDispatcher}。</p>
- */
 @Slf4j
 public class JsonRpcMethods {
 
@@ -38,7 +33,6 @@ public class JsonRpcMethods {
                 : null;
     }
 
-    /** 注册所有方法 */
     public void registerAll() {
         dispatcher.register("session.create", this::sessionCreate);
         dispatcher.register("session.list", this::sessionList);
@@ -55,12 +49,10 @@ public class JsonRpcMethods {
         dispatcher.register("session.status", this::sessionStatus);
     }
 
-    /** 获取当前 session ID（供 WebSocket 关闭时清理） */
     public TuiSessionService getSessionService() {
         return sessionService;
     }
 
-    /** 获取当前连接的 emitter（供 TuiChannelAdapter 注册） */
     public JsonRpcEventEmitter getEmitter() {
         return emitter;
     }
@@ -73,7 +65,6 @@ public class JsonRpcMethods {
         return sessionService.submitPrompt(text, emitter, sessionReadyHandler);
     }
 
-    // ── 方法实现 ────────────────────────────────────────────────────────────
 
     private ObjectNode sessionCreate(String id, JsonNode params) {
         String sessionId = sessionService.createSession();
@@ -119,7 +110,6 @@ public class JsonRpcMethods {
             return JsonRpcProtocol.error(id, JsonRpcProtocol.INVALID_PARAMS, "Missing text");
         }
 
-        // 如果指定了不同的 sessionId，先切过去
         if (sessionId != null && !sessionId.equals(sessionService.getCurrentSessionId())) {
             try {
                 sessionService.switchSession(sessionId);
@@ -166,7 +156,6 @@ public class JsonRpcMethods {
     }
 
     private ObjectNode sessionInterrupt(String id, JsonNode params) {
-        // TODO: 实现图执行中断
         return JsonRpcProtocol.response(id, Map.of("ok", false, "reason", "Not implemented yet"));
     }
 

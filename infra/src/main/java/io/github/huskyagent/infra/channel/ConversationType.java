@@ -1,14 +1,11 @@
 package io.github.huskyagent.infra.channel;
 
-/**
- * 对话类型 — 区分私聊/群聊/频道/话题，影响 session 路由规则。
- */
 public enum ConversationType {
 
-    DIRECT("direct", "私聊/一对一"),
-    GROUP("group", "群聊"),
-    CHANNEL("channel", "频道"),
-    THREAD("thread", "话题/子讨论");
+    DIRECT("direct", "direct or one-on-one chat"),
+    GROUP("group", "group chat"),
+    CHANNEL("channel", "channel"),
+    THREAD("thread", "thread or sub-discussion");
 
     private final String name;
     private final String description;

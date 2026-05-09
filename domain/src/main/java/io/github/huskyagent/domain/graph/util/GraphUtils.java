@@ -18,9 +18,6 @@ import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * AgentGraph 图节点/边的公共静态工具方法。
- */
 @Slf4j
 public final class GraphUtils {
 
@@ -32,13 +29,7 @@ public final class GraphUtils {
 
     private GraphUtils() {}
 
-    // ── 审批判断 ──────────────────────────────────────────────────────────────
 
-    /**
-     * 判断一个工具调用是否需要审批。
-     * 先检查静态 approvalToolNames 集合，再委托工具自身的 approvalChecker 动态判断。
-     * JSON 解析失败时保守返回 true（需要审批）。
-     */
     public static boolean requiresApproval(AssistantMessage.ToolCall call,
                                            Set<String> approvalToolNames,
                                            Map<String, ToolDefinition> toolDefinitionMap) {
@@ -49,14 +40,11 @@ public final class GraphUtils {
             Map<String, Object> args = MAPPER.readValue(call.arguments(), MAP_TYPE);
             return def.checkApproval(args) != null;
         } catch (Exception e) {
-            log.warn("[GraphUtils] 解析工具参数失败，保守判断为需要审批: {}", e.getMessage());
+            log.warn("[GraphUtils] Failed to parse tool arguments; conservatively requiring approval: {}", e.getMessage());
             return true;
         }
     }
 
-    /**
-     * 从工具定义列表中收集所有需要审批的工具名。
-     */
     public static Set<String> collectApprovalToolNames(List<ToolDefinition> definitions) {
         Set<String> names = new HashSet<>();
         for (ToolDefinition def : definitions) {
@@ -65,19 +53,15 @@ public final class GraphUtils {
         return names;
     }
 
-    // ── 工具执行 ──────────────────────────────────────────────────────────────
 
-    /**
-     * 同步执行单个工具调用，返回 ToolResponse（供并发 Future 使用）。
-     */
     public static ToolResponseMessage.ToolResponse executeSingleToolCall(
             org.bsc.langgraph4j.spring.ai.tool.SpringAIToolService toolService,
             AssistantMessage.ToolCall call,
             Map<String, Object> stateData) {
         ToolCallback cb = toolService.agentFunction(call.name())
-                .orElseThrow(() -> new IllegalStateException("工具未注册: " + call.name()));
+                .orElseThrow(() -> new IllegalStateException("Tool is not registered: " + call.name()));
         String result = cb.call(call.arguments(), new ToolContext(stateData));
-        log.debug("[parallel_executor] 工具 {} 执行完成", call.name());
+        log.debug("[parallel_executor] Tool {} completed", call.name());
         return new ToolResponseMessage.ToolResponse(call.id(), call.name(), result);
     }
 
@@ -89,10 +73,6 @@ public final class GraphUtils {
         }
     }
 
-    /**
-     * 从工具执行结果的 state update 中提取 ToolResponseMessage 的 content 字符串。
-     * 用于判断工具是否返回了错误响应（含 "error":true）。
-     */
     @SuppressWarnings("unchecked")
     public static String extractToolResponseContent(Map<String, Object> update) {
         Object messages = update.get("messages");
@@ -113,20 +93,14 @@ public final class GraphUtils {
         return null;
     }
 
-    /**
-     * 构造工具被拒绝时的 ToolResponseMessage，让 LLM 感知拒绝原因。
-     */
     public static ToolResponseMessage buildRejectionMessage(AssistantMessage.ToolCall denied) {
-        String responseData = "工具 '%s' 的执行已被用户拒绝！".formatted(denied.name());
+        String responseData = "Execution of tool '%s' was rejected by the user.".formatted(denied.name());
         return ToolResponseMessage.builder()
                 .responses(List.of(new ToolResponseMessage.ToolResponse(
                         denied.id(), denied.name(), responseData)))
                 .build();
     }
 
-    /**
-     * 构造指定内容的 ToolResponseMessage（供 Hook 阻塞等场景使用）。
-     */
     public static ToolResponseMessage buildToolResponseMessage(String toolCallId,
                                                                 String toolName,
                                                                 String responseData) {
@@ -136,18 +110,17 @@ public final class GraphUtils {
                 .build();
     }
 
-    // ── 日志 ──────────────────────────────────────────────────────────────────
 
     public static void logLlmRequest(String systemPrompt, List<Message> messages) {
         String systemPromptText = safeText(systemPrompt);
         String messageListText = formatMessages(messages);
-        log.info("[model] 调用 LLM，systemPromptChars={}, messageCount={}",
+        log.info("[model] Calling LLM, systemPromptChars={}, messageCount={}",
                 systemPromptText.length(), messages.size());
         writePromptDebugFiles(systemPromptText, messageListText);
     }
 
     public static void logLlmResponse(AssistantMessage output, String finishReason) {
-        log.info("[model] LLM 响应：hasToolCalls={}, toolCount={}, finishReason={}, text={}",
+        log.info("[model] LLM response: hasToolCalls={}, toolCount={}, finishReason={}, text={}",
                 output.hasToolCalls(),
                 output.hasToolCalls() ? output.getToolCalls().size() : 0,
                 finishReason,
@@ -158,7 +131,6 @@ public final class GraphUtils {
         }
     }
 
-    // ── 字符串工具 ────────────────────────────────────────────────────────────
 
     private static String safeText(String s) {
         return s == null || s.isBlank() ? "<empty>" : s;
@@ -172,7 +144,7 @@ public final class GraphUtils {
             Files.writeString(MESSAGE_LIST_FILE, messageList, StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
-            log.warn("[model] 写入 prompt debug 文件失败: {}", e.getMessage());
+            log.warn("[model] Failed to write prompt debug file: {}", e.getMessage());
         }
     }
 

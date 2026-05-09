@@ -22,11 +22,6 @@ import java.util.concurrent.TimeoutException;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
 
-/**
- * parallel_executor 节点：将当前轮所有工具调用分为安全组和审批组。
- * 安全工具用 CompletableFuture 并发执行，结果批量追加到 messages；
- * 审批工具写回 TOOL_EXECUTION_REQUESTS 队列，交由 action_dispatcher 串行审批。
- */
 @Slf4j
 public class ParallelExecutorNode {
 
@@ -67,7 +62,7 @@ public class ParallelExecutorNode {
                 allCalls = state.loadToolCallsFromLastMessage().orElse(List.of());
             }
             if (allCalls.isEmpty()) {
-                log.warn("[parallel_executor] 无工具调用，直接回 model");
+                log.warn("[parallel_executor] No tool calls; returning directly to model");
                 return completedFuture(Map.of(
                         ReActAgentState.TOOL_EXECUTION_REQUESTS, List.of(),
                         ReActAgentState.LAST_TOOL_FAILED, false));
@@ -85,7 +80,7 @@ public class ParallelExecutorNode {
                     safeTools.add(call);
                 }
             }
-            log.info("[parallel_executor] 工具总数={}, 安全={}, 审批={}",
+            log.info("[parallel_executor] total tools={}, safe={}, approval={}",
                     allCalls.size(), safeTools.size(), approvalTools.size());
 
             if (safeTools.isEmpty()) {
@@ -111,11 +106,11 @@ public class ParallelExecutorNode {
 
             return CompletableFuture.allOf(futures).handle((v, ex) -> {
                 if (ex != null) {
-                    log.error("[parallel_executor] 并发执行异常", ex);
+                    log.error("[parallel_executor] Concurrent execution failed", ex);
                     Map<String, Object> update = new HashMap<>();
                     update.put(ReActAgentState.TOOL_EXECUTION_REQUESTS, finalApprovalTools);
                     update.put(ReActAgentState.LAST_TOOL_FAILED, true);
-                    update.put(ReActAgentState.TOOL_ERROR_HISTORY, "parallel_executor 异常: " + ex.getMessage());
+                    update.put(ReActAgentState.TOOL_ERROR_HISTORY, "parallel_executor  exception: " + ex.getMessage());
                     return update;
                 }
 
@@ -133,8 +128,8 @@ public class ParallelExecutorNode {
                         String name = finalSafeTools.get(i).name();
                         int n = retryCounts.getOrDefault(name, 0) + 1;
                         retryCounts.put(name, n);
-                        errorEntries.add(name + "(第" + n + "次失败): " + responseData);
-                        log.info("[parallel_executor] 工具 {} 失败（第 {}/{} 次）", name, n, maxToolRetries);
+                        errorEntries.add(name + "(attempt " + n + " failed attempt): " + responseData);
+                        log.info("[parallel_executor] Tool {} failed (attempt {}/{})", name, n, maxToolRetries);
                     }
                 }
 
@@ -168,7 +163,7 @@ public class ParallelExecutorNode {
         beforeData.put(HookDataKeys.TOOL_CALL_ID, call.id());
         HookResult beforeResult = hookRegistry.fireBefore(HookEvent.TOOL_CALL_BEFORE, sessionId, beforeData);
         if (!beforeResult.allowed()) {
-            log.info("[parallel] Hook 阻塞 {}: {}", call.name(), beforeResult.blockReason());
+            log.info("[parallel] Hook blocked {}: {}", call.name(), beforeResult.blockReason());
             return new ToolResponseMessage.ToolResponse(call.id(), call.name(),
                     "{\"error\":true,\"message\":\"" + escapeJson(beforeResult.blockReason()) + "\"}");
         }
@@ -207,7 +202,7 @@ public class ParallelExecutorNode {
         try {
             return definition.resolveTimeout(GraphUtils.parseArguments(call.arguments()), defaultTimeout);
         } catch (Exception e) {
-            log.warn("[parallel_executor] 工具 {} 超时配置解析失败，使用默认 {}s: {}",
+            log.warn("[parallel_executor] Failed to parse timeout for tool {}; using default {}s: {}",
                     call.name(), defaultTimeout.toSeconds(), e.getMessage());
             return defaultTimeout;
         }

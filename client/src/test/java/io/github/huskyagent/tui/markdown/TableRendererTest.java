@@ -5,27 +5,20 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.*;
 
-/**
- * 测试 TableRenderer 的表格渲染功能。
- * 验证表格边框对齐、列宽计算、自动换行。
- */
 class TableRendererTest {
 
-    // ── 辅助 ──────────────────────────────────────────────────────────────────
 
-    /** 断言结果中所有行的显示宽度一致 */
     private static void assertUniformWidth(List<String> result) {
         int firstWidth = InlineRenderer.displayWidth(result.get(0));
         for (int i = 1; i < result.size(); i++) {
             assertEquals(firstWidth, InlineRenderer.displayWidth(result.get(i)),
-                "第 " + i + " 行宽度不一致: " + result.get(i));
+                "row " + i + " width mismatch: " + result.get(i));
         }
     }
 
-    // ── 基础表格测试 ──────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("简单 ASCII 表格应对齐")
+    @DisplayName("simple ASCII table should align")
     void simpleAsciiTable() {
         List<String> rawLines = Arrays.asList(
             "| Name | Age |",
@@ -34,13 +27,12 @@ class TableRendererTest {
             "| Bob | 30 |"
         );
         List<String> result = TableRenderer.render(rawLines);
-        // 顶边框 + 表头 + 分隔线 + 2个数据行 + 底边框 = 6 行
-        assertEquals(6, result.size(), "应有 6 行输出");
+        assertEquals(6, result.size(), "should have 6 output lines");
         assertUniformWidth(result);
     }
 
     @Test
-    @DisplayName("中文表格应对齐")
+    @DisplayName("CJK table should align")
     void chineseTable() {
         List<String> rawLines = Arrays.asList(
             "| 姓名 | 年龄 |",
@@ -53,7 +45,7 @@ class TableRendererTest {
     }
 
     @Test
-    @DisplayName("带 Emoji 的表格应对齐")
+    @DisplayName("emoji table should align")
     void emojiTable() {
         List<String> rawLines = Arrays.asList(
             "| 状态 | 描述 |",
@@ -67,7 +59,7 @@ class TableRendererTest {
     }
 
     @Test
-    @DisplayName("混合内容表格应对齐")
+    @DisplayName("mixed content table should align")
     void mixedContentTable() {
         List<String> rawLines = Arrays.asList(
             "| 项目 | 状态 | 备注 |",
@@ -80,29 +72,28 @@ class TableRendererTest {
         assertUniformWidth(result);
     }
 
-    // ── 边界情况测试 ──────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("空表格应返回空列表")
+    @DisplayName("empty table should return empty list")
     void emptyTable() {
         assertTrue(TableRenderer.render(Collections.emptyList()).isEmpty());
         assertTrue(TableRenderer.render(null).isEmpty());
     }
 
     @Test
-    @DisplayName("单列表格应对齐")
+    @DisplayName("single-column table should align")
     void singleColumnTable() {
         List<String> rawLines = Arrays.asList(
             "| 标题 |",
             "|------|",
-            "| 内容 |"
+            "| Content |"
         );
         List<String> result = TableRenderer.render(rawLines);
         assertUniformWidth(result);
     }
 
     @Test
-    @DisplayName("列数不一致的表格应自动补齐")
+    @DisplayName("table with inconsistent column counts should auto-fill missing cells")
     void unevenColumnsTable() {
         List<String> rawLines = Arrays.asList(
             "| A | B | C |",
@@ -114,41 +105,36 @@ class TableRendererTest {
         assertUniformWidth(result);
     }
 
-    // ── 自动换行测试 ──────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("超宽内容应在列内自动换行，逻辑行变为多个物理行")
+    @DisplayName("over-wide content wraps within columns into multiple physical lines")
     void longCellWraps() {
         List<String> rawLines = Arrays.asList(
             "| 名称 | 描述 |",
             "|------|------|",
-            "| A | 这是一段很长的描述内容需要自动换行处理才能正常显示 |"
+            "| A | 这是一段很长的描述Content需要自动换行handle it才能正常显示 |"
         );
-        // 用 40 列的窄终端强制触发 wrap
         List<String> result = TableRenderer.render(rawLines, 40);
 
-        // 数据行应超过 1 个物理行（wrap 生效）：顶 + 表头 + 分隔 + 数据行(≥2) + 底
-        assertTrue(result.size() > 5, "超长内容应产生多个物理行，实际: " + result.size());
+        assertTrue(result.size() > 5, "overlong content should produce multiple physical lines, actual: " + result.size());
         assertUniformWidth(result);
     }
 
     @Test
-    @DisplayName("内容未超宽时不应换行")
+    @DisplayName("content should not wrap when it is not too wide")
     void shortCellNoWrap() {
         List<String> rawLines = Arrays.asList(
             "| A | B |",
             "|---|---|",
-            "| 短 | 内容 |"
+            "| 短 | Content |"
         );
-        // 宽终端，不应 wrap
         List<String> result = TableRenderer.render(rawLines, 200);
-        // 顶 + 表头 + 分隔 + 1数据行 + 底 = 5
-        assertEquals(5, result.size(), "内容未超宽不应产生额外物理行");
+        assertEquals(5, result.size(), "content that is not too wide should not produce extra physical lines");
         assertUniformWidth(result);
     }
 
     @Test
-    @DisplayName("多列都超宽时各列独立换行，物理行数取最多列的行数")
+    @DisplayName("over-wide columns wrap independently and physical rows use the maximum wrapped line count")
     void multiColWrap() {
         List<String> rawLines = Arrays.asList(
             "| 列1 | 列2 |",
@@ -158,63 +144,60 @@ class TableRendererTest {
         List<String> narrow = TableRenderer.render(rawLines, 30);
         List<String> wide   = TableRenderer.render(rawLines, 200);
 
-        assertTrue(narrow.size() >= wide.size(), "窄终端物理行数应 >= 宽终端");
+        assertTrue(narrow.size() >= wide.size(), "narrow terminal physical rows should be >= wide terminal");
         assertUniformWidth(narrow);
         assertUniformWidth(wide);
     }
 
     @Test
-    @DisplayName("单个超长无空格词应强制截断")
+    @DisplayName("single overlong word without spaces should be forcibly split")
     void hardWrapLongWord() {
         List<String> result = TableRenderer.wrapText("abcdefghijklmnopqrstuvwxyz", 10);
         assertFalse(result.isEmpty());
         for (String line : result) {
             assertTrue(InlineRenderer.displayWidth(line) <= 10,
-                "截断后每行宽度应 <= 10，实际: " + InlineRenderer.displayWidth(line));
+                "each split line width should be <= 10, actual: " + InlineRenderer.displayWidth(line));
         }
     }
 
     @Test
-    @DisplayName("中文超长内容应强制截断")
+    @DisplayName("CJK overlong content should be forcibly split")
     void hardWrapChinese() {
         List<String> result = TableRenderer.wrapText("这是一段非常非常非常长的中文文本需要被截断", 10);
         assertFalse(result.isEmpty());
         for (String line : result) {
             assertTrue(InlineRenderer.displayWidth(line) <= 10,
-                "中文截断后每行宽度应 <= 10，实际: " + InlineRenderer.displayWidth(line));
+                "each CJK split line width should be <= 10, actual: " + InlineRenderer.displayWidth(line));
         }
     }
 
-    // ── 列宽计算测试 ──────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("内容总宽在终端宽度内时不应收缩")
+    @DisplayName("content width within terminal width should not shrink")
     void colWidthsNoShrink() {
         int[] content = {10, 20, 15};
         int[] result = TableRenderer.computeColWidths(content, 200);
-        assertArrayEquals(content, result, "无需收缩时列宽应与内容宽度一致");
+        assertArrayEquals(content, result, "column widths should match content widths when no shrinking is needed");
     }
 
     @Test
-    @DisplayName("内容超出终端宽度时各列应按比例收缩")
+    @DisplayName("columns should shrink proportionally when content exceeds terminal width")
     void colWidthsShrink() {
         int[] content = {50, 50};
         int terminalWidth = 40;
         int[] result = TableRenderer.computeColWidths(content, terminalWidth);
 
-        // 总宽度 + 边框开销应 <= terminalWidth
         int totalWithBorder = result[0] + result[1] + 1 + 2 * 3; // left + 2*(space+│)
         assertTrue(totalWithBorder <= terminalWidth,
-            "收缩后总宽度应 <= 终端宽度，实际: " + totalWithBorder);
+            "total width after shrinking should be <= terminal width, actual: " + totalWithBorder);
 
-        // 每列宽度应 >= MIN_COL_WIDTH
         for (int w : result) {
-            assertTrue(w >= 3, "每列宽度应 >= 3");
+            assertTrue(w >= 3, "each column width should be >= 3");
         }
     }
 
     @Test
-    @DisplayName("wrapText 空字符串应返回单元素列表")
+    @DisplayName("wrapText should return a single-element list for empty string")
     void wrapTextEmpty() {
         List<String> result = TableRenderer.wrapText("", 10);
         assertEquals(1, result.size());
@@ -222,7 +205,7 @@ class TableRendererTest {
     }
 
     @Test
-    @DisplayName("wrapText 短文本不触发换行")
+    @DisplayName("wrapText should not wrap short text")
     void wrapTextShort() {
         List<String> result = TableRenderer.wrapText("hello", 20);
         assertEquals(1, result.size());
@@ -230,32 +213,30 @@ class TableRendererTest {
     }
 
     @Test
-    @DisplayName("wrapText 按空格断词换行")
+    @DisplayName("wrapText wraps by spaces")
     void wrapTextWordBoundary() {
         List<String> result = TableRenderer.wrapText("hello world foo bar", 10);
-        assertTrue(result.size() > 1, "应换行");
+        assertTrue(result.size() > 1, "should wrap");
         for (String line : result) {
             assertTrue(InlineRenderer.displayWidth(line) <= 10,
-                "每行宽度应 <= 10，实际: " + InlineRenderer.displayWidth(line));
+                "each line width should be <= 10, actual: " + InlineRenderer.displayWidth(line));
         }
-        // 拼回应等于原文（空格连接）
         assertEquals("hello world foo bar", String.join(" ", result));
     }
 
-    // ── emoji 宽度 & 行内代码对齐回归测试 ────────────────────────────────────
 
     @Test
-    @DisplayName("✅ U+2705 应被识别为宽度 2")
+    @DisplayName("✅ U+2705 should be recognized as width 2")
     void checkmarkEmojiWidth() {
-        assertEquals(2, InlineRenderer.displayWidth("✅"), "✅ 应占 2 列");
-        assertEquals(2, InlineRenderer.displayWidth("❌"), "❌ 应占 2 列");
-        assertEquals(2, InlineRenderer.displayWidth("🔄"), "🔄 应占 2 列");
-        assertEquals(2, InlineRenderer.displayWidth("⏳"), "⏳ 应占 2 列");
-        assertEquals(2, InlineRenderer.displayWidth("🚀"), "🚀 应占 2 列");
+        assertEquals(2, InlineRenderer.displayWidth("✅"), "✅ should occupy 2 columns");
+        assertEquals(2, InlineRenderer.displayWidth("❌"), "❌ should occupy 2 columns");
+        assertEquals(2, InlineRenderer.displayWidth("🔄"), "🔄 should occupy 2 columns");
+        assertEquals(2, InlineRenderer.displayWidth("⏳"), "⏳ should occupy 2 columns");
+        assertEquals(2, InlineRenderer.displayWidth("🚀"), "🚀 should occupy 2 columns");
     }
 
     @Test
-    @DisplayName("含行内代码的单元格 padding 应正确（render 后宽度一致）")
+    @DisplayName("cell padding with inline code should be correct; rendered widths match")
     void inlineCodeCellAlignment() {
         List<String> rawLines = Arrays.asList(
             "| 端点 | 方法 | 描述 | 认证 | 限流 |",
@@ -269,10 +250,9 @@ class TableRendererTest {
         assertUniformWidth(result);
     }
 
-    // ── 实际场景测试 ──────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("天气预报表格应对齐")
+    @DisplayName("weather forecast table should align")
     void weatherForecastTable() {
         List<String> rawLines = Arrays.asList(
             "| 城市 | 天气 | 温度 |",
@@ -286,12 +266,12 @@ class TableRendererTest {
     }
 
     @Test
-    @DisplayName("任务列表表格应对齐")
+    @DisplayName("task list table should align")
     void taskListTable() {
         List<String> rawLines = Arrays.asList(
             "| 任务 | 状态 | 负责人 |",
             "|------|------|--------|",
-            "| 完成报告 | ✅ | 张三 |",
+            "| done报告 | ✅ | 张三 |",
             "| 代码审查 | 🔄 | 李四 |",
             "| 测试部署 | ⏳ | 王五 |"
         );
@@ -300,16 +280,16 @@ class TableRendererTest {
     }
 
     @Test
-    @DisplayName("窄终端下的长文本表格应换行且对齐")
+    @DisplayName("narrow-terminal long text tables should wrap and align")
     void narrowTerminalLongDesc() {
         List<String> rawLines = Arrays.asList(
-            "| 功能 | 说明 |",
+            "| Feature | Description |",
             "|------|------|",
-            "| 自动换行 | 当单元格内容超出列宽上限时，渲染器会自动将内容切割为多个物理行，保持表格边框对齐 |",
-            "| 宽度感知 | 通过 terminal.getWidth() 实时获取终端宽度，调整窗口大小后下一个 token 即生效 |"
+            "| Auto wrap | When cell content exceeds the column width limit, the renderer splits it into multiple physical lines while keeping table borders aligned |",
+            "| Width aware | terminal.getWidth() is read live, so the next token reflects terminal resize changes |"
         );
         List<String> result = TableRenderer.render(rawLines, 60);
-        assertTrue(result.size() > 6, "长描述应产生多个物理行");
+        assertTrue(result.size() > 6, "long description should produce multiple physical lines");
         assertUniformWidth(result);
     }
 }

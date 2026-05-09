@@ -52,9 +52,9 @@ public class WriteFileTool implements ToolProvider {
         try {
             Path filePath = workspace.resolve(path);
 
-            // 过期检测：现有文件修改后未重读就写入时警告
             String warning = null;
             String sessionId = (String) args.get(ToolCallbackFactory.SESSION_ID_KEY);
+            // Mirror Claude Code's safeguard: warn before blind overwrites of files the session never inspected.
             if (workspace.exists(filePath) && sessionId != null && !toolStateStore.hasBeenRead(sessionId, path)) {
                 warning = "File '" + path + "' has not been read in this session. Overwriting may discard external changes. Consider read_file first.";
                 log.warn(warning);
@@ -67,7 +67,6 @@ public class WriteFileTool implements ToolProvider {
 
             workspace.writeString(filePath, content != null ? content : "");
 
-            // 写入后标记为已读，避免后续 edit_file 重复 read
             if (sessionId != null) {
                 toolStateStore.markRead(sessionId, path);
             }

@@ -11,9 +11,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-/**
- * Hook 注册表默认实现 — Spring 自动注入所有 {@link AgentHook} bean。
- */
 @Slf4j
 @Component
 public class DefaultHookRegistry implements HookRegistry {

@@ -4,14 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import javax.sql.DataSource;
 
-/**
- * 本地 Checkpoint 存储 — 委托 SqliteCheckpointSaver，行为与改动前完全一致。
- *
- * <p>由 {@link LocalCheckpointStoreConfiguration} 通过 @Bean 注册，
- * @ConditionalOnMissingBean 确保远端实现可自动替换。</p>
- */
 class LocalCheckpointStore extends SqliteCheckpointSaver implements CheckpointStore {
 
+    /** Reflects runtime config: storage may exist, but callers still need to know whether rewind is enabled. */
     private final boolean checkpointEnabled;
 
     LocalCheckpointStore(DataSource dataSource,

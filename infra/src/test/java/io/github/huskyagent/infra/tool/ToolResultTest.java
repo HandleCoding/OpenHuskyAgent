@@ -7,9 +7,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * ToolResult 测试
- */
 class ToolResultTest {
 
     @Test

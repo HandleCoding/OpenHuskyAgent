@@ -12,12 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * 默认 Context 压缩引擎
- * 参考 Hermes-Agent 的压缩算法：剪枝 + 摘要
- *
- * 运行时状态按 sessionId 隔离，避免多会话交叉污染。
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -28,7 +22,6 @@ public class DefaultContextEngine implements ContextEngine {
     private final PruneStrategy pruneStrategy;
     private final SummaryStrategy summaryStrategy;
 
-    /** 按 sessionId 隔离的运行时状态 */
     private final ConcurrentHashMap<String, SessionContextState> sessionStates = new ConcurrentHashMap<>();
 
     private SessionContextState getState(String sessionId) {
@@ -42,18 +35,12 @@ public class DefaultContextEngine implements ContextEngine {
 
     @Override
     public void updateFromResponse(TokenUsage usage) {
-        // updateFromResponse 不带 sessionId，由 ContextManager 路径传入
-        // 保留全局默认值用于无 session 场景（如 getStatus 无 sessionId 时）
-        // 但实际使用都通过带 sessionId 的 ContextManager 路径
         if (usage != null) {
             log.debug("updateFromResponse called without sessionId: prompt={}, completion={}",
                     usage.promptTokens(), usage.completionTokens());
         }
     }
 
-    /**
-     * 带 sessionId 的 token 使用更新
-     */
     public void updateFromResponse(String sessionId, TokenUsage usage) {
         if (usage != null) {
             SessionContextState state = getState(sessionId);
@@ -117,9 +104,6 @@ public class DefaultContextEngine implements ContextEngine {
         return (int) (policy.getContextLength() * policy.getThresholdPercent());
     }
 
-    /**
-     * 使用摘要进行压缩
-     */
     private List<Message> compressWithSummary(List<Message> messages, int protectFirstN, int tailTokenBudget, int maxSummaryTokens) {
 
         int tailBoundary = tokenCounter.findBoundaryByTokens(messages, protectFirstN, tailTokenBudget);
@@ -147,9 +131,6 @@ public class DefaultContextEngine implements ContextEngine {
         return result;
     }
 
-    /**
-     * 修复孤立的 tool_call/result 对
-     */
     private List<Message> sanitizeToolPairs(List<Message> messages) {
         List<Message> result = new ArrayList<>();
         boolean hasPendingToolCall = false;
@@ -193,13 +174,9 @@ public class DefaultContextEngine implements ContextEngine {
 
     @Override
     public ContextStatus getStatus() {
-        // 无 sessionId 调用时返回空状态
         return ContextStatus.empty(config.getContextLength(), config.getThresholdTokens());
     }
 
-    /**
-     * 带 sessionId 的状态查询
-     */
     public ContextStatus getStatus(String sessionId) {
         SessionContextState state = getState(sessionId);
         return new ContextStatus(
@@ -218,7 +195,6 @@ public class DefaultContextEngine implements ContextEngine {
         return (double) state.lastPromptTokens / config.getContextLength() * 100;
     }
 
-    /** 按 session 隔离的运行时状态 */
     private static class SessionContextState {
         int lastPromptTokens = 0;
         int lastCompletionTokens = 0;

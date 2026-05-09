@@ -20,11 +20,6 @@ import java.time.Duration;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
 
-/**
- * Web 内容处理器
- * 负责 URL 抓取、HTML→文本转换、LLM 摘要
- * 支持 gzip/deflate 内容编码自动解压（Java HttpClient 不内置此功能，需手动处理）
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -34,9 +29,6 @@ public class WebContentProcessor {
     private final WebConfig config;
     private final HttpClientFactory httpClientFactory;
 
-    /**
-     * 抓取 URL 并返回处理后的内容
-     */
     public FetchResult fetchUrl(String url, boolean summarize) {
         try {
             URI fetchUri = URI.create(url);
@@ -55,18 +47,15 @@ public class WebContentProcessor {
                 .timeout(Duration.ofSeconds(config.getRequestTimeoutSeconds()))
                 .build();
 
-            // 使用 InputStream 接收响应，手动处理 gzip/deflate 解压
             HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
 
             if (response.statusCode() >= 400) {
-                // 带尾斜杠 404 时，自动尝试去掉尾斜杠重试（很多 SPA/SSG 站点路径不带尾斜杠）
                 if (response.statusCode() == 404 && url.endsWith("/")) {
                     String urlWithoutSlash = url.substring(0, url.length() - 1);
                     log.info("URL {} returned 404 with trailing slash, retrying without: {}", url, urlWithoutSlash);
                     return fetchUrl(urlWithoutSlash, summarize);
                 }
 
-                // 尝试读取错误响应体，可能包含有用的重定向信息或页面建议
                 String errorBody = "";
                 try {
                     String encoding = response.headers().firstValue("Content-Encoding").orElse("");
@@ -89,14 +78,13 @@ public class WebContentProcessor {
                 return FetchResult.error(url, msg);
             }
 
-            // 根据 Content-Encoding 解压
             String encoding = response.headers().firstValue("Content-Encoding").orElse("");
             InputStream bodyStream = response.body();
 
             switch (encoding) {
                 case "gzip" -> bodyStream = new GZIPInputStream(bodyStream);
                 case "deflate" -> bodyStream = new InflaterInputStream(bodyStream);
-                default -> { /* 不需要解压 */ }
+                default -> { /* no decompression needed */ }
             }
 
             String body = new String(bodyStream.readAllBytes(), StandardCharsets.UTF_8);
@@ -132,13 +120,13 @@ public class WebContentProcessor {
                     wasSummarized = true;
                 } else {
                     content = truncateContent(content, config.getMaxOutputChars(),
-                        "[内容截断 - LLM摘要失败]");
+                        "[Content truncated - LLM summary failed]");
                 }
             }
 
             if (content.length() > config.getMaxOutputChars() * 2) {
                 content = truncateContent(content, config.getMaxOutputChars(),
-                    "[内容截断]");
+                    "[Content truncated]");
             }
 
             return new FetchResult(url, title, content, originalSize, wasSummarized, null);
@@ -177,9 +165,6 @@ public class WebContentProcessor {
         return options;
     }
 
-    /**
-     * 抓取结果
-     */
     public record FetchResult(
         String url,
         String title,

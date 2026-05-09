@@ -9,11 +9,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Context File Section
- *
- * 加载上下文文件（AGENTS.md、CLAUDE.md、.cursorrules 等）
- */
 public class ContextFileSection extends AbstractPromptSection {
 
     private final ContextFileLoader fileLoader;
@@ -29,7 +24,7 @@ public class ContextFileSection extends AbstractPromptSection {
 
     @Override
     public int getPriority() {
-        return 400;  // Skills 之后，Tools 之前
+        return 400;
     }
 
     @Override

@@ -22,11 +22,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * 会话解析器 — 统一入口，决定"谁拥有哪个 session、从哪个渠道来、属于哪个 scene"。
- *
- * <p>所有渠道（TUI / HTTP / 飞书 / Telegram）都走同一条解析链路。</p>
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -42,15 +37,6 @@ public class SessionResolver {
     private final SessionKeyStrategy sessionKeyStrategy;
     private final SessionAccessPolicy sessionAccessPolicy;
 
-    /**
-     * 解析或创建会话，返回 RuntimeScope。
-     *
-     * @param principal       已认证主体
-     * @param channelIdentity 渠道身份
-     * @param sceneId         场景 ID（null 时 fallback 到默认 scene）
-     * @param requestedSessionId 调用方请求恢复的 session ID（null 时新建）
-     * @return RuntimeScope
-     */
     public RuntimeScope resolveOrCreateSession(Principal principal, ChannelIdentity channelIdentity,
                                                 String sceneId, String requestedSessionId) {
         SceneConfig sceneConfig = sceneResolver.resolve(sceneId);
@@ -63,7 +49,7 @@ public class SessionResolver {
             SessionEntity existing = sessionRepository.findSession(requestedSessionId)
                     .orElseThrow(() -> new SecurityException("Session not found"));
             if (!sessionAccessPolicy.canResume(requestedScope, existing)) {
-                log.warn("Session scope 校验失败: sessionId={}, principalId={}, channel={}, scene={}",
+                log.warn("Session scope validation failed: sessionId={}, principalId={}, channel={}, scene={}",
                         requestedSessionId, principal.getId(), requestedScope.getChannelType(), sceneConfig.getSceneId());
                 throw new SecurityException("Session is outside current isolation scope");
             }
@@ -88,9 +74,6 @@ public class SessionResolver {
         return scope;
     }
 
-    /**
-     * 强制新建会话（不复用已有 session），返回 RuntimeScope。
-     */
     public RuntimeScope createSession(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
         SceneConfig sceneConfig = sceneResolver.resolve(sceneId);
         RuntimePolicy runtimePolicy = runtimePolicyResolver.resolve(sceneConfig, toolRegistry.getAllEnabled());
@@ -210,7 +193,6 @@ public class SessionResolver {
                 sessionKey);
     }
 
-    /** 校验 session 是否属于指定 principal */
     public boolean isSessionOwnedBy(String sessionId, String principalId) {
         return sessionRepository.isSessionOwnedBy(sessionId, principalId);
     }

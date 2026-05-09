@@ -16,17 +16,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-/**
- * 内置记忆提供者
- *
- * 使用文件存储持久化记忆：
- * - MEMORY.md: Agent 笔记、环境事实、工具技巧 (2200 字符限制)
- * - USER.md: 用户画像、偏好、沟通风格 (1375 字符限制)
- *
- * Frozen Snapshot 模式：
- * - 会话开始时冻结内容，用于系统提示注入
- * - 运行中写入更新磁盘但不改变已注入的提示（保护 prefix cache）
- */
 @Slf4j
 @Component
 public class BuiltinMemoryProvider implements ScopedMemoryProvider {
@@ -60,7 +49,6 @@ public class BuiltinMemoryProvider implements ScopedMemoryProvider {
     // Legacy snapshot for non-scoped callers. Runtime prompt loading uses sessionSnapshots.
     private Snapshot defaultSnapshot = Snapshot.empty();
 
-    // 实时内容（磁盘上的最新内容）
     private List<String> memoryEntries = new ArrayList<>();
     private List<String> userEntries = new ArrayList<>();
 
@@ -102,9 +90,6 @@ public class BuiltinMemoryProvider implements ScopedMemoryProvider {
         }
     }
 
-    /**
-     * 从磁盘加载记忆内容
-     */
     private void loadFromDisk() {
         memoryEntries = readEntries(memoryDirectory.resolve(MEMORY_FILE));
         userEntries = readEntries(memoryDirectory.resolve(USER_FILE));
@@ -112,9 +97,6 @@ public class BuiltinMemoryProvider implements ScopedMemoryProvider {
             memoryEntries.size(), userEntries.size());
     }
 
-    /**
-     * 读取文件并按分隔符拆分为条目
-     */
     private List<String> readEntries(Path file) {
         if (!Files.exists(file)) {
             return new ArrayList<>();
@@ -124,7 +106,6 @@ public class BuiltinMemoryProvider implements ScopedMemoryProvider {
             if (content.isBlank()) {
                 return new ArrayList<>();
             }
-            // 按 § 分隔符拆分
             return List.of(content.split(ENTRY_DELIMITER));
         } catch (IOException e) {
             log.error("Failed to read file: {}", file, e);
@@ -144,9 +125,6 @@ public class BuiltinMemoryProvider implements ScopedMemoryProvider {
             readEntries(memoryDirectory.resolve(USER_FILE)));
     }
 
-    /**
-     * 渲染记忆块
-     */
     private String renderBlock(String target, List<String> entries, int limit) {
         if (entries.isEmpty()) {
             return "";
@@ -271,7 +249,6 @@ public class BuiltinMemoryProvider implements ScopedMemoryProvider {
     }
 
     private MemoryResult prefetchSnapshot(Snapshot snapshot) {
-        // Builtin provider 返回冻结快照内容（不是动态检索）
         List<MemoryEntry> entries = new ArrayList<>();
 
         if (snapshot.memory() != null && !snapshot.memory().isBlank()) {
@@ -340,7 +317,6 @@ public class BuiltinMemoryProvider implements ScopedMemoryProvider {
             return "Error: Content is empty";
         }
 
-        // 安全检查
         SecurityCheckResult check = securityScanner.scan(content);
         if (check.hasWarnings()) {
             log.warn("Memory write security warnings: {}", check.warnings());
@@ -349,7 +325,6 @@ public class BuiltinMemoryProvider implements ScopedMemoryProvider {
             return "Blocked: " + check.blockReason();
         }
 
-        // 字符限制检查
         if (content.length() > MEMORY_CHAR_LIMIT) {
             content = content.substring(0, MEMORY_CHAR_LIMIT);
             log.warn("Memory content truncated to {} chars", MEMORY_CHAR_LIMIT);
@@ -366,20 +341,16 @@ public class BuiltinMemoryProvider implements ScopedMemoryProvider {
             return "Error: Content is empty";
         }
 
-        // 安全检查
         SecurityCheckResult check = securityScanner.scan(content);
         if (check.blocked()) {
             return "Blocked: " + check.blockReason();
         }
 
-        // 添加新条目
         List<String> newEntries = new ArrayList<>(memoryEntries);
         newEntries.add(content);
 
-        // 字符限制检查
         String combined = String.join(ENTRY_DELIMITER, newEntries);
         if (combined.length() > MEMORY_CHAR_LIMIT) {
-            // 移除旧条目直到符合限制
             while (combined.length() > MEMORY_CHAR_LIMIT && newEntries.size() > 1) {
                 newEntries.remove(0);
                 combined = String.join(ENTRY_DELIMITER, newEntries);
@@ -401,13 +372,11 @@ public class BuiltinMemoryProvider implements ScopedMemoryProvider {
             return "Error: Content is empty";
         }
 
-        // 安全检查
         SecurityCheckResult check = securityScanner.scan(content);
         if (check.blocked()) {
             return "Blocked: " + check.blockReason();
         }
 
-        // 字符限制检查
         if (content.length() > USER_CHAR_LIMIT) {
             content = content.substring(0, USER_CHAR_LIMIT);
             log.warn("User content truncated to {} chars", USER_CHAR_LIMIT);
@@ -424,17 +393,14 @@ public class BuiltinMemoryProvider implements ScopedMemoryProvider {
             return "Error: Content is empty";
         }
 
-        // 安全检查
         SecurityCheckResult check = securityScanner.scan(content);
         if (check.blocked()) {
             return "Blocked: " + check.blockReason();
         }
 
-        // 添加新条目
         List<String> newEntries = new ArrayList<>(userEntries);
         newEntries.add(content);
 
-        // 字符限制检查
         String combined = String.join(ENTRY_DELIMITER, newEntries);
         if (combined.length() > USER_CHAR_LIMIT) {
             while (combined.length() > USER_CHAR_LIMIT && newEntries.size() > 1) {

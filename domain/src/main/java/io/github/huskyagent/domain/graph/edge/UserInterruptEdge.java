@@ -30,14 +30,14 @@ public class UserInterruptEdge {
             Optional<String> resultOpt = state.<String>value(resultChannel).filter(s -> !s.isEmpty());
             if (resultOpt.isEmpty()) {
                 return failedFuture(new IllegalStateException(
-                        "userInterruptAction 执行时 " + resultChannel + " 为空（不应发生）"));
+                        "userInterruptAction executed with " + resultChannel + " empty; this should not happen"));
             }
 
             String answer = resultOpt.get();
             List<AssistantMessage.ToolCall> requests = state.toolExecutionRequests();
             if (requests.isEmpty()) {
                 return failedFuture(new IllegalStateException(
-                        "userInterruptAction 执行时 toolExecutionRequests 为空（不应发生）"));
+                        "userInterruptAction executed with toolExecutionRequests empty; this should not happen"));
             }
 
             AssistantMessage.ToolCall request = requests.get(0);

@@ -2,56 +2,30 @@ package io.github.huskyagent.tui.markdown;
 
 import org.jline.utils.WCWidth;
 
-/**
- * 行内 Markdown 元素渲染器（无状态，静态工具类）。
- *
- * <p>处理：粗体、斜体、行内代码。
- * 正则天然只匹配已闭合的标记，未闭合的标记原样输出，因此 {@link #renderPartial}
- * 可安全用于流式实时回显（token 片段可能不完整）。</p>
- */
 final class InlineRenderer {
 
     private InlineRenderer() {}
 
-    // ── ANSI 常量 ────────────────────────────────────────────────────────────
     static final String RESET  = "\033[0m";
     static final String BOLD   = "\033[1m";
     static final String ITALIC = "\033[3m";
     static final String YELLOW = "\033[33m";
 
-    /**
-     * 对完整行做行内渲染。
-     * 顺序：先处理行内代码（防止代码内的 * 被误解析），再处理粗体/斜体。
-     */
     static String render(String text) {
         if (text == null || text.isEmpty()) return text;
-        // 行内代码：`code` → 黄色
         text = text.replaceAll("`([^`]+)`", YELLOW + "$1" + RESET);
-        // 粗体：**text** 或 __text__（非贪婪）
         text = text.replaceAll("\\*\\*(.+?)\\*\\*", BOLD + "$1" + RESET);
         text = text.replaceAll("__(.+?)__",          BOLD + "$1" + RESET);
-        // 斜体：*text* 或 _text_（排除与粗体重叠）
         text = text.replaceAll("(?<!\\*)\\*(?!\\*)(.+?)(?<!\\*)\\*(?!\\*)", ITALIC + "$1" + RESET);
         text = text.replaceAll("(?<!_)_(?!_)(.+?)(?<!_)_(?!_)",             ITALIC + "$1" + RESET);
         return text;
     }
 
-    /**
-     * 对片段做保守行内渲染（仅替换已闭合标记），用于流式实时回显。
-     * 与 {@link #render} 逻辑相同，正则本身只匹配闭合对，未闭合的不受影响。
-     */
     static String renderPartial(String fragment) {
         return render(fragment);
     }
 
-    /**
-     * 计算字符串的终端显示宽度。
-     * CJK、全角、Emoji 等宽字符占 2 列，ANSI 转义序列不占宽度，其余占 1 列。
-     *
-     * <p>WCWidth 对 "East Asian Ambiguous" 类字符（✅❌⚠️等）返回 1，
-     * 但现代终端（iTerm2、Terminal.app、VTE）几乎全部将它们渲染为 2 列宽。
-     * 此方法对这些 Ambiguous 字符修正为 2，确保表格边框对齐。</p>
-     */
+    /** Measures rendered width after stripping ANSI sequences and widening ambiguous glyphs for CJK terminals. */
     static int displayWidth(String s) {
         if (s == null) return 0;
         int width = 0;
@@ -59,7 +33,6 @@ final class InlineRenderer {
             int cp = s.codePointAt(i);
             i += Character.charCount(cp);
 
-            // 跳过 ANSI 转义序列（ESC [ ... m）
             if (cp == 0x1B && i < s.length() && s.charAt(i) == '[') {
                 i++; // skip '['
                 while (i < s.length() && s.charAt(i) != 'm') i++;
@@ -68,26 +41,17 @@ final class InlineRenderer {
             }
 
             int w = WCWidth.wcwidth(cp);
-            if (w < 0) continue;          // 不可打印 → 0 宽度
+            if (w < 0) continue;
             if (w == 1 && isAmbiguous(cp)) {
-                w = 2;                    // Ambiguous 在现代终端实际占 2 列
+                w = 2;
             }
             width += w;
         }
         return width;
     }
 
-    /**
-     * 判断 Unicode code point 是否属于 "East Asian Ambiguous Width" 类别
-     * 且在现代终端中实际占据 2 列宽度。
-     *
-     * <p>Box Drawing 和 Block Elements（U+2500–U+259F）虽然是 Ambiguous 类别，
-     * 但在所有终端中都显示为 1 列，不应修正。只有符号类 Ambiguous 字符
-     * （✅❌⚠️☀★→ etc）在现代终端中实际占 2 列，需要修正。</p>
-     *
-     * 参考: Unicode Standard Annex #11 (East Asian Width), category 'A'.
-     */
     private static boolean isAmbiguous(int cp) {
+        // Treat emoji-like and East Asian ambiguous symbols as double-width, but leave box drawing characters alone.
         // U+2000–U+206F: General Punctuation (dashes, quotes — many ambiguous)
         // U+2100–U+214F: Letterlike Symbols (℠™℃ etc)
         // U+2150–U+218F: Number Forms (½⅓ etc)

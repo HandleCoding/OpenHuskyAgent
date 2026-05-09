@@ -8,10 +8,6 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 
 import java.util.List;
 
-/**
- * afterTool 边：审批工具执行节点后的路由。
- * 工具失败 → end（回 model 反思）；审批队列非空 → continue；队列为空 → end（回 model）。
- */
 @Slf4j
 public class AfterToolEdge {
 
@@ -21,15 +17,15 @@ public class AfterToolEdge {
     public AsyncCommandAction<ReActAgentState> build() {
         return AsyncCommandAction.command_async((state, config) -> {
             if (state.lastToolFailed()) {
-                log.info("[afterTool] 工具失败 → model 反思");
+                log.info("[afterTool] Tool failed -> model reflection");
                 return new Command(LABEL_END);
             }
             List<AssistantMessage.ToolCall> remaining = state.toolExecutionRequests();
             if (!remaining.isEmpty()) {
-                log.debug("[afterTool] 队列剩余 {} 个工具 → dispatcher", remaining.size());
+                log.debug("[afterTool] Queue has {} remaining tools -> dispatcher", remaining.size());
                 return new Command(LABEL_CONTINUE);
             }
-            log.debug("[afterTool] 队列已空 → model");
+            log.debug("[afterTool] Queue empty -> model");
             return new Command(LABEL_END);
         });
     }

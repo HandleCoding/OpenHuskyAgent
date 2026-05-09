@@ -9,12 +9,6 @@ import org.springframework.context.annotation.Configuration;
 
 import javax.sql.DataSource;
 
-/**
- * 本地 Checkpoint 存储配置。
- *
- * <p>始终注册本地 LocalCheckpointStore 与 local provider。
- * 远端存储通过额外的 CheckpointStoreProvider 注册，由 CheckpointStoreFactory 按 type 选择。</p>
- */
 @Configuration
 public class LocalCheckpointStoreConfiguration {
 

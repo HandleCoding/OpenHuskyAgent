@@ -40,12 +40,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-/**
- * 子 Agent 运行器 — 在独立 session 中执行委派任务。
- *
- * <p>非 Spring Bean，每次委派由 DelegateTaskTool 创建实例。
- * 依赖通过构造器从 DelegateTaskTool（Spring Bean）传入。</p>
- */
 @Slf4j
 public class SubAgentRunner {
 
@@ -64,10 +58,6 @@ public class SubAgentRunner {
 
     private final List<SubAgentMessage.ToolTraceEntry> toolTrace = new ArrayList<>();
 
-    /**
-     * 子 Agent 专用 HookRegistry — 将工具事件推入 SubAgentMessageQueue，
-     * 而不是触发主 Agent 的 TUI hook。
-     */
     private class QueuePushingHookRegistry implements HookRegistry {
 
         @Override
@@ -176,13 +166,13 @@ public class SubAgentRunner {
 
         } catch (SubAgentExecutionException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
-            log.error("子 Agent 执行失败: sessionId={}, goal={}", childSessionId, task.goal(), cause);
+            log.error("Sub-agent execution failed: sessionId={}, goal={}", childSessionId, task.goal(), cause);
             SubAgentMessage.Failed failed = new SubAgentMessage.Failed(
                     childSessionId, cause.getMessage(), List.copyOf(toolTrace), idx);
             queue.offer(failed);
             return failed;
         } catch (Exception e) {
-            log.error("子 Agent 执行失败: sessionId={}, goal={}", childSessionId, task.goal(), e);
+            log.error("Sub-agent execution failed: sessionId={}, goal={}", childSessionId, task.goal(), e);
             SubAgentMessage.Failed failed = new SubAgentMessage.Failed(
                     childSessionId, e.getMessage(), List.copyOf(toolTrace), idx);
             queue.offer(failed);
@@ -293,7 +283,7 @@ public class SubAgentRunner {
     }
 
     private String extractResponse(ReActAgentState state) {
-        if (state == null) return "无法获取子 Agent 响应";
+        if (state == null) return "Unable to get sub-agent response";
         List<Message> msgs = state.messages();
         if (msgs != null && !msgs.isEmpty()) {
             for (int i = msgs.size() - 1; i >= 0; i--) {
@@ -304,6 +294,6 @@ public class SubAgentRunner {
                 }
             }
         }
-        return "子 Agent 未产出有效回复";
+        return "Sub-agent did not produce a valid response";
     }
 }

@@ -159,10 +159,6 @@ public final class FileUtils {
         }
     }
 
-    /**
-     * 当文件不存在时，建议相似文件。对标 Hermes find_closest_lines。
-     * 评分策略：同目录下同名不同扩展名(90)、子串包含(60)、同扩展名(30)。
-     */
     static String suggestSimilarFiles(Path targetPath) {
         Path parent = targetPath.getParent();
         String targetName = targetPath.getFileName() != null ? targetPath.getFileName().toString() : "";
@@ -183,9 +179,9 @@ public final class FileUtils {
                     String ext = name.contains(".") ? name.substring(name.lastIndexOf('.') + 1) : "";
 
                     int score = 0;
-                    if (base.equals(targetBase) && !ext.equals(targetExt)) score = 90;  // 同名不同扩展名
-                    else if (name.contains(targetBase) || targetBase.contains(name)) score = 60;  // 子串包含
-                    else if (ext.equals(targetExt) && !targetExt.isEmpty() && base.length() > 2) score = 30;  // 同扩展名
+                    if (base.equals(targetBase) && !ext.equals(targetExt)) score = 90;
+                    else if (name.contains(targetBase) || targetBase.contains(name)) score = 60;
+                    else if (ext.equals(targetExt) && !targetExt.isEmpty() && base.length() > 2) score = 30;
 
                     if (score > 0) {
                         candidates.add(new ScoredPath(score, parent.relativize(p).toString()));

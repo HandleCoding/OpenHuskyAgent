@@ -13,7 +13,7 @@ class SkillFrontmatterParserTest {
         String raw = """
             ---
             name: web_research
-            description: 深度网络调研
+            description: Deep web research
             requires_toolsets: [WEB, SEARCH]
             platforms: [macos, linux]
             ---
@@ -26,7 +26,7 @@ class SkillFrontmatterParserTest {
 
         Skill skill = parser.parse("web_research.md", raw);
         assertEquals("web_research", skill.name());
-        assertEquals("深度网络调研", skill.description());
+        assertEquals("Deep web research", skill.description());
         assertEquals(2, skill.requiresToolsets().size());
         assertTrue(skill.requiresToolsets().contains(io.github.huskyagent.infra.tool.Toolset.WEB));
         assertTrue(skill.requiresToolsets().contains(io.github.huskyagent.infra.tool.Toolset.SEARCH));

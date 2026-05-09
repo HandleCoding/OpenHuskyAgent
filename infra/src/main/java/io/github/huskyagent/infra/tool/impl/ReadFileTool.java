@@ -79,10 +79,10 @@ public class ReadFileTool implements ToolProvider {
                 return ToolResult.failure("Cannot read binary file: " + path);
             }
 
-            // 大文件提前拒绝，避免全部读入内存
             long fileSize = workspace.size(filePath);
             if (fileSize > limitsConfig.getReadFileMaxChars()) {
                 int totalLines = countLines(filePath);
+                // Large files must be paged so tool output stays bounded and clickable in the UI.
                 return ToolResult.failure(
                     "File too large (" + fileSize + " bytes, ~" + totalLines + " lines). " +
                     "Use offset and limit to read specific sections. " +

@@ -7,9 +7,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Todo 存储 — 按 sessionId 隔离，会话结束时清理
- */
 @Slf4j
 @Component
 public class TodoStore {
@@ -63,17 +60,11 @@ public class TodoStore {
         log.debug("Todos cleared for session={}", sessionId);
     }
 
-    /**
-     * 整体替换任务列表（merge=false 模式）
-     */
     public void replace(String sessionId, List<TodoItem> items) {
         store.put(sessionId, new ArrayList<>(items));
         log.debug("Todos replaced: session={}, count={}", sessionId, items.size());
     }
 
-    /**
-     * 合并任务列表（merge=true 模式）：按 id 更新已有项，追加新项
-     */
     public void merge(String sessionId, List<TodoItem> items) {
         List<TodoItem> existing = store.computeIfAbsent(sessionId, k -> new ArrayList<>());
         Map<String, TodoItem> existingMap = new LinkedHashMap<>();
@@ -88,12 +79,6 @@ public class TodoStore {
         log.debug("Todos merged: session={}, count={}", sessionId, existing.size());
     }
 
-    /**
-     * 格式化当前会话的活跃 todo 列表，用于 prompt 注入
-     *
-     * <p>只注入 pending/in_progress 项，避免模型重复做已完成的工作。
-     * 对标 Hermes：compression 后只注入 active tasks。</p>
-     */
     public String formatForInjection(String sessionId) {
         if (sessionId == null) return "";
         List<TodoItem> items = store.getOrDefault(sessionId, List.of());

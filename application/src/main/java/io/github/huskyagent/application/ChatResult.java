@@ -3,10 +3,10 @@ package io.github.huskyagent.application;
 import io.github.huskyagent.infra.context.TokenUsage;
 
 /**
- * 对话结果
+ * Result returned by a single chat execution.
  *
- * <p>{@code streamed} 为 true 时表示内容已通过 textHandler 实时推送给调用方，
- * TUI 等展示层无需再次打印 {@code content}。</p>
+ * <p>When {@code streamed} is true, the full response has already been emitted
+ * through the streaming callback, so callers should not print {@code content} again.</p>
  */
 public record ChatResult(
     String content,
@@ -14,7 +14,6 @@ public record ChatResult(
     String errorMessage,
     ErrorCode errorCode,
     String sessionId,
-    /** 内容是否已在流式回调中全量输出（true → 调用方不应再打印 content） */
     boolean streamed,
     TokenUsage tokenUsage
 ) {

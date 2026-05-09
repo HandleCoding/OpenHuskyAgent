@@ -34,9 +34,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.concurrent.CompletableFuture.failedFuture;
 
-/**
- * model 节点：流式调用 LLM，逐 token 推送给 TUI，聚合完整 AssistantMessage 存入 state。
- */
 @Slf4j
 public class CallModelNode {
 
@@ -86,7 +83,7 @@ public class CallModelNode {
             long nodeStartNanos = System.nanoTime();
             List<Message> messages = state.messages();
             if (messages.isEmpty()) {
-                return failedFuture(new IllegalArgumentException("messages 为空，无法调用模型"));
+                return failedFuture(new IllegalArgumentException("messages is empty; cannot call model"));
             }
 
             String sessionId = config != null ? config.threadId().orElse(null) : null;
@@ -118,23 +115,20 @@ public class CallModelNode {
                 return failedFuture(new RuntimeException("LLM call blocked: " + beforeResult.blockReason()));
             }
 
-            // Hook 注入上下文
             String injectedContext = beforeResult.getModification(HookDataKeys.LLM_CONTEXT_INJECT, String.class);
             if (injectedContext != null && !injectedContext.isBlank()) {
-                log.debug("[model] Hook 注入上下文: {} chars", injectedContext.length());
+                log.debug("[model] Hook injected context: {} chars", injectedContext.length());
             }
 
             long debugDumpStartNanos = System.nanoTime();
             GraphUtils.logLlmRequest(systemPrompt, requestMessages);
             long debugDumpDurationMs = elapsedMs(debugDumpStartNanos);
 
-            // ── 流式回调（通过 ChannelEventBus 推送 token）───────────────────────────────
 
             long startTime = System.currentTimeMillis();
             long llmStartNanos = System.nanoTime();
 
             try {
-                // ── 重试循环（不用 Reactor retryWhen，因为 ChatClient 的 advisor chain 是有状态 Deque，retryWhen 重订阅时 Deque 已空） ──
                 int maxRetries = llmRetryPolicy.getMaxRetries();
                 long initialBackoffMs = llmRetryPolicy.getInitialBackoffMs();
                 Exception lastException = null;
@@ -149,12 +143,11 @@ public class CallModelNode {
 
                 for (int attempt = 0; attempt <= maxRetries; attempt++) {
                     if (attempt > 0) {
-                        long backoff = initialBackoffMs * (1L << (attempt - 1)); // 指数退避
-                        log.warn("[model] 第 {} 次重试，等待 {}ms...", attempt, backoff);
+                        long backoff = initialBackoffMs * (1L << (attempt - 1));
+                        log.warn("[model] Retry attempt {}; waiting {}ms...", attempt, backoff);
                         Thread.sleep(backoff);
                     }
 
-                    // 每次重试都重新构建 stream 调用，确保 advisor chain 的 Deque 是新的
                     fullText.setLength(0);
                     fullReasoning.setLength(0);
                     lastWithToolCalls[0] = null;
@@ -203,7 +196,7 @@ public class CallModelNode {
                                 .blockLast(Duration.ofMinutes(callBlockTimeoutMinutes));
 
                         LlmUsageDetails usageDetails = usageDetailsExtractor.extract(lastUsage.get());
-                        log.info("[model] LLM 分段耗时: session={}, attempt={}, promptBuild={}ms, beforeHook={}ms, debugDump={}ms, firstChunk={}ms, firstToken={}ms, stream={}ms, total={}ms, requestMessages={}, dynamicPromptChars={}, dynamicPromptHash={}, dynamicPromptCacheHit={}, estimatedHistoryTokens={}, estimatedStablePromptTokens={}, estimatedDynamicPromptTokens={}, estimatedRequestTokens={}, estimatedPromptTokens={}, promptTokens={}, completionTokens={}, totalTokens={}, cachedPromptTokens={}, uncachedPromptTokens={}, nativeUsageType={}, hasPromptTokenDetails={}",
+                        log.info("[model] LLM timing breakdown: session={}, attempt={}, promptBuild={}ms, beforeHook={}ms, debugDump={}ms, firstChunk={}ms, firstToken={}ms, stream={}ms, total={}ms, requestMessages={}, dynamicPromptChars={}, dynamicPromptHash={}, dynamicPromptCacheHit={}, estimatedHistoryTokens={}, estimatedStablePromptTokens={}, estimatedDynamicPromptTokens={}, estimatedRequestTokens={}, estimatedPromptTokens={}, promptTokens={}, completionTokens={}, totalTokens={}, cachedPromptTokens={}, uncachedPromptTokens={}, nativeUsageType={}, hasPromptTokenDetails={}",
                                 sessionId,
                                 attempt + 1,
                                 promptDurationMs,
@@ -234,27 +227,26 @@ public class CallModelNode {
                             throw new EmptyLlmResponseException();
                         }
 
-                        // 成功，跳出重试循环
                         lastException = null;
                         break;
                     } catch (Exception e) {
                         lastException = e;
                         if (e instanceof EmptyLlmResponseException) {
                             if (attempt < maxRetries) {
-                                log.warn("[model] LLM 返回空响应（第 {}/{} 次），将重试", attempt + 1, maxRetries);
+                                log.warn("[model] LLM returned an empty response (attempt {}/{}); retrying", attempt + 1, maxRetries);
                             } else {
-                                log.error("[model] LLM 返回空响应，重试 {} 次后仍失败", maxRetries);
+                                log.error("[model] LLM returned an empty response after {} retries", maxRetries);
                             }
                             continue;
                         }
                         if (!llmRetryPolicy.isRetryable(e)) {
-                            log.error("[model] 不可重试错误: {}", e.getMessage());
+                            log.error("[model] Non-retryable error: {}", e.getMessage());
                             break;
                         }
                         if (attempt < maxRetries) {
-                            log.warn("[model] 可重试错误（第 {}/{} 次）: {}", attempt + 1, maxRetries, e.getMessage());
+                            log.warn("[model] Retryable error (attempt {}/{}): {}", attempt + 1, maxRetries, e.getMessage());
                         } else {
-                            log.error("[model] 重试 {} 次后仍失败", maxRetries);
+                            log.error("[model] Still failed after {} retries", maxRetries);
                         }
                     }
                 }

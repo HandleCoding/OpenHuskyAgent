@@ -39,40 +39,11 @@ import java.util.*;
 
 import static org.bsc.langgraph4j.StateGraph.START;
 
-/**
- * ReAct Agent 图构建器
- *
- * <p>负责图的装配：将 node/、edge/ 子包中的节点/边工厂组合成 LangGraph4j StateGraph。</p>
- *
- * <h2>图结构</h2>
- * <pre>
- *   START → model → [shouldContinue]
- *                     ├─ "end"      → END
- *                     └─ "continue" → parallel_executor
- *
- *   parallel_executor → [afterParallel]
- *                         ├─ "continue" → action_dispatcher（有审批工具）
- *                         └─ "end"      → model（全部完成）
- *
- *   action_dispatcher → [dispatchAction]
- *                         ├─ "approval" → ApprovalNode（审批工具）
- *                         └─ "clarify"  → UserInterruptNode（用户中断工具）
- *
- *   ApprovalNode → [approvalAction]
- *                    ├─ "APPROVED" → execute_tool
- *                    └─ "REJECTED" → model
- *
- *   execute_tool → [afterTool]
- *                  ├─ "continue" → action_dispatcher（队列还有剩余）
- *                  └─ "end"      → model（队列已空）
- * </pre>
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class AgentGraph {
 
-    // ── 节点名称常量 ────────────────────────────────────────────────────────────
     public static final String NODE_MODEL             = "model";
     public static final String NODE_DISPATCHER        = "action_dispatcher";
     public static final String NODE_PARALLEL_EXECUTOR = "parallel_executor";
@@ -80,13 +51,11 @@ public class AgentGraph {
     public static final String NODE_EXECUTE_TOOL      = "execute_tool";
     private static final Set<String> USER_INTERRUPT_TOOL_NAMES = Set.of("clarify");
 
-    // ── 边路由标签 ──────────────────────────────────────────────────────────────
     private static final String LABEL_CONTINUE = "continue";
     private static final String LABEL_END      = "end";
     private static final String LABEL_APPROVED = "APPROVED";
     private static final String LABEL_REJECTED = "REJECTED";
 
-    // ── 依赖注入 ────────────────────────────────────────────────────────────────
     private final org.springframework.ai.chat.model.ChatModel chatModel;
     private final PromptBuilder promptBuilder;
     private final ToolCallbackFactory toolCallbackFactory;
@@ -101,7 +70,6 @@ public class AgentGraph {
     @Qualifier("toolExecutor")
     private final java.util.concurrent.ExecutorService toolExecutor;
 
-    // ── 公开接口 ────────────────────────────────────────────────────────────────
 
     public CompiledGraph<ReActAgentState> buildGraph(String sessionId, Path workingDirectory,
             SessionScope sessionScope,
@@ -130,7 +98,7 @@ public class AgentGraph {
                 buildToolExecutionContext(sessionId, sessionScope, runtimePolicy));
         SpringAIToolService toolService      = new SpringAIToolService(toolCallbacks);
 
-        log.debug("构建图：sessionId={}, tools={}", sessionId, toolDefinitions.size());
+        log.debug("Building graph: sessionId={}, tools={}", sessionId, toolDefinitions.size());
 
         PromptContext promptContext = PromptContext.of(sessionId, workingDirectory)
                 .runtimePolicy(runtimePolicy)
@@ -182,7 +150,6 @@ public class AgentGraph {
                 capabilityView.getVisiblePromptSections());
     }
 
-    // ── 图结构装配 ──────────────────────────────────────────────────────────────
 
     private StateGraph<ReActAgentState> buildStateGraph(GraphBuildContext context) throws GraphStateException {
 
@@ -216,7 +183,6 @@ public class AgentGraph {
                 agentConfig.getTool().getExecutionTimeoutSeconds(),
                 context.effectiveHookRegistry());
 
-        // ── 节点注册 ──────────────────────────────────────────────────────────
         graph.addNode(NODE_MODEL,             new CallModelNode(modelDependencies).build());
         graph.addNode(NODE_PARALLEL_EXECUTOR, new ParallelExecutorNode(parallelDependencies).build());
         graph.addNode(NODE_DISPATCHER,        new DispatchToolsNode(USER_INTERRUPT_TOOL_NAMES).build());
@@ -243,7 +209,6 @@ public class AgentGraph {
                 .toEND()
                 .to(NODE_APPROVAL);
 
-        // ── 用户交互中断工具节点 ─────────────────────────────────────────────────
         if (context.toolDefinitionMap().containsKey("clarify")) {
             graph.addNode("clarify", new UserInterruptNode("clarify", ReActAgentState.CLARIFY_RESULT, context.effectiveHookRegistry()));
             graph.addConditionalEdges("clarify", new UserInterruptEdge(ReActAgentState.CLARIFY_RESULT).build(),

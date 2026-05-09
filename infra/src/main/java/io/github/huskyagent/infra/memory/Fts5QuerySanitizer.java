@@ -5,13 +5,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * FTS5 查询净化器
- *
- * 将用户输入转为安全的 FTS5 MATCH 查询字符串。
- * FTS5 有自己的查询语法（"AND", "OR", "NOT", *, +, {}, (), ^ 等），
- * 直接传入原始用户输入可能导致 OperationalError。
- *
- * 对标 hermes-agent 的 _sanitize_fts5_query()
+ * Normalizes free-form user text into a conservative SQLite FTS5 MATCH query.
  */
 public final class Fts5QuerySanitizer {
 

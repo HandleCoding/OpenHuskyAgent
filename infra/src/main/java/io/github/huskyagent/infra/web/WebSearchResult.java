@@ -2,9 +2,6 @@ package io.github.huskyagent.infra.web;
 
 import java.util.List;
 
-/**
- * Web 搜索结果
- */
 public record WebSearchResult(
     boolean success,
     List<SearchEntry> entries,
@@ -19,9 +16,6 @@ public record WebSearchResult(
         return new WebSearchResult(false, List.of(), error);
     }
 
-    /**
-     * 单条搜索结果
-     */
     public record SearchEntry(
         String title,
         String url,

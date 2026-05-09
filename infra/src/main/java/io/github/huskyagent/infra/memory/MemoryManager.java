@@ -6,39 +6,23 @@ import org.springframework.stereotype.Component;
 
 import java.util.*;
 
-/**
- * 记忆管理器
- *
- * 协调多个 MemoryProvider，提供统一的记忆访问接口
- *
- * 设计原则：
- * 1. 支持 builtin（必选）、session（必选）、vector（可选）三种 Provider
- * 2. 聚合所有 Provider 的 prefetch 结果
- * 3. 路由工具调用到正确的 Provider
- * 4. 提供 Frozen Snapshot 系统提示注入
- */
 @Slf4j
 @Component
 public class MemoryManager {
 
     private final List<MemoryProvider> providers = new ArrayList<>();
+    /** Resolves the runtime strategy that controls prompt loading, search, and writes. */
     private final MemoryRuntimeStrategyResolver strategyResolver;
 
     public MemoryManager(MemoryRuntimeStrategyResolver strategyResolver) {
         this.strategyResolver = strategyResolver;
     }
 
-    /**
-     * 注册 Provider
-     */
     public void registerProvider(MemoryProvider provider) {
         providers.add(provider);
         log.info("Registered memory provider: {}", provider.getName());
     }
 
-    /**
-     * 初始化所有 Provider
-     */
     public void initialize(MemoryContext context) {
         for (MemoryProvider provider : providers) {
             try {
@@ -50,11 +34,6 @@ public class MemoryManager {
         }
     }
 
-    /**
-     * 构建系统提示（聚合所有 Provider）
-     *
-     * 使用 Frozen Snapshot 模式，每个 Provider 返回冻结的内容
-     */
     public String buildSystemPrompt(SessionScope scope) {
         SessionScope requiredScope = requireScope(scope);
         return strategy(requiredScope).loadForPrompt(new MemoryLoadRequest(
@@ -62,11 +41,6 @@ public class MemoryManager {
                 providersForCurrentScope(requiredScope))).prompt();
     }
 
-    /**
-     * 聚合所有 Provider 的 prefetch 结果
-     *
-     * 并行调用各 Provider，按评分排序返回 TopK
-     */
     public MemoryResult prefetchAll(SessionScope scope, String query, MemorySearchOptions options) {
         SessionScope requiredScope = requireScope(scope);
         return strategy(requiredScope).search(new MemorySearchRequest(
@@ -89,9 +63,6 @@ public class MemoryManager {
                 MemorySearchTrigger.TOOL));
     }
 
-    /**
-     * 同步对话轮次到所有 Provider
-     */
     public void syncAll(SessionScope scope, String user, String assistant) {
         SessionScope requiredScope = requireScope(scope);
         strategy(requiredScope).afterTurn(new MemoryTurnRequest(
@@ -133,6 +104,10 @@ public class MemoryManager {
         return strategyResolver.resolve(scope.getMemoryStrategyId());
     }
 
+    /**
+     * Filters providers to the ids enabled for the current session scope.
+     * An empty provider-id set means all registered providers are visible.
+     */
     private List<MemoryProvider> providersForCurrentScope(SessionScope scope) {
         Set<String> enabledProviderIds = enabledProviderIds(scope);
         if (enabledProviderIds.isEmpty()) {
@@ -166,16 +141,10 @@ public class MemoryManager {
         return provider.getName();
     }
 
-    /**
-     * 获取所有已注册的 Provider
-     */
     public List<MemoryProvider> getProviders() {
         return Collections.unmodifiableList(providers);
     }
 
-    /**
-     * 检查是否有可用的 Provider
-     */
     public boolean hasAvailableProvider() {
         return providers.stream().anyMatch(MemoryProvider::isAvailable);
     }

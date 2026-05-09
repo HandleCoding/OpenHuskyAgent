@@ -62,16 +62,16 @@ wait_for_service() {
     local url="${1:-http://localhost:18088/actuator/health}"
     local max_wait="${2:-30}"
     local elapsed=0
-    echo "  ⏳ 等待服务就绪..."
+    echo "  Waiting for service readiness..."
     while [ $elapsed -lt $max_wait ]; do
         if curl -sf "$url" > /dev/null 2>&1; then
-            echo "  ✓ 服务已就绪"
+            echo "  Service is ready"
             return 0
         fi
         sleep 1
         elapsed=$((elapsed + 1))
     done
-    echo "  ⚠ 服务未在 ${max_wait}s 内就绪，尝试连接..."
+    echo "  Service was not ready within ${max_wait}s; trying to connect..."
     return 1
 }
 

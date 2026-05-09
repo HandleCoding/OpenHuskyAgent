@@ -15,10 +15,6 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * LLM 摘要生成策略
- * 使用结构化模板生成对话摘要
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -28,59 +24,59 @@ public class LLMSummaryGenerator implements SummaryStrategy {
     private ChatModel summaryChatModel;
 
     private static final String SUMMARY_PROMPT_TEMPLATE = """
-        请将以下对话历史压缩为一个结构化摘要，保留关键信息以便后续继续工作。
+        Compress the following conversation history into a structured summary while preserving key information needed to continue later.
 
-        ## 对话历史
+        ## Conversation History
         %s
 
-        ## 摘要格式
-        请按以下格式输出摘要：
+        ## Summary Format
+        Use the following format:
 
         ## Active Task
-        [用户最新请求原文]
+        [Original latest user request]
 
         ## Goal
-        [用户整体目标]
+        [User's overall goal]
 
         ## Constraints & Preferences
-        [用户偏好、约束、重要决策]
+        [User preferences, constraints, and important decisions]
 
         ## Completed Actions
-        [已完成的操作，带工具名]
+        [Completed actions, including tool names]
 
         ## Active State
-        [当前状态：目录、文件、测试状态]
+        [Current state: directories, files, test status]
 
         ## In Progress
-        [正在进行的工作]
+        [Current work in progress]
 
         ## Blocked
-        [未解决的阻塞问题]
+        [Unresolved blockers]
 
         ## Key Decisions
-        [关键决策]
+        [Key decisions]
 
         ## Resolved Questions
-        [已解决的问题]
+        [Resolved issues]
 
         ## Pending User Asks
-        [待用户确认的问题]
+        [Questions awaiting user confirmation]
 
         ## Relevant Files
-        [相关文件列表]
+        [Relevant file list]
 
         ## Remaining Work
-        [剩余工作]
+        [Remaining work]
         """;
 
     private static final String UPDATE_PROMPT_TEMPLATE = """
-        已有摘要：
+        Existing summary:
         %s
 
-        新增对话：
+        New conversation:
         %s
 
-        请更新摘要，合并新信息，保持格式一致。
+        Update the summary, merge the new information, and keep the same format.
         """;
 
     @Override
@@ -88,9 +84,6 @@ public class LLMSummaryGenerator implements SummaryStrategy {
         return "llmSummary";
     }
 
-    /**
-     * 设置摘要模型（延迟初始化）
-     */
     public void setSummaryChatModel(ChatModel chatModel) {
         this.summaryChatModel = chatModel;
     }
@@ -159,27 +152,18 @@ public class LLMSummaryGenerator implements SummaryStrategy {
         }
     }
 
-    /**
-     * 格式化消息列表为文本
-     */
     private String formatMessages(List<Message> messages) {
         return messages.stream()
             .map(this::formatMessage)
             .collect(Collectors.joining("\n\n"));
     }
 
-    /**
-     * 格式化单条消息
-     */
     private String formatMessage(Message msg) {
         String role = msg.getMessageType().getValue();
         String content = msg.getText();
         return String.format("[%s]: %s", role, content);
     }
 
-    /**
-     * 简单摘要（fallback）
-     */
     private String simpleSummarize(List<Message> turns) {
         StringBuilder sb = new StringBuilder();
         sb.append("## Conversation Summary\n\n");

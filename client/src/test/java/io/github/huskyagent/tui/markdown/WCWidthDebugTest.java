@@ -5,15 +5,12 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.jline.utils.WCWidth;
 
-/**
- * 调试测试 - 验证 WCWidth 的实际行为
- */
 class WCWidthDebugTest {
 
     @Test
-    @DisplayName("调试 WCWidth 返回值")
+    @DisplayName("debug WCWidth return values")
     void debugWCWidth() {
-        System.out.println("\n=== WCWidth 返回值调试 ===\n");
+        System.out.println("\n=== WCWidth return value debug ===\n");
         
         // ASCII
         System.out.println("ASCII:");

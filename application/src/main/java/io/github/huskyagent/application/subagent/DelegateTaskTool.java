@@ -34,16 +34,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
-/**
- * 子 Agent 委派工具 — 注册 delegate_task 供主 Agent LLM 调用。
- *
- * <p>支持两种模式：
- * <ul>
- *   <li><b>单任务</b>：传 goal 参数，派生 1 个子 Agent</li>
- *   <li><b>批量并行</b>：传 tasks 数组，派生多个子 Agent 并行执行</li>
- * </ul>
- * </p>
- */
 @Slf4j
 @Component
 public class DelegateTaskTool implements ToolProvider {
@@ -77,7 +67,7 @@ public class DelegateTaskTool implements ToolProvider {
     @Override
     public List<ToolDefinition> getTools() {
         if (!subAgentConfig.isEnabled()) {
-            log.info("子 Agent 委派已禁用，不注册 delegate_task 工具");
+            log.info("Sub-agent delegation is disabled; delegate_task will not be registered");
             return List.of();
         }
         return List.of(createDelegateTaskDefinition());
@@ -89,7 +79,6 @@ public class DelegateTaskTool implements ToolProvider {
 
         ObjectNode props = MAPPER.createObjectNode();
 
-        // 单任务参数
         ObjectNode goalProp = MAPPER.createObjectNode();
         goalProp.put("type", "string");
         goalProp.put("description", "Task description for a single subagent (use 'tasks' for parallel execution)");
@@ -100,7 +89,6 @@ public class DelegateTaskTool implements ToolProvider {
         contextProp.put("description", "Additional context from the parent conversation to help the subagent");
         props.set("context", contextProp);
 
-        // 批量任务参数
         ObjectNode tasksProp = MAPPER.createObjectNode();
         tasksProp.put("type", "array");
         tasksProp.put("description", "List of tasks for parallel subagent execution. Each task runs in its own isolated session.");
@@ -122,7 +110,6 @@ public class DelegateTaskTool implements ToolProvider {
         tasksProp.set("items", taskItem);
         props.set("tasks", tasksProp);
 
-        // 共享参数
         ObjectNode toolsetsProp = MAPPER.createObjectNode();
         toolsetsProp.put("type", "array");
         ObjectNode items = MAPPER.createObjectNode();
@@ -169,13 +156,11 @@ public class DelegateTaskTool implements ToolProvider {
     }
 
     private ToolResult handleDelegateTask(Map<String, Object> args, ToolExecutionContext executionContext) {
-        // 解析任务列表
         List<TaskSpec> taskSpecs = parseTaskSpecs(args);
         if (taskSpecs.isEmpty()) {
             return ToolResult.failure("Either 'goal' or 'tasks' must be provided");
         }
 
-        // 解析共享参数（防御性转换：LLM 有时会传 List<Map> 而非 List<String>）
         List<String> requestedToolsets = args.get("required_toolsets") instanceof List<?> rawList
                 ? rawList.stream()
                         .filter(Objects::nonNull)
@@ -212,7 +197,6 @@ public class DelegateTaskTool implements ToolProvider {
 
         Path workingDir = Path.of(System.getProperty("user.dir"));
 
-        // 构建子任务列表
         List<SubAgentTask> tasks = new ArrayList<>();
         for (int i = 0; i < taskSpecs.size(); i++) {
             TaskSpec spec = taskSpecs.get(i);
@@ -225,12 +209,11 @@ public class DelegateTaskTool implements ToolProvider {
                 Map.of(HookDataKeys.SUBAGENT_GOAL,
                         tasks.size() == 1 ? tasks.get(0).goal() : tasks.size() + " parallel tasks"));
 
-        log.info("启动子 Agent: {} 个任务, tools={}, timeout={}s",
+        log.info("Starting sub-agents: {} tasks, tools={}, timeout={}s",
                 tasks.size(), allowedToolsets, timeoutSeconds);
 
         long startTime = System.currentTimeMillis();
 
-        // 执行子 Agent
         List<SubAgentResult> results;
         if (tasks.size() == 1) {
             results = executeSingle(tasks.get(0), parentSessionId, timeoutSeconds, executionContext);
@@ -246,19 +229,17 @@ public class DelegateTaskTool implements ToolProvider {
         hookData.put(HookDataKeys.SUBAGENT_STATUS, aggregateStatus(results));
         hookRegistry.fireAfter(HookEvent.SUBAGENT_STOP, parentSessionId, hookData);
 
-        log.info("子 Agent 全部完成: status={}, duration={}ms", aggregateStatus(results), totalDurationMs);
+        log.info("All sub-agents completed: status={}, duration={}ms", aggregateStatus(results), totalDurationMs);
 
         return buildToolResult(results, totalDurationMs);
     }
 
-    // ── 任务解析 ────────────────────────────────────────────────────────────────
 
     private record TaskSpec(String goal, String context) {}
 
     private List<TaskSpec> parseTaskSpecs(Map<String, Object> args) {
         List<TaskSpec> specs = new ArrayList<>();
 
-        // 优先解析 tasks 数组
         Object tasksObj = args.get("tasks");
         if (tasksObj instanceof List<?> tasksList && !tasksList.isEmpty()) {
             for (Object item : tasksList) {
@@ -273,7 +254,6 @@ public class DelegateTaskTool implements ToolProvider {
             return specs;
         }
 
-        // 回退到单任务模式
         String goal = args.get("goal") instanceof String g ? g : null;
         if (goal != null && !goal.isBlank()) {
             String context = args.get("context") instanceof String c ? c : null;
@@ -283,9 +263,7 @@ public class DelegateTaskTool implements ToolProvider {
         return specs;
     }
 
-    // ── 执行模式 ────────────────────────────────────────────────────────────────
 
-    /** 单任务执行（轮询 queue 实时推送进度到 TUI） */
     private List<SubAgentResult> executeSingle(SubAgentTask task, String parentSessionId, long timeoutSeconds,
                                                ToolExecutionContext executionContext) {
         SubAgentMessageQueue queue = new SubAgentMessageQueue();
@@ -301,7 +279,6 @@ public class DelegateTaskTool implements ToolProvider {
         return List.of(new SubAgentResult(finalMsg, task.taskIndex(), events));
     }
 
-    /** 并行批量执行（轮询所有 queue 实时推送进度到 TUI） */
     private List<SubAgentResult> executeParallel(List<SubAgentTask> tasks, String parentSessionId,
                                                   long timeoutSeconds, ToolExecutionContext executionContext) {
         int maxConcurrent = Math.min(subAgentConfig.getMaxConcurrentChildren(), tasks.size());
@@ -322,19 +299,17 @@ public class DelegateTaskTool implements ToolProvider {
             final int taskIndex = i;
             futures.add(CompletableFuture.supplyAsync(runner::run, executor)
                     .exceptionally(ex -> {
-                        log.error("子 Agent #{} 执行异常", taskIndex, ex);
+                        log.error("Sub-agent #{} execution failed", taskIndex, ex);
                         return new SubAgentMessage.Failed(null, ex.getMessage(), List.of(), taskIndex);
                     }));
         }
 
-        // 轮询所有 queue，实时推送进度
         long deadline = System.currentTimeMillis() + timeoutSeconds * 1000;
         boolean allDone = false;
         while (!allDone && System.currentTimeMillis() < deadline) {
             allDone = true;
             for (int i = 0; i < futures.size(); i++) {
                 if (!futures.get(i).isDone()) allDone = false;
-                // 非阻塞消费每个 queue 的待处理事件
                 drainQueueProgress(queues.get(i), parentSessionId);
             }
             if (!allDone) {
@@ -342,16 +317,14 @@ public class DelegateTaskTool implements ToolProvider {
             }
         }
 
-        // 超时处理
         if (!allDone) {
-            log.warn("并行子 Agent 总超时: timeout={}s", timeoutSeconds);
+            log.warn("Parallel sub-agents timed out: timeout={}s", timeoutSeconds);
             for (int i = 0; i < futures.size(); i++) {
                 queues.get(i).close();
                 if (!futures.get(i).isDone()) futures.get(i).cancel(true);
             }
         }
 
-        // 收集结果
         List<SubAgentResult> results = new ArrayList<>();
         for (int i = 0; i < futures.size(); i++) {
             drainQueueProgress(queues.get(i), parentSessionId);
@@ -371,9 +344,7 @@ public class DelegateTaskTool implements ToolProvider {
         return results;
     }
 
-    // ── Queue 轮询与进度推送 ────────────────────────────────────────────────────
 
-    /** 单任务：轮询 queue 直到子 Agent 完成，实时推送进度 */
     private SubAgentMessage pollQueueUntilDone(SubAgentMessageQueue queue,
                                                 CompletableFuture<SubAgentMessage> future,
                                                 String parentSessionId,
@@ -385,9 +356,8 @@ public class DelegateTaskTool implements ToolProvider {
             try { Thread.sleep(100); } catch (InterruptedException e) { break; }
         }
 
-        // 超时处理
         if (!future.isDone()) {
-            log.warn("子 Agent 执行超时: taskIndex={}, timeout={}s", taskIndex, timeoutSeconds);
+            log.warn("Sub-agent execution timed out: taskIndex={}, timeout={}s", taskIndex, timeoutSeconds);
             queue.close();
             future.cancel(true);
             return new SubAgentMessage.Timeout(null, taskIndex);
@@ -397,17 +367,16 @@ public class DelegateTaskTool implements ToolProvider {
             long remaining = Math.max(1, deadline - System.currentTimeMillis());
             return future.get(remaining, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            log.warn("子 Agent get 超时: taskIndex={}", taskIndex);
+            log.warn("Sub-agent get timed out: taskIndex={}", taskIndex);
             queue.close();
             future.cancel(true);
             return new SubAgentMessage.Timeout(null, taskIndex);
         } catch (Exception e) {
-            log.error("子 Agent 执行异常: taskIndex={}", taskIndex, e);
+            log.error("Sub-agent execution failed: taskIndex={}", taskIndex, e);
             return new SubAgentMessage.Failed(null, e.getMessage(), List.of(), taskIndex);
         }
     }
 
-    /** 非阻塞消费 queue 中待处理的事件，推送 SUBAGENT_PROGRESS hook */
     private void drainQueueProgress(SubAgentMessageQueue queue, String parentSessionId) {
         List<SubAgentMessage> pending = queue.drain();
         for (SubAgentMessage msg : pending) {
@@ -456,7 +425,6 @@ public class DelegateTaskTool implements ToolProvider {
         return data;
     }
 
-    // ── 工具集解析 ──────────────────────────────────────────────────────────────
 
     private Set<Toolset> resolveAllowedToolsets(List<String> requested) {
         Set<Toolset> blocked = subAgentConfig.getBlockedToolsets().stream()
@@ -483,7 +451,6 @@ public class DelegateTaskTool implements ToolProvider {
                 .collect(Collectors.toSet());
     }
 
-    // ── 结果构建 ────────────────────────────────────────────────────────────────
 
     private record SubAgentResult(SubAgentMessage finalMsg, int taskIndex, List<SubAgentMessage> events) {}
 
@@ -512,13 +479,11 @@ public class DelegateTaskTool implements ToolProvider {
     }
 
     private ToolResult buildToolResult(List<SubAgentResult> results, long totalDurationMs) {
-        // 单任务 → 扁平结构（向后兼容）
         if (results.size() == 1) {
             SubAgentResult r = results.get(0);
             return buildSingleResult(r.finalMsg(), totalDurationMs);
         }
 
-        // 多任务 → 数组结构
         ObjectNode root = MAPPER.createObjectNode();
         root.put("status", aggregateStatus(results));
         root.put("total_duration_seconds", totalDurationMs / 1000.0);

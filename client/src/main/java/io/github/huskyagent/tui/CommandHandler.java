@@ -14,9 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
-/**
- * TUI 命令处理器：通过 JSON-RPC 客户端实现 /xxx 命令。
- */
 @Slf4j
 class CommandHandler {
 
@@ -49,7 +46,6 @@ class CommandHandler {
         this.workingDirectory = workingDirectory;
     }
 
-    // ── 公开接口 ─────────────────────────────────────────────────────────────────
 
     void handle(String command) {
         String[] parts = command.split("\\s+", 2);
@@ -58,7 +54,7 @@ class CommandHandler {
 
         switch (cmd) {
             case "/help"                 -> printHelp();
-            case "/exit", "/quit", "/q" -> { println(BLUE + "再见！👋" + RESET); exitRequested = true; }
+            case "/exit", "/quit", "/q" -> { println(BLUE + "Goodbye! 👋" + RESET); exitRequested = true; }
             case "/new"                  -> createNewSession();
             case "/resume"               -> resumeSession(args);
             case "/rewind"               -> rewindSession();
@@ -69,7 +65,7 @@ class CommandHandler {
             case "/pwd"                  -> showWorkingDirectory();
             case "/status"               -> showContextStatus();
             case "/memory"               -> showMemory();
-            default -> println(RED + "❌ 未知命令: " + cmd + "，输入 /help 查看帮助" + RESET);
+            default -> println(RED + "❌ Unknown command: " + cmd + ". Type /help for help" + RESET);
         }
     }
 
@@ -77,23 +73,22 @@ class CommandHandler {
     String  getCurrentSessionId(){ return currentSessionId; }
     Path    getWorkingDirectory() { return workingDirectory; }
 
-    // ── 命令实现 ─────────────────────────────────────────────────────────────────
 
     private void printHelp() {
         println("");
-        println(BOLD + "命令列表:" + RESET);
-        println("  " + YELLOW + "/help" + RESET + "      - 显示帮助信息");
-        println("  " + YELLOW + "/new" + RESET + "       - 创建新会话");
-        println("  " + YELLOW + "/resume" + RESET + "    - 恢复历史会话（交互选择）");
-        println("  " + YELLOW + "/rewind" + RESET + "    - 回退到某条历史消息（撤销对话）");
-        println("  " + YELLOW + "/session" + RESET + "   - 显示当前会话信息");
-        println("  " + YELLOW + "/sessions" + RESET + "  - 列出所有会话");
-        println("  " + YELLOW + "/status" + RESET + "    - 显示上下文状态");
-        println("  " + YELLOW + "/memory" + RESET + "    - 查看记忆系统");
-        println("  " + YELLOW + "/cd <dir>" + RESET + "  - 切换工作目录");
-        println("  " + YELLOW + "/pwd" + RESET + "       - 显示当前目录");
-        println("  " + YELLOW + "/clear" + RESET + "     - 清屏");
-        println("  " + YELLOW + "/exit" + RESET + "      - 退出程序");
+        println(BOLD + "Commands:" + RESET);
+        println("  " + YELLOW + "/help" + RESET + "      - Show help");
+        println("  " + YELLOW + "/new" + RESET + "       - Create a new session");
+        println("  " + YELLOW + "/resume" + RESET + "    - Resume a previous session interactively");
+        println("  " + YELLOW + "/rewind" + RESET + "    - Rewind to a previous message");
+        println("  " + YELLOW + "/session" + RESET + "   - Show current session information");
+        println("  " + YELLOW + "/sessions" + RESET + "  - List all sessions");
+        println("  " + YELLOW + "/status" + RESET + "    - Show context status");
+        println("  " + YELLOW + "/memory" + RESET + "    - Show memory status");
+        println("  " + YELLOW + "/cd <dir>" + RESET + "  - Change working directory");
+        println("  " + YELLOW + "/pwd" + RESET + "       - Show current directory");
+        println("  " + YELLOW + "/clear" + RESET + "     - Clear the screen");
+        println("  " + YELLOW + "/exit" + RESET + "      - Exit");
         println("");
     }
 
@@ -102,10 +97,10 @@ class CommandHandler {
             JsonNode result = client.request("session.create", Map.of()).get();
             if (result != null && result.has("sessionId")) {
                 currentSessionId = result.get("sessionId").asText();
-                println(GREEN + "✓ 已创建新会话 " + CYAN + currentSessionId.substring(0, 8) + RESET);
+                println(GREEN + "✓ Created new session " + CYAN + currentSessionId.substring(0, 8) + RESET);
             }
         } catch (Exception e) {
-            println(RED + "❌ 创建会话失败: " + e.getMessage() + RESET);
+            println(RED + "❌ Failed to create session: " + e.getMessage() + RESET);
         }
     }
 
@@ -113,16 +108,15 @@ class CommandHandler {
         try {
             JsonNode result = client.request("session.list", Map.of()).get();
             if (result == null || !result.has("sessions")) {
-                println(GRAY + "无法获取会话列表" + RESET);
+                println(GRAY + "Unable to fetch session list" + RESET);
                 return;
             }
             JsonNode sessions = result.get("sessions");
             if (sessions.isEmpty()) {
-                println(GRAY + "没有历史会话" + RESET);
+                println(GRAY + "No previous sessions" + RESET);
                 return;
             }
 
-            // 若 args 直接指定了 sessionId 前缀，尝试匹配
             if (!args.isBlank()) {
                 for (JsonNode s : sessions) {
                     String id = s.has("id") ? s.get("id").asText() : "";
@@ -131,20 +125,19 @@ class CommandHandler {
                         return;
                     }
                 }
-                println(RED + "❌ 未找到匹配的会话: " + args + RESET);
+                println(RED + "❌ No matching session found: " + args + RESET);
                 return;
             }
 
-            // 交互式选择：列出会话供用户输入编号
             println("");
-            println(BOLD + "历史会话:" + RESET);
+            println(BOLD + "Previous sessions:" + RESET);
             List<String> ids = new ArrayList<>();
             int idx = 1;
             for (JsonNode s : sessions) {
                 String id   = s.has("id")        ? s.get("id").asText()        : "?";
                 String updAt = s.has("updatedAt") ? s.get("updatedAt").asText() : "";
                 String msgs  = s.has("messageCount") ? s.get("messageCount").asText() : "";
-                String marker = id.equals(currentSessionId) ? YELLOW + " ← 当前" + RESET : "";
+                String marker = id.equals(currentSessionId) ? YELLOW + " ← current" + RESET : "";
                 String info = updAt.isBlank() ? "" : GRAY + "  " + updAt.substring(0, Math.min(16, updAt.length())) + RESET;
                 println("  " + CYAN + "[" + idx + "]" + RESET + " " + id.substring(0, Math.min(8, id.length())) + info + marker);
                 ids.add(id);
@@ -154,7 +147,7 @@ class CommandHandler {
 
             String input;
             try {
-                input = reader.readLine(BOLD + "选择会话编号 (回车取消): " + RESET);
+                input = reader.readLine(BOLD + "Select session number (Enter to cancel): " + RESET);
             } catch (org.jline.reader.UserInterruptException | org.jline.reader.EndOfFileException e) {
                 return;
             }
@@ -164,17 +157,17 @@ class CommandHandler {
             try {
                 chosen = Integer.parseInt(input.trim());
             } catch (NumberFormatException e) {
-                println(RED + "❌ 请输入有效的编号" + RESET);
+                println(RED + "❌ Please enter a valid number" + RESET);
                 return;
             }
             if (chosen < 1 || chosen > ids.size()) {
-                println(RED + "❌ 编号超出范围" + RESET);
+                println(RED + "❌ Number out of range" + RESET);
                 return;
             }
             doSwitch(ids.get(chosen - 1));
 
         } catch (Exception e) {
-            println(RED + "❌ 获取会话列表失败: " + e.getMessage() + RESET);
+            println(RED + "❌ Failed to fetch session list: " + e.getMessage() + RESET);
         }
     }
 
@@ -183,12 +176,12 @@ class CommandHandler {
             JsonNode result = client.request("session.switch", Map.of("sessionId", sessionId)).get();
             if (result != null && result.has("sessionId")) {
                 currentSessionId = result.get("sessionId").asText();
-                println(GREEN + "✓ 已切换到会话 " + CYAN + currentSessionId.substring(0, 8) + RESET);
+                println(GREEN + "✓ Switched to session " + CYAN + currentSessionId.substring(0, 8) + RESET);
             } else {
-                println(RED + "❌ 切换失败" + RESET);
+                println(RED + "❌ Switch failed" + RESET);
             }
         } catch (Exception e) {
-            println(RED + "❌ 切换会话失败: " + e.getMessage() + RESET);
+            println(RED + "❌ Failed to switch session: " + e.getMessage() + RESET);
         }
     }
 
@@ -196,18 +189,17 @@ class CommandHandler {
         try {
             JsonNode result = client.request("session.user-messages", Map.of()).get();
             if (result == null || !result.has("messages")) {
-                println(GRAY + "无法获取消息列表" + RESET);
+                println(GRAY + "Unable to fetch message list" + RESET);
                 return;
             }
             JsonNode messages = result.get("messages");
             if (messages.isEmpty()) {
-                println(GRAY + "当前会话没有消息记录" + RESET);
+                println(GRAY + "Current session has no messages" + RESET);
                 return;
             }
 
-            // 展示用户消息列表
             println("");
-            println(BOLD + "选择回退到哪条消息（该消息之后的内容将被删除）:" + RESET);
+            println(BOLD + "Select the message to rewind to; messages after it will be deleted:" + RESET);
             List<Long> ids = new ArrayList<>();
             int idx = 1;
             for (JsonNode msg : messages) {
@@ -220,12 +212,12 @@ class CommandHandler {
                 ids.add(msgId);
                 idx++;
             }
-            println("  " + GRAY + "[0] 取消" + RESET);
+            println("  " + GRAY + "[0] Cancel" + RESET);
             println("");
 
             String input;
             try {
-                input = reader.readLine(BOLD + "选择编号: " + RESET);
+                input = reader.readLine(BOLD + "Select number: " + RESET);
             } catch (org.jline.reader.UserInterruptException | org.jline.reader.EndOfFileException e) {
                 return;
             }
@@ -235,56 +227,54 @@ class CommandHandler {
             try {
                 chosen = Integer.parseInt(input.trim());
             } catch (NumberFormatException e) {
-                println(RED + "❌ 请输入有效编号" + RESET);
+                println(RED + "❌ Please enter a valid number" + RESET);
                 return;
             }
             if (chosen == 0) return;
             if (chosen < 1 || chosen > ids.size()) {
-                println(RED + "❌ 编号超出范围" + RESET);
+                println(RED + "❌ Number out of range" + RESET);
                 return;
             }
 
             long targetId = ids.get(chosen - 1);
 
-            // 选项菜单
             println("");
-            println(BOLD + "选择回退方式:" + RESET);
-            println("  " + CYAN + "[1]" + RESET + " 回退对话上下文");
-            println("  " + CYAN + "[2]" + RESET + " 取消");
+            println(BOLD + "Select rewind mode:" + RESET);
+            println("  " + CYAN + "[1]" + RESET + " Rewind conversation context");
+            println("  " + CYAN + "[2]" + RESET + " Cancel");
             println("");
 
             String optInput;
             try {
-                optInput = reader.readLine(BOLD + "选择: " + RESET);
+                optInput = reader.readLine(BOLD + "Select: " + RESET);
             } catch (org.jline.reader.UserInterruptException | org.jline.reader.EndOfFileException e) {
                 return;
             }
             if (optInput == null || optInput.isBlank() || "2".equals(optInput.trim())) return;
             if (!"1".equals(optInput.trim())) {
-                println(RED + "❌ 无效选项" + RESET);
+                println(RED + "❌ Invalid option" + RESET);
                 return;
             }
 
-            // 执行回退
             JsonNode rewindResult = client.request("session.rewind", Map.of("messageId", targetId)).get();
             if (rewindResult != null && rewindResult.has("ok") && rewindResult.get("ok").asBoolean()) {
-                println(GREEN + "✓ 已回退到消息 [" + chosen + "]，之后的对话已清除" + RESET);
+                println(GREEN + "✓ Rewound to message [" + chosen + "]; later conversation has been cleared" + RESET);
             } else {
-                println(RED + "❌ 回退失败" + RESET);
+                println(RED + "❌ Rewind failed" + RESET);
             }
 
         } catch (Exception e) {
-            println(RED + "❌ 回退失败: " + e.getMessage() + RESET);
+            println(RED + "❌ Rewind failed: " + e.getMessage() + RESET);
         }
     }
 
     private void showSessionInfo() {
         if (currentSessionId == null) {
-            println(GRAY + "当前没有活动会话" + RESET);
+            println(GRAY + "No active session" + RESET);
         } else {
-            println(BOLD + "当前会话:" + RESET);
+            println(BOLD + "Current session:" + RESET);
             println("  ID: " + currentSessionId);
-            println("  目录: " + workingDirectory);
+            println("  Directory: " + workingDirectory);
         }
     }
 
@@ -294,18 +284,18 @@ class CommandHandler {
             if (result != null && result.has("sessions")) {
                 JsonNode sessions = result.get("sessions");
                 if (sessions.isEmpty()) {
-                    println(GRAY + "没有历史会话" + RESET);
+                    println(GRAY + "No previous sessions" + RESET);
                 } else {
-                    println(BOLD + "历史会话:" + RESET);
+                    println(BOLD + "Previous sessions:" + RESET);
                     for (JsonNode s : sessions) {
                         String id = s.has("id") ? s.get("id").asText() : "?";
-                        String marker = id.equals(currentSessionId) ? " ← 当前" : "";
+                        String marker = id.equals(currentSessionId) ? " ← current" : "";
                         println("  " + CYAN + id.substring(0, Math.min(8, id.length())) + RESET + marker);
                     }
                 }
             }
         } catch (Exception e) {
-            println(RED + "❌ 获取会话列表失败: " + e.getMessage() + RESET);
+            println(RED + "❌ Failed to fetch session list: " + e.getMessage() + RESET);
         }
     }
 
@@ -316,36 +306,36 @@ class CommandHandler {
                 int contextLength = result.has("contextLength") ? result.get("contextLength").asInt() : 0;
                 int thresholdTokens = result.has("thresholdTokens") ? result.get("thresholdTokens").asInt() : 0;
                 double usagePercent = result.has("usagePercent") ? result.get("usagePercent").asDouble() : 0;
-                println(BOLD + "上下文状态:" + RESET);
-                println("  Token 使用: " + contextLength + " / " + thresholdTokens);
-                println("  使用率: " + String.format("%.1f%%", usagePercent));
-                println("  状态: " + (usagePercent > 75.0 ? YELLOW + "需要压缩" : GREEN + "正常") + RESET);
+                println(BOLD + "Context status:" + RESET);
+                println("  Token usage: " + contextLength + " / " + thresholdTokens);
+                println("  Usage: " + String.format("%.1f%%", usagePercent));
+                println("  Status: " + (usagePercent > 75.0 ? YELLOW + "needs compression" : GREEN + "normal") + RESET);
             }
         } catch (Exception e) {
-            println(GRAY + "无法获取状态" + RESET);
+            println(GRAY + "Unable to fetch status" + RESET);
         }
     }
 
     private void showMemory() {
-        println(GRAY + "记忆系统状态:" + RESET);
-        println("  - MEMORY.md: 静态记忆 (memory_read/write/append)");
-        println("  - USER.md: 用户画像 (user_read/write/append)");
-        println("  - session_search: 历史对话检索");
+        println(GRAY + "Memory system status:" + RESET);
+        println("  - MEMORY.md: static memory (memory_read/write/append)");
+        println("  - USER.md: user profile (user_read/write/append)");
+        println("  - session_search: conversation history search");
         println("");
-        println(YELLOW + "提示: 在对话中直接请求 Agent 操作记忆" + RESET);
+        println(YELLOW + "Tip: ask the agent directly in chat to manage memory" + RESET);
     }
 
     private void changeDirectory(String dir) {
-        if (dir.isBlank()) { println(GRAY + "用法: /cd <目录>" + RESET); return; }
+        if (dir.isBlank()) { println(GRAY + "Usage: /cd <directory>" + RESET); return; }
         try {
             JsonNode result = client.request("session.cd", Map.of("path", dir)).get();
             if (result != null && result.has("path")) {
                 workingDirectory = Path.of(result.get("path").asText());
                 completer.setWorkingDirectory(workingDirectory);
-                println(GREEN + "✓ 切换到: " + RESET + workingDirectory);
+                println(GREEN + "✓ Changed to: " + RESET + workingDirectory);
             }
         } catch (Exception e) {
-            println(RED + "❌ 切换目录失败: " + e.getMessage() + RESET);
+            println(RED + "❌ Failed to change directory: " + e.getMessage() + RESET);
         }
     }
 
@@ -353,10 +343,10 @@ class CommandHandler {
         try {
             JsonNode result = client.request("session.pwd", Map.of()).get();
             if (result != null && result.has("path")) {
-                println("工作目录: " + result.get("path").asText());
+                println("Working directory: " + result.get("path").asText());
             }
         } catch (Exception e) {
-            println("工作目录: " + workingDirectory);
+            println("Working directory: " + workingDirectory);
         }
     }
 

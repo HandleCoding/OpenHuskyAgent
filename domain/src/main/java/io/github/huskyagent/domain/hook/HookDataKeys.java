@@ -1,13 +1,9 @@
 package io.github.huskyagent.domain.hook;
 
-/**
- * HookContext.data() 的 key 常量定义。
- */
 public final class HookDataKeys {
 
     private HookDataKeys() {}
 
-    // ── 工具调用 ────────────────────────────────────────────────────────────
     public static final String TOOL_NAME = "toolName";
     public static final String TOOL_ARGS = "toolArgs";
     public static final String TOOL_ARGS_PREVIEW = "argsPreview";
@@ -18,41 +14,33 @@ public final class HookDataKeys {
     /** "started" / "completed" / "failed" */
     public static final String TOOL_STATUS = "toolStatus";
 
-    // ── LLM 调用 ───────────────────────────────────────────────────────────
     public static final String LLM_MESSAGES = "messages";
     public static final String LLM_RESPONSE = "response";
     public static final String LLM_FINISH_REASON = "finishReason";
     public static final String LLM_DURATION_MS = "durationMs";
     public static final String LLM_MODEL_CALL_COUNT = "modelCallCount";
     public static final String LLM_HAS_TOOL_CALLS = "hasToolCalls";
-    /** LLM_CALL_BEFORE 上下文注入 */
     public static final String LLM_CONTEXT_INJECT = "context";
-    /** LLM 本次调用的 token 用量（TokenUsage），可能为 null（provider 不支持时） */
     public static final String LLM_TOKEN_USAGE = "tokenUsage";
 
-    // ── 审批 ───────────────────────────────────────────────────────────────
     public static final String APPROVAL_REASON = "reason";
     /** "approved" / "rejected" */
     public static final String APPROVAL_DECISION = "decision";
     public static final String APPROVAL_ALWAYS = "always";
 
-    // ── 用户交互中断 ─────────────────────────────────────────────────────────
     public static final String CLARIFY_TYPE = "clarifyType";
     public static final String CLARIFY_QUESTION = "question";
     public static final String CLARIFY_ANSWER = "answer";
 
-    // ── 会话 ───────────────────────────────────────────────────────────────
     public static final String SESSION_MESSAGE = "message";
     public static final String SESSION_INPUT_TOKENS = "inputTokens";
     public static final String SESSION_OUTPUT_TOKENS = "outputTokens";
     public static final String SESSION_DURATION_MS = "sessionDurationMs";
 
-    // ── 上下文压缩 ─────────────────────────────────────────────────────────
     public static final String COMPRESS_ORIGINAL_COUNT = "originalMessageCount";
     public static final String COMPRESS_RESULT_COUNT = "compressedMessageCount";
     public static final String COMPRESS_ORIGINAL_TOKENS = "originalTokens";
 
-    // ── 子 Agent ────────────────────────────────────────────────────────────
     public static final String SUBAGENT_ID = "subagentId";
     public static final String SUBAGENT_GOAL = "subagentGoal";
     public static final String SUBAGENT_DEPTH = "subagentDepth";

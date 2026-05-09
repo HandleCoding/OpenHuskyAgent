@@ -19,11 +19,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Brave Search API 后端
- * GET https://api.search.brave.com/res/v1/web/search?q=...&count=...
- * Header: X-Subscription-Token: <apiKey>
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -33,7 +28,6 @@ public class BraveSearchBackend implements SearchBackend {
     private final HttpClientFactory httpClientFactory;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // 不再硬编码 API URL，从 WebConfig 读取
 
     @Override
     public WebSearchResult search(String query, int limit) {

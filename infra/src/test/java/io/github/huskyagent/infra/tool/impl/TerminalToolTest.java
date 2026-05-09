@@ -20,9 +20,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-/**
- * TerminalTool 测试
- */
 class TerminalToolTest {
 
     @TempDir

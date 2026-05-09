@@ -69,13 +69,15 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
     private final MultimodalMessageBuilder multimodalMessageBuilder;
     private final DynamicPromptSnapshotCache dynamicPromptSnapshotCache;
 
-    /** 多 key graph 缓存：按 SceneConfig 摘要缓存，不同 scene/工作目录不共用 */
+    /**
+     * Caches compiled graphs by runtime-policy fingerprint so scenes, principals,
+     * workspaces, and sessions do not accidentally share graph instances.
+     */
     private final ConcurrentHashMap<GraphCacheKey, CompiledGraph<ReActAgentState>> graphCache = new ConcurrentHashMap<>();
 
     /** Per-session start time tracking for observability duration calculation */
     private final ConcurrentHashMap<String, Long> sessionStartTimes = new ConcurrentHashMap<>();
 
-    // ── 公开 API ────────────────────────────────────────────────────────────────
 
     public io.github.huskyagent.infra.tool.todo.TodoStore getTodoStore() {
         return todoStore;
@@ -94,7 +96,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
         final String sid = scope.getSessionId();
         try {
             scope.requireCompleteForExecution();
-            log.info("开始 graph 执行: sessionId={}, scene={}", sid, scope.getRuntimePolicy().getSceneId());
+            log.info("Starting graph execution: sessionId={}, scene={}", sid, scope.getRuntimePolicy().getSceneId());
             initSession(sid);
             CompiledGraph<ReActAgentState> graph = getOrBuildGraph(scope);
             sessionManager.saveUserMessage(sid, multimodalMessageBuilder.persistenceText(input),
@@ -108,12 +110,15 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
                 dynamicPromptSnapshotCache.clearTurn(sid, turnId);
             }
         } catch (Exception e) {
-            log.error("Graph 执行失败: sessionId={}", sid, e);
+            log.error("Graph execution failed: sessionId={}", sid, e);
             return ChatResult.failure(e.getMessage());
         }
     }
 
-    /** 获取当前 graph 最新 checkpoint 的 id，写入 user message 前记录，供 rewind 定位。 */
+    /**
+     * Returns the latest checkpoint id for the current graph state so the next
+     * user message can be anchored to the pre-write checkpoint.
+     */
     private String currentCheckpointId(CompiledGraph<ReActAgentState> graph, String sessionId) {
         try {
             RunnableConfig config = RunnableConfig.builder().threadId(sessionId).build();
@@ -126,7 +131,6 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
         }
     }
 
-    // ── 核心 interrupt/resume 循环 ───────────────────────────────────────────────
 
     @SuppressWarnings("unchecked")
     private ChatResult runWithInterruptLoop(
@@ -157,7 +161,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
             if (!graphResult.isInterruptionMetadata()) break;
 
             if (resumeCount++ > 50) {
-                log.warn("中断恢复循环次数超限，强制退出");
+                log.warn("Interrupt resume loop exceeded the limit; forcing exit");
                 break;
             }
 
@@ -180,9 +184,11 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
         return handleFinalState(sessionId, finalState, hasModelOutput);
     }
 
-    // ── 私有辅助方法 ────────────────────────────────────────────────────────────
 
-    /** 按 RuntimePolicy 摘要获取或构建 compiledGraph（多 key 缓存，所有渠道共享） */
+    /**
+     * Returns a cached compiled graph for the runtime scope, or builds one if no
+     * matching graph exists yet.
+     */
     public CompiledGraph<ReActAgentState> getOrBuildGraph(RuntimeScope scope) throws Exception {
         RuntimePolicy runtimePolicy = scope.getRuntimePolicy();
         GraphCacheKey key = GraphCacheKey.of(
@@ -201,7 +207,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
 
         return graphCache.computeIfAbsent(key, k -> {
             try {
-                log.info("构建 CompiledGraph: sceneId={}, workDir={}, policy={}",
+                log.info("Building CompiledGraph: sceneId={}, workDir={}, policy={}",
                         runtimePolicy.getSceneId(), scope.getWorkingDirectory(), runtimePolicy.fingerprint());
 
                 ChannelIdentity channelIdentity = scope.getChannelIdentity();
@@ -326,12 +332,12 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
         hookRegistry.fireAfter(HookEvent.SESSION_END, sessionId, sessionEndData);
         todoStore.clear(sessionId);
 
-        log.info("对话完成: sessionId={}", sessionId);
+        log.info("Chat completed: sessionId={}", sessionId);
         return ChatResult.success(response, sessionId, streamed, tokenUsage);
     }
 
     private String extractResponse(ReActAgentState state) {
-        if (state == null) return "无法获取响应";
+        if (state == null) return "Unable to get response";
         List<Message> msgs = state.messages();
         if (msgs != null && !msgs.isEmpty()) {
             String latest = msgs.get(msgs.size() - 1).getText();
@@ -343,7 +349,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
                 return previousAssistantText;
             }
         }
-        return "无法获取响应";
+        return "Unable to get response";
     }
 
     private TokenUsage estimateTokenUsage(List<Message> messages, String response) {
@@ -381,7 +387,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
                 .map(Object::toString)
                 .orElse(null);
 
-        log.info("[approval] 工具={}, nodeId={}", toolName, nodeId);
+        log.info("[approval] tool={}, nodeId={}", toolName, nodeId);
 
         return new ApprovalContext(sessionId, toolName, toolArgs, agentText, reason,
                 (approved, always) -> {
@@ -395,7 +401,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
                                 approvalService.getSessionAllowedTools(sessionId));
                         graph.updateState(config, update, nodeId);
                     } catch (Exception e) {
-                        log.error("写入审批状态失败", e);
+                        log.error("Failed to write approval state", e);
                     }
                 });
     }
@@ -429,7 +435,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
                         update.put(ReActAgentState.CLARIFY_RESULT, answer != null ? answer : "");
                         graph.updateState(config, update, nodeId);
                     } catch (Exception e) {
-                        log.error("写入澄清回答失败", e);
+                        log.error("Failed to write clarification answer", e);
                     }
                 });
     }

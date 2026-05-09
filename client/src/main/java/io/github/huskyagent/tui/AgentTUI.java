@@ -20,11 +20,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-/**
- * 终端用户界面（TUI）— 独立进程，通过 WebSocket JSON-RPC 连接服务。
- *
- * <p>启动方式：java -jar husky-agent-client.jar</p>
- */
 @Slf4j
 public class AgentTUI {
 
@@ -62,43 +57,40 @@ public class AgentTUI {
         try {
             tui.start(serverUrl);
         } catch (Exception e) {
-            System.err.println("TUI 启动失败: " + e.getMessage());
+            System.err.println("TUI startup failed: " + e.getMessage());
             e.printStackTrace();
             System.exit(1);
         }
     }
 
-    // ── 启动流程 ────────────────────────────────────────────────────────────
 
     private void start(String serverUrl) throws Exception {
         initTerminal();
         printWelcome();
 
-        // 连接服务
-        println(GRAY + "  连接服务 " + serverUrl + " ..." + RESET);
+        println(GRAY + "  Connecting to service " + serverUrl + " ..." + RESET);
         client = new JsonRpcClient(serverUrl);
         registerEventHandlers();
 
         try {
             client.connect();
         } catch (Exception e) {
-            println(RED + "  连接失败: " + e.getMessage() + RESET);
-            println(GRAY + "  请确认服务已启动: bin/husky serve" + RESET);
+            println(RED + "  Connection failed: " + e.getMessage() + RESET);
+            println(GRAY + "  Make sure the service is running: bin/husky serve" + RESET);
             shutdown();
             return;
         }
 
-        println(GRAY + "  ✓ 已连接" + RESET);
+        println(GRAY + "  ✓ Connected" + RESET);
         println("");
 
-        // 创建初始会话
         try {
             var result = client.request("session.create", Map.of()).get();
             if (result != null && result.has("sessionId")) {
                 currentSessionId = result.get("sessionId").asText();
             }
         } catch (Exception e) {
-            println(RED + "  创建会话失败: " + e.getMessage() + RESET);
+            println(RED + "  Failed to create session: " + e.getMessage() + RESET);
         }
 
         workingDirectory = Path.of(System.getProperty("user.dir"));
@@ -109,7 +101,6 @@ public class AgentTUI {
         shutdown();
     }
 
-    // ── 事件注册 ────────────────────────────────────────────────────────────
 
     private void registerEventHandlers() {
         client.onEvent("message.delta", this::handleMessageDelta);
@@ -128,7 +119,6 @@ public class AgentTUI {
         client.onEvent("error", this::handleError);
     }
 
-    // ── 主循环 ───────────────────────────────────────────────────────────────
 
     private void mainLoop() {
         while (running) {
@@ -146,20 +136,19 @@ public class AgentTUI {
                     handleChat(line);
                 }
             } catch (UserInterruptException e) {
-                println("\n使用 /exit 退出");
+                println("\nUse /exit to quit");
             } catch (EndOfFileException e) {
                 running = false;
             } catch (Exception e) {
-                log.error("主循环异常", e);
-                println(RED + "❌ 发生错误: " + e.getMessage() + RESET);
+                log.error("Main loop failed", e);
+                println(RED + "❌ Error: " + e.getMessage() + RESET);
             }
         }
     }
 
-    // ── 对话处理 ────────────────────────────────────────────────────────────
 
     private void handleChat(String message) {
-        print(GRAY + "⏳ 思考中..." + RESET);
+        print(GRAY + "⏳ Thinking..." + RESET);
         boxRenderer.reset();
 
         try {
@@ -171,21 +160,18 @@ public class AgentTUI {
             future.exceptionally(ex -> {
                 clearThinking();
                 boxRenderer.closeBoxIfOpen();
-                println(RED + "❌ 请求失败: " + ex.getMessage() + RESET);
+                println(RED + "❌ Request failed: " + ex.getMessage() + RESET);
                 return null;
             });
 
-            // 轮询等待：每 100ms 检查交互队列，确保 readLine() 始终在主线程执行
-            // （JLine LineReader 非线程安全，不能从 WebSocket IO 线程调用）
             while (!future.isDone()) {
                 try {
                     future.get(100, TimeUnit.MILLISECONDS);
                 } catch (TimeoutException ignored) {
-                    // 超时后检查交互队列
                 }
+                // Keep approval and clarification prompts on the terminal thread while chat work runs elsewhere.
                 approvalHandler.drainPendingInteraction();
             }
-            // 确保异常被传播
             future.get();
 
             clearThinking();
@@ -194,11 +180,10 @@ public class AgentTUI {
         } catch (ExecutionException e) {
             clearThinking();
             boxRenderer.closeBoxIfOpen();
-            println(RED + "❌ 对话失败: " + e.getCause().getMessage() + RESET);
+            println(RED + "❌ Chat failed: " + e.getCause().getMessage() + RESET);
         }
     }
 
-    // ── 事件处理 ────────────────────────────────────────────────────────────
 
     private void handleMessageDelta(JsonNode payload) {
         String token = payload.has("token") ? payload.get("token").asText() : "";
@@ -220,7 +205,7 @@ public class AgentTUI {
             boxRenderer.closeBox(durationMs);
         } else {
             boxRenderer.closeBoxIfOpen();
-            String error = payload.has("error") ? payload.get("error").asText() : "未知错误";
+            String error = payload.has("error") ? payload.get("error").asText() : "Unknown error";
             println(RED + "❌ " + error + RESET);
         }
     }
@@ -291,7 +276,6 @@ public class AgentTUI {
         println(RED + "❌ " + message + RESET);
     }
 
-    // ── 初始化 ───────────────────────────────────────────────────────────────
 
     private void initTerminal() throws IOException {
         terminal        = TerminalBuilder.builder().system(true).build();
@@ -307,7 +291,6 @@ public class AgentTUI {
         approvalHandler  = new ApprovalHandler(reader, terminal.writer(), terminal::flush);
     }
 
-    // ── 终端工具 ─────────────────────────────────────────────────────────────
 
     private void printWelcome() {
         println("");
@@ -316,13 +299,13 @@ public class AgentTUI {
         println(BOLD + CYAN + "║" + RESET + "        AI Agent Platform · Sub-Agent · Memory · MCP          " + RESET + BOLD + CYAN + "║" + RESET);
         println(BOLD + CYAN + "╚══════════════════════════════════════════════════════════════╝" + RESET);
         println("");
-        println(GRAY + "  工作目录: " + RESET + workingDirectory);
-        println(GRAY + "  输入 " + RESET + YELLOW + "/help" + RESET + GRAY + " 查看命令，" + RESET + YELLOW + "/exit" + RESET + GRAY + " 退出" + RESET);
+        println(GRAY + "  Working directory: " + RESET + workingDirectory);
+        println(GRAY + "  Type " + RESET + YELLOW + "/help" + RESET + GRAY + " for commands, " + RESET + YELLOW + "/exit" + RESET + GRAY + " to exit" + RESET);
         println("");
     }
 
     private String buildPrompt() {
-        String disconnected = client != null && !client.isConnected() ? RED + "[断开] " + RESET : "";
+        String disconnected = client != null && !client.isConnected() ? RED + "[Disconnected] " + RESET : "";
         if (currentSessionId != null) {
             return disconnected + "❯ [" + currentSessionId.substring(0, Math.min(8, currentSessionId.length())) + "] ";
         }
@@ -342,7 +325,7 @@ public class AgentTUI {
             if (reader != null) reader.getHistory().save();
             if (terminal != null) terminal.close();
         } catch (Exception e) {
-            log.debug("关闭时异常", e);
+            log.debug("Exception during shutdown", e);
         }
     }
 }

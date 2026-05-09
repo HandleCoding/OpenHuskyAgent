@@ -24,7 +24,6 @@ class DefaultHookRegistryTest {
         registry = new DefaultHookRegistry(List.of(), NOOP_EVENT_BUS);
     }
 
-    // ── 注册与发现 ─────────────────────────────────────────────────────────────
 
     @Test
     void registerAndDiscover() {

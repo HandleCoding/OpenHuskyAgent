@@ -11,7 +11,7 @@
 
     <artifactId>husky-agent-domain</artifactId>
     <name>husky-agent-domain</name>
-    <description>领域层 - 业务核心逻辑</description>
+    <description>Domain layer - core business logic</description>
 
     <dependencies>
         <dependency>

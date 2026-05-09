@@ -3,9 +3,6 @@ package io.github.huskyagent.infra.tool.registry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-/**
- * 工具执行结果
- */
 public record ToolResult(
 
     boolean success,
@@ -14,10 +11,8 @@ public record ToolResult(
 
     String error,
 
-    /** 失败时是否值得让 LLM 反思重试（默认 true；文件不存在等可重试；权限不足等不可重试） */
     boolean retryable,
 
-    /** 给 LLM 的修复建议（可为 null），会附加到工具响应中帮助 LLM 调整策略 */
     String suggestedFix
 
 ) {
@@ -40,7 +35,6 @@ public record ToolResult(
         return new ToolResult(false, null, error, true, null);
     }
 
-    /** 失败结果，可指定是否可重试及修复建议 */
     public static ToolResult failure(String error, boolean retryable, String suggestedFix) {
         return new ToolResult(false, null, error, retryable, suggestedFix);
     }

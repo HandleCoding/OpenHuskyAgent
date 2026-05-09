@@ -72,7 +72,7 @@ class ContextManagementStrategyTest {
     void defaultStrategyReplacesExistingSummaryInsteadOfStacking() {
         List<Message> messages = List.of(
                 new UserMessage("protected"),
-                new SystemMessage("[对话历史摘要]\nold summary"),
+                new SystemMessage("[Conversation History Summary]\nold summary"),
                 new UserMessage("middle message with enough words to exceed threshold"),
                 new UserMessage("recent"));
         DefaultContextManagementStrategy strategy = new DefaultContextManagementStrategy(
@@ -110,7 +110,7 @@ class ContextManagementStrategyTest {
 
         assertTrue(result.changed());
         assertEquals(1, result.messages().stream().filter(ContextSummaryMessages::isSummary).count());
-        assertEquals("[对话历史摘要]\nnew summary", result.messages().get(1).getText());
+        assertEquals("[Conversation History Summary]\nnew summary", result.messages().get(1).getText());
         assertEquals("protected", result.messages().get(0).getText());
         assertEquals("recent", result.messages().get(result.messages().size() - 1).getText());
     }

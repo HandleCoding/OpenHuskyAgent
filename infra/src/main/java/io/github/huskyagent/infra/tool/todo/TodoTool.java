@@ -16,16 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Todo 任务追踪工具 — 对标 Hermes todo_tool
- *
- * <p>单次调用批量写入任务列表，避免并发多次 create。</p>
- *
- * <ul>
- *   <li>提供 todos 数组 → 写入（merge=false 整体替换，merge=true 按 id 合并）</li>
- *   <li>不提供 todos → 读取当前列表</li>
- * </ul>
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -45,7 +35,6 @@ public class TodoTool implements ToolProvider {
 
         ObjectNode props = schema.putObject("properties");
 
-        // todos 数组
         ObjectNode todosNode = props.putObject("todos");
         todosNode.put("type", "array");
         todosNode.put("description", "Task items to write. Omit to read current list.");
@@ -70,7 +59,6 @@ public class TodoTool implements ToolProvider {
         ArrayNode itemRequired = itemsNode.putArray("required");
         itemRequired.add("id").add("content").add("status");
 
-        // merge 布尔值
         ObjectNode mergeNode = props.putObject("merge");
         mergeNode.put("type", "boolean");
         mergeNode.put("description", "true: update existing items by id, add new ones. false (default): replace entire list.");
@@ -107,11 +95,9 @@ public class TodoTool implements ToolProvider {
         boolean merge = args.containsKey("merge") && Boolean.TRUE.equals(args.get("merge"));
 
         if (todosObj == null) {
-            // 读取模式：不提供 todos 时返回当前列表
             return handleList(sessionId);
         }
 
-        // 写入模式：解析 todos 数组
         List<Map<String, Object>> todoMaps;
         if (todosObj instanceof List<?> list) {
             todoMaps = (List<Map<String, Object>>) (List<?>) list;

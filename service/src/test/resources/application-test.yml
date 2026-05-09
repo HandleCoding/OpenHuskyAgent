@@ -19,7 +19,7 @@ spring:
       idle-timeout: 300000
       max-lifetime: 600000
 
-# Agent 配置
+# Agent configuration
 agent:
   graph:
     max-react-loops: 10
@@ -36,7 +36,7 @@ agent:
   delegation:
     enabled: false
 
-# 工具限制参数
+# Tool limit parameters
 tool:
   limits:
     terminal-max-output-chars: 50000
@@ -48,7 +48,7 @@ tool:
     prune-max-tool-result-length: 1000
     prune-max-arguments-length: 500
 
-# Context 压缩配置
+# Context compression configuration
 context:
   threshold-percent: 0.75
   protect-first-n: 3
@@ -59,24 +59,24 @@ context:
     test-model: 64000
   summary-model: test-model
 
-# Web 工具配置（测试环境不启用）
+# Web tool configuration, disabled in tests
 web:
   backend: none
   brave-api-key: test-key
 
-# MCP 配置（测试环境不启用）
+# MCP configuration, disabled in tests
 mcp:
   enabled: false
 
-# Chatbot 配置（测试环境不启用）
+# Chatbot configuration, disabled in tests
 chatbot:
   enabled: false
 
-# Auth 配置（测试环境不启用）
+# Auth configuration, disabled in tests
 auth:
   enabled: false
 
-# 可观测性配置（测试环境关闭审计，保留 metrics）
+# Observability configuration; audit disabled, metrics enabled
 husky:
   observability:
     audit:
@@ -84,7 +84,7 @@ husky:
     metrics:
       enabled: true
 
-# 日志配置
+# Logging configuration
 logging:
   level:
     io.github.huskyagent: DEBUG

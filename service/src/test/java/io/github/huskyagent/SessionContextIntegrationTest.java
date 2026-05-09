@@ -12,7 +12,7 @@ class SessionContextIntegrationTest extends AbstractIntegrationTest {
     @Test
     @Order(1)
     void testSessionCreation() {
-        System.out.println("\n📋 测试: Session 创建");
+        System.out.println("\n📋 Test: session creation");
 
         String sessionId = sessionManager.createSession();
         assertNotNull(sessionId, "Session ID should not be null");
@@ -20,15 +20,15 @@ class SessionContextIntegrationTest extends AbstractIntegrationTest {
         List<?> messages = sessionManager.loadMessages(sessionId);
         assertTrue(messages.isEmpty(), "New session should have no persisted messages");
 
-        System.out.println("✅ Session 创建成功:");
+        System.out.println("✅ Session created successfully:");
         System.out.println("   Session ID: " + sessionId);
-        System.out.println("   初始消息数: " + messages.size());
+        System.out.println("   Initial message count: " + messages.size());
     }
 
     @Test
     @Order(2)
     void testSessionPersistence() {
-        System.out.println("\n📋 测试: Session 持久化");
+        System.out.println("\n📋 Test: session persistence");
 
         String sessionId = sessionManager.createSession();
 
@@ -40,18 +40,18 @@ class SessionContextIntegrationTest extends AbstractIntegrationTest {
         List<?> messages = sessionManager.loadMessages(sessionId);
         assertTrue(messages.size() >= 4, "Should have at least 4 messages");
 
-        System.out.println("✅ Session 持久化成功:");
+        System.out.println("✅ Session persistence succeeded:");
         System.out.println("   Session ID: " + sessionId);
-        System.out.println("   总消息数: " + messages.size());
+        System.out.println("   Total message count: " + messages.size());
 
         List<?> sessions = sessionManager.listSessions();
-        System.out.println("   所有会话数: " + sessions.size());
+        System.out.println("   All session count: " + sessions.size());
     }
 
     @Test
     @Order(3)
     void testContextManagerInitialization() {
-        System.out.println("\n📋 测试: Context Manager 初始化");
+        System.out.println("\n📋 Test: ContextManager initialization");
 
         assertNotNull(contextManager, "ContextManager should be injected");
 
@@ -59,7 +59,7 @@ class SessionContextIntegrationTest extends AbstractIntegrationTest {
         assertNotNull(status, "Status should not be null");
         assertTrue(status.contextLength() > 0, "Context length should be positive");
 
-        System.out.println("✅ Context Manager 状态:");
+        System.out.println("✅ ContextManager status:");
         System.out.println("   Context Length: " + status.contextLength());
         System.out.println("   Threshold Tokens: " + status.thresholdTokens());
         System.out.println("   Threshold %: " + contextManager.getConfig().getThresholdPercent());
@@ -68,12 +68,12 @@ class SessionContextIntegrationTest extends AbstractIntegrationTest {
     @Test
     @Order(4)
     void testTokenEstimation() {
-        System.out.println("\n📋 测试: Token 估算");
+        System.out.println("\n📋 Test: token estimation");
 
         org.springframework.ai.chat.messages.Message msg1 =
-            new org.springframework.ai.chat.messages.UserMessage("这是一个测试消息");
+            new org.springframework.ai.chat.messages.UserMessage("this is a test message");
         org.springframework.ai.chat.messages.Message msg2 =
-            new org.springframework.ai.chat.messages.AssistantMessage("这是助手响应");
+            new org.springframework.ai.chat.messages.AssistantMessage("this is an assistant response");
 
         List<org.springframework.ai.chat.messages.Message> messages = List.of(msg1, msg2);
 
@@ -83,15 +83,15 @@ class SessionContextIntegrationTest extends AbstractIntegrationTest {
         int expectedMin = (msg1.getText().length() + msg2.getText().length()) / 4;
         assertTrue(tokens >= expectedMin, "Tokens should be at least chars/4");
 
-        System.out.println("✅ Token 估算:");
-        System.out.println("   消息字符数: " + (msg1.getText().length() + msg2.getText().length()));
-        System.out.println("   估算 Tokens: " + tokens);
+        System.out.println("✅ Token estimation:");
+        System.out.println("   Message char count: " + (msg1.getText().length() + msg2.getText().length()));
+        System.out.println("   Estimated tokens: " + tokens);
     }
 
     @Test
     @Order(5)
     void testContextCompressionDecision() {
-        System.out.println("\n📋 测试: Context 压缩决策");
+        System.out.println("\n📋 Test: context compression decision");
 
         String sessionId = sessionManager.createSession();
 
@@ -104,10 +104,10 @@ class SessionContextIntegrationTest extends AbstractIntegrationTest {
         int tokens = contextManager.estimateTokens((List<org.springframework.ai.chat.messages.Message>) messages);
 
         ContextStatus status = contextManager.getStatus();
-        System.out.println("✅ Context 状态检查:");
-        System.out.println("   消息数: " + messages.size());
-        System.out.println("   估算 Tokens: " + tokens);
-        System.out.println("   压缩阈值: " + status.thresholdTokens());
-        System.out.println("   使用率: " + status.usagePercent() + "%");
+        System.out.println("✅ Context status check:");
+        System.out.println("   Message count: " + messages.size());
+        System.out.println("   Estimated tokens: " + tokens);
+        System.out.println("   Compression threshold: " + status.thresholdTokens());
+        System.out.println("   Usage: " + status.usagePercent() + "%");
     }
 }

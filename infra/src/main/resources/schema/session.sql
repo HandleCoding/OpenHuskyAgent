@@ -1,4 +1,4 @@
--- Session 表：存储会话元数据
+-- Session table: stores session metadata.
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     user_id TEXT DEFAULT 'default',
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     total_duration_ms INTEGER DEFAULT 0
 );
 
--- Message 表：存储对话消息
+-- Message table: stores conversation messages.
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS messages (
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
--- ToolCall 表：存储工具调用记录
+-- Tool call table: stores tool invocation records.
 CREATE TABLE IF NOT EXISTS tool_calls (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message_id INTEGER NOT NULL,
@@ -43,8 +43,8 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
 );
 
--- FTS5 全文索引（content-sync 模式，trigger 自动维护）
--- 英文搜索走 FTS5 MATCH + bm25 评分，中文搜索 fallback LIKE
+-- FTS5 full-text index in content-sync mode; triggers keep it updated.
+-- English search uses FTS5 MATCH with bm25 scoring; Chinese search falls back to LIKE.
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
     content,
     content='messages',
@@ -64,7 +64,7 @@ CREATE TRIGGER IF NOT EXISTS messages_fts_update AFTER UPDATE ON messages BEGIN
     INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
 END;
 
--- 索引
+-- Indexes
 CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_messages_session_created ON messages(session_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);

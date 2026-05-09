@@ -23,9 +23,6 @@ import java.util.concurrent.TimeoutException;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.concurrent.CompletableFuture.failedFuture;
 
-/**
- * 审批工具执行节点：动态解析并执行队列头部的工具调用，弹出队列，追加 ToolResponseMessage。
- */
 @Slf4j
 public class ExecuteToolNode {
 
@@ -54,16 +51,16 @@ public class ExecuteToolNode {
         return (state, config) -> {
             List<AssistantMessage.ToolCall> requests = state.toolExecutionRequests();
             if (requests.isEmpty()) {
-                return failedFuture(new IllegalStateException("工具队列为空，无法执行"));
+                return failedFuture(new IllegalStateException("Tool queue is empty; cannot execute"));
             }
             AssistantMessage.ToolCall toolCall = requests.get(0);
             ToolDefinition toolDefinition = toolDefinitionMap.get(toolCall.name());
             if (toolDefinition == null) {
-                return failedFuture(new IllegalStateException("执行节点找不到工具定义: " + toolCall.name()));
+                return failedFuture(new IllegalStateException("Execution node could not find tool definition: " + toolCall.name()));
             }
             String toolName = toolCall.name();
             String argsPreview = GraphUtils.truncate(toolCall.arguments(), 200);
-            log.debug("[{}] 执行工具调用，args={}", toolName, argsPreview);
+            log.debug("[{}] Executing tool call, args={}", toolName, argsPreview);
 
             String sessionId = config != null ? config.threadId().orElse(null) : null;
 
@@ -76,7 +73,7 @@ public class ExecuteToolNode {
             HookResult beforeResult = hookRegistry.fireBefore(
                     HookEvent.TOOL_CALL_BEFORE, sessionId, beforeData);
             if (!beforeResult.allowed()) {
-                log.info("[{}] Hook 阻塞: {}", toolName, beforeResult.blockReason());
+                log.info("[{}] Hook blocked: {}", toolName, beforeResult.blockReason());
                 Map<String, Object> update = new HashMap<>();
                 update.put("messages", GraphUtils.buildToolResponseMessage(
                         toolCall.id(), toolName,
@@ -90,7 +87,7 @@ public class ExecuteToolNode {
                 counts.put(toolName, n);
                 update.put(ReActAgentState.TOOL_RETRY_COUNTS, counts);
                 update.put(ReActAgentState.TOOL_ERROR_HISTORY,
-                        toolName + "(第" + n + "次): " + beforeResult.blockReason());
+                        toolName + "(attempt " + n + "): " + beforeResult.blockReason());
                 return completedFuture(update);
             }
 
@@ -146,9 +143,9 @@ public class ExecuteToolNode {
                             counts.put(toolName, n);
                             update.put(ReActAgentState.TOOL_RETRY_COUNTS, counts);
                             update.put(ReActAgentState.TOOL_ERROR_HISTORY,
-                                    toolName + "(第" + n + "次失败): " + toolResponse);
+                                    toolName + "(attempt " + n + " failed attempt): " + toolResponse);
                             update.put(ReActAgentState.LAST_TOOL_FAILED, true);
-                            log.info("[{}] 工具失败（第 {}/{} 次），回 model 反思", toolName, n, maxToolRetries);
+                            log.info("[{}] Tool failed (attempt {}/{} ); returning to model reflection", toolName, n, maxToolRetries);
                         } else {
                             update.put(ReActAgentState.LAST_TOOL_FAILED, false);
                         }
@@ -161,7 +158,7 @@ public class ExecuteToolNode {
         try {
             return toolDefinition.resolveTimeout(GraphUtils.parseArguments(call.arguments()), defaultTimeout);
         } catch (Exception e) {
-            log.warn("[{}] 工具超时配置解析失败，使用默认 {}s: {}",
+            log.warn("[{}] Failed to parse tool timeout configuration; using default {}s: {}",
                     toolName, defaultTimeout.toSeconds(), e.getMessage());
             return defaultTimeout;
         }

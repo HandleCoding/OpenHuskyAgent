@@ -16,11 +16,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * SSE 渠道适配器 — 统一消费 Hook 事件，推送到 Chatbot SSE 客户端。
- *
- * <p>替代 SseHookRegistry + CompositeHookRegistry + ToolEventCallbacks。</p>
- */
 @Slf4j
 @Component
 public class SseChannelAdapter implements ChannelSubscriber, TokenSubscriber {
@@ -39,7 +34,6 @@ public class SseChannelAdapter implements ChannelSubscriber, TokenSubscriber {
         eventBus.subscribeTokens("chatbot", this);
     }
 
-    // ── Emitter 生命周期 ─────────────────────────────────────────────────────
 
     public void registerEmitter(String sessionId, SseEmitter emitter) {
         activeEmitters.put(sessionId, emitter);

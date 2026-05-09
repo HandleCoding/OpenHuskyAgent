@@ -7,10 +7,6 @@ import org.jline.terminal.Terminal;
 import java.io.PrintWriter;
 import java.util.*;
 
-/**
- * 工具调用列表渲染工具：emoji 映射、参数预览提取、状态行原地更新。
- * （client-side version — 无 AssistantMessage/TodoStore 依赖）
- */
 final class ToolCallDisplay {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -23,28 +19,18 @@ final class ToolCallDisplay {
     private static final String CYAN  = "\033[36m";
     private static final String YELLOW= "\033[33m";
 
-    /** 最近一次 STARTED 行的内容（串行 fallback），用于 COMPLETED 时原地覆盖 */
     private static String lastStartedContent = null;
-    /** 并发工具调用按 toolCallId 记录 started 行，避免完成事件覆盖到别的调用 */
     private static final Map<String, String> startedLinesByCallId = new HashMap<>();
 
-    // ── 子 Agent 并发面板渲染 ─────────────────────────────────────────────────
 
     private static final int SUB_AGENT_WINDOW = 5;
 
-    /**
-     * 单个子 Agent 的状态。
-     */
     private static class SubAgentToolPanel {
         final int taskIndex;
         final String goalPreview;
-        /** 已完成（或失败）的工具总数 */
         int totalFinished = 0;
-        /** 正在执行中的工具名 */
         String runningTool = null;
-        /** 滑动窗口：最多 SUB_AGENT_WINDOW 条已完成行（不含边框前缀） */
         final Deque<String> window = new ArrayDeque<>();
-        /** 是否已结束（completed/failed/timeout） */
         boolean finished = false;
 
         SubAgentToolPanel(int taskIndex, String goalPreview) {
@@ -53,30 +39,19 @@ final class ToolCallDisplay {
         }
     }
 
-    /** taskIndex → SubAgentToolPanel，按插入顺序排列 */
     private static final LinkedHashMap<Integer, SubAgentToolPanel> subAgentPanels
             = new LinkedHashMap<>();
 
-    /**
-     * 所有活跃面板上次共渲染的总行数（用于整体上移）。
-     * 必须在持有 subAgentPanels 锁时读写。
-     */
     private static int subAgentTotalRenderedLines = 0;
 
     /**
-     * 面板活跃期间主 Agent 工具行的缓冲区。
-     * 面板消失后一次性 flush，避免主 Agent 行与面板块交错导致重绘错乱。
-     * 必须在持有 subAgentPanels 锁时读写。
+     * Buffers completed main-agent tool lines while sub-agent panels are on screen
+     * so panel redraws do not interleave with the main tool timeline.
      */
     private static final List<String> pendingMainAgentLines = new ArrayList<>();
 
     private ToolCallDisplay() {}
 
-    /**
-     * 打印工具执行状态行，支持原地更新：
-     * - STARTED：打印 ⏳ 行
-     * - COMPLETED/FAILED：如果上一行是 STARTED 且同工具，原地覆盖；否则新打印一行
-     */
     static void printStatus(String type, String toolName, String argsPreview,
                             long durationMs, String error,
                             PrintWriter out, Runnable flush) {
@@ -103,10 +78,7 @@ final class ToolCallDisplay {
 
         synchronized (subAgentPanels) {
             if (!subAgentPanels.isEmpty()) {
-                // 面板活跃期间：把主 Agent 行缓冲起来，等面板全部结束后统一输出
-                // 不做原地覆盖（STARTED → COMPLETED 合并），直接以完成态形式缓冲
                 if (!isStarted) {
-                    // 只缓冲完成/失败行，跳过 STARTED（完成态已含工具名和时间，足够）
                     String icon = isFailed ? RED + "✗" + RESET : GREEN + "✓" + RESET;
                     String duration = String.format("%.1fs", status.durationMs() / 1000.0);
                     StringBuilder line = new StringBuilder();
@@ -120,21 +92,18 @@ final class ToolCallDisplay {
                     }
                     pendingMainAgentLines.add(line.toString());
                 }
-                // 清除 STARTED 记录（不会被用到）
                 if (status.toolCallId() != null && !status.toolCallId().isBlank()) {
                     startedLinesByCallId.remove(status.toolCallId());
                 }
                 lastStartedContent = null;
-                return; // 暂不输出到终端
+                return;
             }
         }
 
-        // 没有活跃面板，正常打印（允许原地覆盖）
         printStatusLine(isStarted, isFailed, status.toolName(), preview, status.durationMs(), status.error(), status.toolCallId(), out);
         flush.run();
     }
 
-    /** 打印单条主 Agent 工具状态行，支持 STARTED→COMPLETED 原地覆盖。 */
     private static void printStatusLine(boolean isStarted, boolean isFailed,
                                         String toolName, String preview,
                                         long durationMs, String error, String toolCallId,
@@ -184,7 +153,6 @@ final class ToolCallDisplay {
         }
     }
 
-    // ── Todo 列表渲染 ──────────────────────────────────────────────────────────
 
     static void printTodoPanel(JsonNode items, PrintWriter out, Runnable flush) {
         if (items == null || !items.isArray() || items.isEmpty()) {
@@ -244,7 +212,6 @@ final class ToolCallDisplay {
         flush.run();
     }
 
-    // ── 子 Agent 视觉边界 ──────────────────────────────────────────────────────
 
     static void printSubAgentStart(int taskIndex, String goal,
                                    PrintWriter out, Runnable flush) {
@@ -312,20 +279,17 @@ final class ToolCallDisplay {
                 panel.finished = true;
                 panel.runningTool = null;
                 panel.window.clear();
-                panel.window.addLast(icon + " " + BOLD + "完成" + RESET
+                panel.window.addLast(icon + " " + BOLD + "Completed" + RESET
                         + "  " + GRAY + duration + RESET
                         + (summaryPreview.isBlank() ? "" : "  " + GRAY + summaryPreview + RESET));
             }
 
-            // 整体重绘（把最新的 └ 行渲染到位）
             renderAllPanels(out, flush);
 
-            // 所有面板都结束后：清理并冻结，让光标留在块末尾，主 Agent 输出从这里继续
             boolean allDone = subAgentPanels.values().stream().allMatch(p -> p.finished);
             if (allDone) {
                 subAgentPanels.clear();
-                subAgentTotalRenderedLines = 0; // 块已"固化"，不再上移
-                // 输出面板活跃期间缓冲的主 Agent 行
+                subAgentTotalRenderedLines = 0;
                 if (!pendingMainAgentLines.isEmpty()) {
                     for (String line : pendingMainAgentLines) {
                         out.println(line);
@@ -338,7 +302,6 @@ final class ToolCallDisplay {
     }
 
     private static void renderAllPanels(PrintWriter out, Runnable flush) {
-        // 上移到块顶部
         if (subAgentTotalRenderedLines > 0) {
             out.print("\033[" + subAgentTotalRenderedLines + "A");
         }
@@ -349,7 +312,7 @@ final class ToolCallDisplay {
         }
 
         for (String l : allLines) {
-            out.print("\r\033[K"); // 清除当前行残留内容
+            out.print("\r\033[K");
             out.println(l);
         }
         for (int i = allLines.size(); i < subAgentTotalRenderedLines; i++) {
@@ -364,31 +327,26 @@ final class ToolCallDisplay {
     }
 
     private static void buildPanelLines(SubAgentToolPanel panel, List<String> lines) {
-        // ┌ 标题行
-        lines.add(CYAN + "┌ ⚡ 子Agent #" + (panel.taskIndex + 1)
+        lines.add(CYAN + "┌ ⚡ Sub-agent #" + (panel.taskIndex + 1)
                 + BOLD + " " + panel.goalPreview + RESET);
 
         if (panel.finished) {
-            // 结束行：window 里存的就是已格式化的结束内容
             String endContent = panel.window.isEmpty() ? "" : panel.window.peekFirst();
             lines.add(CYAN + "└ " + RESET + endContent);
         } else {
-            // 已完成工具（滑动窗口）
             for (String entry : panel.window) {
                 lines.add(CYAN + "│" + RESET + " " + entry);
             }
-            // 当前正在执行
             if (panel.runningTool != null) {
                 lines.add(CYAN + "│" + RESET + " ⏳ " + BOLD
                         + padRight(panel.runningTool, 16) + RESET);
             }
-            // 计数行
             if (!panel.window.isEmpty() || panel.runningTool != null || panel.totalFinished > 0) {
                 int total = panel.totalFinished + (panel.runningTool != null ? 1 : 0);
                 String hiddenHint = panel.totalFinished > SUB_AGENT_WINDOW
-                        ? GRAY + "  (仅显示最近 " + SUB_AGENT_WINDOW + " 条)" + RESET : "";
-                lines.add(CYAN + "│" + RESET + GRAY + " 已调用 " + RESET
-                        + BOLD + total + RESET + GRAY + " 个工具" + RESET + hiddenHint);
+                        ? GRAY + "  (showing only the latest " + SUB_AGENT_WINDOW + " entries)" + RESET : "";
+                lines.add(CYAN + "│" + RESET + GRAY + " called " + RESET
+                        + BOLD + total + RESET + GRAY + " tools" + RESET + hiddenHint);
             }
         }
     }
@@ -457,6 +415,10 @@ final class ToolCallDisplay {
         return value.length() > max ? value.substring(0, Math.max(0, max - 3)) + "..." : value;
     }
 
+    /**
+     * Collapses multi-line markdown or summaries into a bounded single-line preview
+     * suitable for status panels.
+     */
     private static String singleLinePreview(String value, int max) {
         if (value == null || value.isBlank()) {
             return "";
@@ -489,7 +451,6 @@ final class ToolCallDisplay {
         return s.replaceAll("\033\\[[0-9;]*m", "");
     }
 
-    // ── JSON-RPC 事件便捷方法 ──────────────────────────────────────────────────
 
     static void printToolStarted(Terminal terminal, JsonNode payload) {
         String toolName = payload.has("toolName") ? payload.get("toolName").asText() : "unknown";

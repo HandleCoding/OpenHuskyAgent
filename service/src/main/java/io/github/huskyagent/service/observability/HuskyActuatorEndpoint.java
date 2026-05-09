@@ -15,14 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Husky Actuator Endpoint — 暴露 Agent 运行统计。
- *
- * <p>通过 {@code /actuator/husky} 可访问，返回会话统计、工具使用排行、LLM 调用指标等。</p>
- *
- * <p>注意：Micrometer 指标带 tag（如 toolName, status），不带 tag 查询会返回 0。
- * 这里使用 find() 聚合所有 tag 变体。</p>
- */
 @Component
 @Endpoint(id = "husky")
 public class HuskyActuatorEndpoint {
@@ -48,7 +40,6 @@ public class HuskyActuatorEndpoint {
         sessions.put("avgDurationMs", sessionStats.avgDurationMs());
         result.put("sessions", sessions);
 
-        // Tool usage from Micrometer (聚合所有 tag 变体)
         Map<String, Object> toolMetrics = new LinkedHashMap<>();
         double totalToolCalls = sumCounters("husky.tool.calls");
         double totalToolDurationMs = sumTimerDuration("husky.tool.duration");
@@ -101,7 +92,6 @@ public class HuskyActuatorEndpoint {
         return result;
     }
 
-    /** 聚合所有 tag 变体的 counter 总数 */
     private double sumCounters(String meterName) {
         double total = 0;
         for (Counter c : meterRegistry.find(meterName).counters()) {
@@ -110,7 +100,6 @@ public class HuskyActuatorEndpoint {
         return total;
     }
 
-    /** 聚合所有 tag 变体的 timer 总时长（ms） */
     private double sumTimerDuration(String meterName) {
         double totalMs = 0;
         for (Timer t : meterRegistry.find(meterName).timers()) {

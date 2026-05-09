@@ -1,8 +1,5 @@
 package io.github.huskyagent.infra.tool.todo;
 
-/**
- * Todo 任务条目
- */
 public record TodoItem(
         String id,
         String content,

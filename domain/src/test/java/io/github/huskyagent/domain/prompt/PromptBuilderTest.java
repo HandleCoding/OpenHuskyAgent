@@ -29,9 +29,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.when;
 
-/**
- * Prompt Builder 单元测试
- */
 class PromptBuilderTest {
 
     private ToolRegistry toolRegistry;
@@ -49,7 +46,6 @@ class PromptBuilderTest {
     void testDefaultSectionsRegistered() {
         List<PromptBuilder.SectionInfo> infos = promptBuilder.getSectionInfos();
 
-        // 验证默认注册的 Section
         assertTrue(infos.stream().anyMatch(s -> s.name().equals("identity")));
         assertTrue(infos.stream().anyMatch(s -> s.name().equals("gateway")));
         assertTrue(infos.stream().anyMatch(s -> s.name().equals("memory")));
@@ -67,7 +63,6 @@ class PromptBuilderTest {
     void testSectionPriorityOrder() {
         List<PromptBuilder.SectionInfo> infos = promptBuilder.getSectionInfos();
 
-        // 验证按 priority 排序
         int lastPriority = -1;
         for (PromptBuilder.SectionInfo info : infos) {
             assertTrue(info.priority() >= lastPriority,
@@ -80,9 +75,7 @@ class PromptBuilderTest {
     void testBuildBasicPrompt() {
         String prompt = promptBuilder.build(context("test-session-basic"));
 
-        // 验证基本内容存在
-        assertTrue(prompt.contains("全能的个人智能助手"), "Should contain identity");
-        // RuntimeSection 使用 markdown 格式: **Date**: 和 **Time**:
+        assertTrue(prompt.contains("capable personal AI assistant"), "Should contain identity");
         assertTrue(prompt.contains("Date"), "Should contain date");
         assertTrue(prompt.contains("Time"), "Should contain time");
         assertTrue(prompt.contains("OS"), "Should contain OS info");
@@ -90,9 +83,9 @@ class PromptBuilderTest {
 
     @Test
     void testSceneSystemPromptTemplateIsRendered() {
-        String prompt = promptBuilder.build(context("test-session-scene-template", "根据系统提供的信息，当前时间是：{{currentDateTime}}"));
+        String prompt = promptBuilder.build(context("test-session-scene-template", "According to system information, current time is: {{currentDateTime}}"));
 
-        assertTrue(prompt.contains("根据系统提供的信息，当前时间是："));
+        assertTrue(prompt.contains("According to system information, current time is: "));
         assertFalse(prompt.contains("{{currentDateTime}}"));
     }
 
@@ -101,7 +94,7 @@ class PromptBuilderTest {
         String prompt = promptBuilder.buildSessionStable(context("stable-session")
                 .gatewaySystemPrompt("Stable gateway instructions."));
 
-        assertTrue(prompt.contains("全能的个人智能助手"));
+        assertTrue(prompt.contains("capable personal AI assistant"));
         assertTrue(prompt.contains("Stable gateway instructions."));
         assertFalse(prompt.contains("Runtime Environment"));
         assertFalse(prompt.contains("Available Tools"));
@@ -118,7 +111,7 @@ class PromptBuilderTest {
 
         assertTrue(prompt.contains("Runtime Environment"));
         assertTrue(prompt.contains("Available Tools"));
-        assertFalse(prompt.contains("全能的个人智能助手"));
+        assertFalse(prompt.contains("capable personal AI assistant"));
         assertFalse(prompt.contains("Stable gateway instructions."));
     }
 
@@ -130,7 +123,7 @@ class PromptBuilderTest {
                 .runtimePolicy(runtimePolicyWithRegistryTools())
                 .gatewaySystemPrompt("Stable gateway instructions."));
 
-        assertTrue(prompt.contains("全能的个人智能助手"));
+        assertTrue(prompt.contains("capable personal AI assistant"));
         assertTrue(prompt.contains("Stable gateway instructions."));
         assertTrue(prompt.contains("Runtime Environment"));
         assertTrue(prompt.contains("Available Tools"));
@@ -319,12 +312,9 @@ class PromptBuilderTest {
         assertNotNull(runtimeSection, "RuntimeSection should exist");
         assertTrue(runtimeSection.isDynamic(), "RuntimeSection should be dynamic");
 
-        // 构建两次，时间应该不同（至少秒数）
         String prompt1 = promptBuilder.build(context("session1"));
         String prompt2 = promptBuilder.build(context("session1"));
 
-        // DateTime 是动态的，每次都应该重新生成
-        // 但由于测试执行很快，时间可能相同，所以我们只验证它是 dynamic
         assertTrue(runtimeSection.isDynamic());
     }
 
@@ -335,28 +325,22 @@ class PromptBuilderTest {
         assertNotNull(identitySection, "IdentitySection should exist");
         assertFalse(identitySection.isDynamic(), "IdentitySection should not be dynamic");
 
-        // 构建两次，内容应该相同（缓存）
         String prompt1 = promptBuilder.build(context("session1"));
         String prompt2 = promptBuilder.build(context("session1"));
 
-        // Identity 部分应该相同
-        assertTrue(prompt1.contains("全能的个人智能助手"));
-        assertTrue(prompt2.contains("全能的个人智能助手"));
+        assertTrue(prompt1.contains("capable personal AI assistant"));
+        assertTrue(prompt2.contains("capable personal AI assistant"));
     }
 
     @Test
     void testClearCache() {
-        // 构建一次（会缓存静态 Section）
         String prompt1 = promptBuilder.build(context("session1"));
 
-        // 清除缓存
         promptBuilder.clearCache("session1");
 
-        // 再次构建
         String prompt2 = promptBuilder.build(context("session1"));
 
-        // 验证内容仍然正确（只是重建了）
-        assertTrue(prompt2.contains("全能的个人智能助手"));
+        assertTrue(prompt2.contains("capable personal AI assistant"));
     }
 
     @Test
@@ -364,19 +348,15 @@ class PromptBuilderTest {
         RuntimeSection runtimeSection = promptBuilder.getSection("runtime");
         assertNotNull(runtimeSection, "RuntimeSection should exist");
 
-        // 禁用 Runtime Section
         runtimeSection.setEnabled(false);
         assertFalse(runtimeSection.isEnabled(), "RuntimeSection should be disabled");
 
-        // 清除缓存
         promptBuilder.clearCache();
 
         String prompt = promptBuilder.build(context("test-session-disable"));
 
-        // Runtime 应该不存在
         assertFalse(prompt.contains("Runtime Environment"), "Runtime section content should not appear when disabled");
 
-        // 重新启用
         runtimeSection.setEnabled(true);
         assertTrue(runtimeSection.isEnabled(), "RuntimeSection should be enabled after setting true");
 
@@ -386,7 +366,6 @@ class PromptBuilderTest {
 
     @Test
     void testRegisterCustomSection() {
-        // 注册自定义 Section
         promptBuilder.registerSection(new AbstractPromptSection() {
             @Override
             public String getName() {
@@ -395,7 +374,7 @@ class PromptBuilderTest {
 
             @Override
             public int getPriority() {
-                return 150;  // 在 Identity 和 Gateway 之间
+                return 150;
             }
 
             @Override
@@ -413,13 +392,11 @@ class PromptBuilderTest {
     void testMemorySection() {
         MemorySection memorySection = promptBuilder.getSection("memory");
 
-        // 设置 memory 内容
         memorySection.setMemoryContent("User prefers Python over Java.");
         memorySection.setUserContent("User is a backend developer.");
 
         String prompt = promptBuilder.build(context("test-session"));
 
-        // 验证 memory 标签存在
         assertTrue(prompt.contains("<memory-context>"), "Should contain memory-context tag");
         assertTrue(prompt.contains("Python over Java"), "Should contain memory content");
         assertTrue(prompt.contains("<user-context>"), "Should contain user-context tag");
@@ -474,13 +451,12 @@ class PromptBuilderTest {
         String prompt = promptBuilder.build(context);
 
         assertTrue(prompt.contains("Scene-specific instructions."), "Should contain scene/gateway prompt");
-        assertTrue(prompt.contains("全能的个人智能助手"), "Should still contain identity section");
+        assertTrue(prompt.contains("capable personal AI assistant"), "Should still contain identity section");
         assertTrue(prompt.contains("Runtime Environment"), "Should still contain runtime section");
     }
 
     @Test
     void testSectionRemoval() {
-        // 移除 MCP Section
         promptBuilder.removeSection("mcp");
 
         List<PromptBuilder.SectionInfo> infos = promptBuilder.getSectionInfos();
@@ -488,7 +464,6 @@ class PromptBuilderTest {
         assertFalse(infos.stream().anyMatch(s -> s.name().equals("mcp")),
             "MCP section should be removed");
 
-        // 重新添加
         promptBuilder.registerSection(new McpSection());
         infos = promptBuilder.getSectionInfos();
         assertTrue(infos.stream().anyMatch(s -> s.name().equals("mcp")),

@@ -14,14 +14,14 @@ class SubAgentMessageQueueTest {
     @Test
     void offerAndTake() throws InterruptedException {
         SubAgentMessageQueue queue = new SubAgentMessageQueue();
-        SubAgentMessage.Started msg = new SubAgentMessage.Started("sess-1", "分析项目", 0);
+        SubAgentMessage.Started msg = new SubAgentMessage.Started("sess-1", "analyze project", 0);
 
         queue.offer(msg);
         SubAgentMessage received = queue.take();
 
         assertInstanceOf(SubAgentMessage.Started.class, received);
         assertEquals("sess-1", ((SubAgentMessage.Started) received).sessionId());
-        assertEquals("分析项目", ((SubAgentMessage.Started) received).goal());
+        assertEquals("analyze project", ((SubAgentMessage.Started) received).goal());
     }
 
     @Test

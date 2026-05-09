@@ -10,12 +10,6 @@ import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
 
-/**
- * LLM 调用重试策略。
- *
- * <p>只对可重试错误（限流 429、超时、网络断开）做指数退避重试，
- * 400/401 等非重试性错误直接透传失败。</p>
- */
 @Slf4j
 @Component
 public class LlmRetryPolicy {
@@ -43,11 +37,11 @@ public class LlmRetryPolicy {
         return Retry.backoff(llmConfig.getMaxRetries(), Duration.ofMillis(llmConfig.getInitialBackoffMs()))
                 .filter(this::isRetryable)
                 .doBeforeRetry(signal -> log.warn(
-                        "[LLM] 第 {} 次重试，原因: {}",
+                        "[LLM] retry attempt {}, reason: {}",
                         signal.totalRetries() + 1,
                         signal.failure().getMessage()))
                 .onRetryExhaustedThrow((spec, signal) -> {
-                    log.error("[LLM] 重试 {} 次后仍失败", llmConfig.getMaxRetries());
+                    log.error("[LLM] still failed after {} retries", llmConfig.getMaxRetries());
                     return signal.failure();
                 });
     }

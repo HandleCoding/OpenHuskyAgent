@@ -10,9 +10,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * ToolRegistry 测试
- */
 class ToolRegistryTest {
 
     private ToolRegistry registry;

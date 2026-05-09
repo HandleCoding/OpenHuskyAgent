@@ -4,9 +4,6 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-/**
- * 工具限制参数 — TerminalTool/ReadFileTool/ToolResultPruner 等的限制值统一收口
- */
 @Data
 @Component
 @ConfigurationProperties(prefix = "tool.limits")

@@ -11,10 +11,10 @@
 
     <artifactId>husky-agent-infra</artifactId>
     <name>husky-agent-infra</name>
-    <description>基础设施层 - 外部能力封装</description>
+    <description>Infrastructure layer - external capability adapters</description>
 
     <dependencies>
-        <!-- Spring AI MCP Client（transport + SDK 类型；自动配置通过 yml 禁用） -->
+        <!-- Spring AI MCP Client: transport and SDK types; autoconfiguration is disabled in YAML. -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-mcp-client</artifactId>
@@ -91,7 +91,7 @@
             <version>${playwright.version}</version>
         </dependency>
 
-        <!-- TransmittableThreadLocal: 线程池场景下的上下文传递 -->
+        <!-- TransmittableThreadLocal: context propagation across thread pools. -->
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>transmittable-thread-local</artifactId>

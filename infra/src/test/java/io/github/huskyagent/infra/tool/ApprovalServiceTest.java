@@ -6,9 +6,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * ApprovalService（会话白名单）测试
- */
 class ApprovalServiceTest {
 
     private ApprovalService approvalService;

@@ -12,7 +12,7 @@ class TerminalToolIntegrationTest extends AbstractIntegrationTest {
     @Test
     @Order(1)
     void testTerminalToolExecution() throws Exception {
-        System.out.println("\n📋 测试: terminal 工具执行");
+        System.out.println("\n📋 Test: terminal tool execution");
 
         var result = toolExecutor.execute("terminal", Map.of(
             "command", "echo Hello Terminal"
@@ -28,15 +28,15 @@ class TerminalToolIntegrationTest extends AbstractIntegrationTest {
         assertTrue(stdout.contains("Hello Terminal"), "Output should contain expected text");
         assertEquals(0, exitCode, "Exit code should be 0");
 
-        System.out.println("✅ 终端执行成功:");
-        System.out.println("   输出: " + stdout.trim());
-        System.out.println("   退出码: " + exitCode);
+        System.out.println("✅ Terminal execution succeeded:");
+        System.out.println("   Output: " + stdout.trim());
+        System.out.println("   Exit code: " + exitCode);
     }
 
     @Test
     @Order(2)
     void testTerminalWithWorkingDir() throws Exception {
-        System.out.println("\n📋 测试: terminal 指定工作目录");
+        System.out.println("\n📋 Test: terminal working directory");
 
         var result = toolExecutor.execute("terminal", Map.of(
             "command", "pwd",
@@ -51,15 +51,15 @@ class TerminalToolIntegrationTest extends AbstractIntegrationTest {
 
         assertTrue(stdout.contains(tempDir.toString()), "Output should show workdir");
 
-        System.out.println("✅ 终端指定目录成功:");
-        System.out.println("   工作目录: " + tempDir);
-        System.out.println("   pwd 输出: " + stdout.trim());
+        System.out.println("✅ Terminal working directory succeeded:");
+        System.out.println("   Working directory: " + tempDir);
+        System.out.println("   pwd Output: " + stdout.trim());
     }
 
     @Test
     @Order(3)
     void testTerminalBackgroundExecution() throws Exception {
-        System.out.println("\n📋 测试: terminal 后台执行");
+        System.out.println("\n📋 Test: terminal background execution");
 
         var result = toolExecutor.execute("terminal", Map.of(
             "command", "sleep 2 && echo done",
@@ -74,7 +74,7 @@ class TerminalToolIntegrationTest extends AbstractIntegrationTest {
 
         assertNotNull(taskId, "Should have taskId");
 
-        System.out.println("✅ 后台执行启动成功:");
+        System.out.println("✅ Background execution started:");
         System.out.println("   Task ID: " + taskId);
 
         toolExecutor.cancelTask(taskId);
@@ -83,7 +83,7 @@ class TerminalToolIntegrationTest extends AbstractIntegrationTest {
     @Test
     @Order(4)
     void testDangerousCommandBlocked() {
-        System.out.println("\n📋 测试: 危险命令审批检测");
+        System.out.println("\n📋 Test: dangerous command approval detection");
 
         var terminalDef = toolRegistry.get("terminal");
         assertNotNull(terminalDef, "terminal tool should be registered");
@@ -91,13 +91,13 @@ class TerminalToolIntegrationTest extends AbstractIntegrationTest {
 
         var dangerousRequest = terminalDef.checkApproval(Map.of("command", "rm -rf /tmp/test"));
         assertNotNull(dangerousRequest, "rm command should trigger approval request");
-        System.out.println("✅ 危险命令识别:");
-        System.out.println("   命令: rm -rf /tmp/test");
-        System.out.println("   原因: " + dangerousRequest.reason());
+        System.out.println("✅ dangerous command detected:");
+        System.out.println("   Command: rm -rf /tmp/test");
+        System.out.println("   Reason: " + dangerousRequest.reason());
 
         var safeRequest = terminalDef.checkApproval(Map.of("command", "ls -la"));
         assertNull(safeRequest, "ls command should NOT trigger approval request");
-        System.out.println("✅ 安全命令放行:");
-        System.out.println("   命令: ls -la → 无需审批");
+        System.out.println("✅ safe command allowed:");
+        System.out.println("   Command: ls -la → approval not required");
     }
 }

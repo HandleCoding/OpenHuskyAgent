@@ -11,12 +11,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * 会话记忆工具提供者
- *
- * 将 SessionMemoryProvider 的 Hybrid FTS5+LIKE 搜索能力暴露为 Agent 可调用的工具。
- * 职责分离：记忆逻辑在 SessionMemoryProvider，工具定义在此类。
- */
 @Component
 public class SessionMemoryToolProvider implements ToolProvider {
 

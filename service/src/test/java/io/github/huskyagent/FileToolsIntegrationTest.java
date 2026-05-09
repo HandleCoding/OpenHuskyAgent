@@ -15,7 +15,7 @@ class FileToolsIntegrationTest extends AbstractIntegrationTest {
     @Test
     @Order(1)
     void testWriteFileToolExecution() throws Exception {
-        System.out.println("\n📋 测试: write_file 工具执行");
+        System.out.println("\n📋 Test: write_file tool execution");
 
         String testFile = tempDir.resolve("test-write.txt").toString();
 
@@ -30,15 +30,15 @@ class FileToolsIntegrationTest extends AbstractIntegrationTest {
         String content = Files.readString(Path.of(testFile));
         assertTrue(content.contains("Hello from Tool"), "Content should match");
 
-        System.out.println("✅ 文件写入成功:");
-        System.out.println("   文件: " + testFile);
-        System.out.println("   内容: " + content.substring(0, Math.min(100, content.length())));
+        System.out.println("✅ File write succeeded:");
+        System.out.println("   File: " + testFile);
+        System.out.println("   Content: " + content.substring(0, Math.min(100, content.length())));
     }
 
     @Test
     @Order(2)
     void testReadFileToolExecution() throws Exception {
-        System.out.println("\n📋 测试: read_file 工具执行");
+        System.out.println("\n📋 Test: read_file tool execution");
 
         String testFile = tempDir.resolve("test-read.txt").toString();
         Files.writeString(Path.of(testFile), "Content for reading\nSecond line\nThird line");
@@ -54,14 +54,14 @@ class FileToolsIntegrationTest extends AbstractIntegrationTest {
         assertTrue(content.contains("Content for reading"), "Should contain expected content");
         assertTrue(content.contains("2\t"), "Should have line numbers");
 
-        System.out.println("✅ 文件读取成功:");
-        System.out.println("   总行数: " + response.get("totalLines"));
+        System.out.println("✅ File read succeeded:");
+        System.out.println("   Total lines: " + response.get("totalLines"));
     }
 
     @Test
     @Order(3)
     void testReadFileWithPagination() throws Exception {
-        System.out.println("\n📋 测试: read_file 分页读取");
+        System.out.println("\n📋 Test: read_file paged read");
 
         String testFile = tempDir.resolve("multi-line.txt").toString();
         StringBuilder sb = new StringBuilder();
@@ -85,19 +85,18 @@ class FileToolsIntegrationTest extends AbstractIntegrationTest {
         assertTrue(content.contains("50"), "Should start at line 50");
         assertTrue(content.contains("59"), "Should end around line 59");
 
-        System.out.println("✅ 分页读取成功:");
-        System.out.println("   起始行: 50, 读取 10 行");
+        System.out.println("✅ Paged read succeeded:");
+        System.out.println("   Start line: 50, read 10 lines");
     }
 
     @Test
     @Order(4)
     void testEditFileToolExecution() throws Exception {
-        System.out.println("\n📋 测试: edit_file 工具执行");
+        System.out.println("\n📋 Test: edit_file tool execution");
 
         String testFile = tempDir.resolve("test-edit.txt").toString();
         Files.writeString(Path.of(testFile), "original content here");
 
-        // edit_file 要求先 read_file，注入同一 sessionId
         String sessionId = "test-session";
         toolExecutor.execute("read_file", Map.of(
             "path", testFile,
@@ -116,15 +115,15 @@ class FileToolsIntegrationTest extends AbstractIntegrationTest {
         String content = Files.readString(Path.of(testFile));
         assertEquals("modified content here", content);
 
-        System.out.println("✅ 文件编辑成功:");
-        System.out.println("   原内容: original content here");
-        System.out.println("   新内容: modified content here");
+        System.out.println("✅ File edit succeeded:");
+        System.out.println("   Original content: original content here");
+        System.out.println("   New content: modified content here");
     }
 
     @Test
     @Order(5)
     void testApplyPatchToolExecution() throws Exception {
-        System.out.println("\n📋 测试: apply_patch 工具执行");
+        System.out.println("\n📋 Test: apply_patch tool execution");
 
         String testFile = tempDir.resolve("test-apply-patch.txt").toString();
         Files.writeString(Path.of(testFile), "one\ntwo\nfive\n");
@@ -150,7 +149,7 @@ class FileToolsIntegrationTest extends AbstractIntegrationTest {
     @Test
     @Order(6)
     void testSearchFilesToolExecution() throws Exception {
-        System.out.println("\n📋 测试: search_files 工具执行");
+        System.out.println("\n📋 Test: search_files tool execution");
 
         Files.writeString(tempDir.resolve("file1.txt"), "hello world");
         Files.writeString(tempDir.resolve("file2.txt"), "hello there");
@@ -172,15 +171,15 @@ class FileToolsIntegrationTest extends AbstractIntegrationTest {
         assertEquals(2, response.get("returned"));
         assertEquals(false, response.get("truncated"));
 
-        System.out.println("✅ 文件搜索成功:");
-        System.out.println("   匹配数: " + matches.size());
+        System.out.println("✅ File search succeeded:");
+        System.out.println("   Match count: " + matches.size());
         matches.forEach(m -> System.out.println("   - " + m.get("file") + " line " + m.get("line")));
     }
 
     @Test
     @Order(7)
     void testListFilesToolExecution() throws Exception {
-        System.out.println("\n📋 测试: list_files 工具执行");
+        System.out.println("\n📋 Test: list_files tool execution");
 
         var result = toolExecutor.execute("list_files", Map.of(
             "path", tempDir.toString(),
@@ -198,15 +197,15 @@ class FileToolsIntegrationTest extends AbstractIntegrationTest {
         assertEquals(100, response.get("limit"));
         assertTrue(response.containsKey("truncated"));
 
-        System.out.println("✅ 文件列表成功:");
-        System.out.println("   文件数: " + files.size());
+        System.out.println("✅ File list succeeded:");
+        System.out.println("   File count: " + files.size());
         files.forEach(f -> System.out.println("   - " + f.get("name")));
     }
 
     @Test
     @Order(8)
     void testBinaryFileBlocked() throws Exception {
-        System.out.println("\n📋 测试: 二进制文件拦截");
+        System.out.println("\n📋 Test: binary file blocked");
 
         Path binaryFile = tempDir.resolve("test.exe");
         Files.write(binaryFile, new byte[]{0x4D, 0x5A}); // MZ header
@@ -218,15 +217,15 @@ class FileToolsIntegrationTest extends AbstractIntegrationTest {
         assertFalse(result.success(), "Binary file should be blocked");
         assertTrue(result.error().contains("binary"), "Error should mention binary");
 
-        System.out.println("✅ 二进制文件拦截:");
-        System.out.println("   文件: test.exe");
-        System.out.println("   结果: " + result.error());
+        System.out.println("✅ Binary file blocked:");
+        System.out.println("   File: test.exe");
+        System.out.println("   Result: " + result.error());
     }
 
     @Test
     @Order(9)
     void testMultiStepWorkflow() throws Exception {
-        System.out.println("\n📋 测试: 多步骤工作流");
+        System.out.println("\n📋 Test: multi-step workflow");
 
         String workDir = tempDir.resolve("workflow").toString();
         Files.createDirectories(Path.of(workDir));
@@ -266,7 +265,7 @@ class FileToolsIntegrationTest extends AbstractIntegrationTest {
         String finalContent = Files.readString(Path.of(workDir + "/config.txt"));
         assertTrue(finalContent.contains("version=2.0"), "Version should be updated");
 
-        System.out.println("✅ 多步骤工作流完成:");
-        System.out.println("   最终内容: " + finalContent);
+        System.out.println("✅ Multi-step workflow completed:");
+        System.out.println("   Final content: " + finalContent);
     }
 }

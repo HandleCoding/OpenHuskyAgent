@@ -5,9 +5,6 @@ import io.github.huskyagent.domain.prompt.PromptContext;
 
 import java.util.function.Function;
 
-/**
- * MCP Section — 注入 MCP (Model Context Protocol) 工具描述到系统提示
- */
 public class McpSection extends AbstractPromptSection {
 
     private String mcpToolsDescription;
@@ -24,7 +21,7 @@ public class McpSection extends AbstractPromptSection {
 
     @Override
     public int getPriority() {
-        return 550;  // 在 Tools 之后
+        return 550;
     }
 
     @Override
@@ -47,9 +44,6 @@ public class McpSection extends AbstractPromptSection {
         return sb.toString();
     }
 
-    /**
-     * 设置 MCP 工具描述。非空时自动启用此 section。
-     */
     public void setMcpToolsDescription(String description) {
         this.mcpToolsDescription = description;
         setEnabled(description != null && !description.isBlank());

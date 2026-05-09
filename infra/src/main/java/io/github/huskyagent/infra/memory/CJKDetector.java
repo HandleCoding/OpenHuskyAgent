@@ -1,11 +1,5 @@
 package io.github.huskyagent.infra.memory;
 
-/**
- * CJK (Chinese, Japanese, Korean) 字符检测工具
- *
- * 用于判断查询字符串是否包含 CJK 字符，决定搜索路径：
- * FTS5 MATCH → 空结果 + CJK → LIKE fallback
- */
 public final class CJKDetector {
 
     private CJKDetector() {}

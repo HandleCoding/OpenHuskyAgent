@@ -9,10 +9,6 @@ import org.springframework.ai.chat.messages.Message;
 
 import java.util.Optional;
 
-/**
- * shouldContinue 边：model 节点后判断是否继续 ReAct loop。
- * 最后消息有 tool_calls 且未超限 → continue，否则 → end。
- */
 @Slf4j
 public class ShouldContinueEdge {
 
@@ -30,13 +26,13 @@ public class ShouldContinueEdge {
             int loopCount = state.modelCallCount();
             Optional<Message> lastOpt = state.lastMessage();
             if (lastOpt.isEmpty()) {
-                log.warn("[shouldContinue] 无消息 → end");
+                log.warn("[shouldContinue] No messages -> end");
                 return new Command(LABEL_END);
             }
             Message last = lastOpt.get();
             if (last instanceof AssistantMessage am && am.hasToolCalls()) {
                 if (loopCount >= maxReactLoops) {
-                    log.warn("[shouldContinue] ReAct loop 已达上限 {}/{}，强制结束", loopCount, maxReactLoops);
+                    log.warn("[shouldContinue] ReAct loop reached limit {}/{}; forcing end", loopCount, maxReactLoops);
                     return new Command(LABEL_END);
                 }
                 log.info("[shouldContinue] loop={}/{}, hasToolCalls=true, toolCount={} → continue",

@@ -36,7 +36,7 @@ class ApprovalNodeTest {
         assertTrue(interruption.isPresent());
         assertEquals("terminal", interruption.get().metadata(ApprovalInfo.TOOL_NAME_KEY).orElse(null));
         assertEquals("{\"command\":\"rm -rf /tmp/a\"}", interruption.get().metadata(ApprovalInfo.TOOL_ARGS_KEY).orElse(null));
-        assertEquals("危险命令", interruption.get().metadata(ApprovalInfo.TOOL_REASON_KEY).orElse(null));
+        assertEquals("dangerous command", interruption.get().metadata(ApprovalInfo.TOOL_REASON_KEY).orElse(null));
     }
 
     @Test
@@ -87,7 +87,7 @@ class ApprovalNodeTest {
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> node.interrupt(AgentGraph.NODE_APPROVAL, state, null));
 
-        assertTrue(error.getMessage().contains("工具队列为空"));
+        assertTrue(error.getMessage().contains("empty tool queue"));
     }
 
     @Test
@@ -100,7 +100,7 @@ class ApprovalNodeTest {
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> node.interrupt(AgentGraph.NODE_APPROVAL, state, null));
 
-        assertTrue(error.getMessage().contains("找不到工具定义"));
+        assertTrue(error.getMessage().contains("could not find tool definition"));
     }
 
     private ToolDefinition approvalTool(String name) {
@@ -108,7 +108,7 @@ class ApprovalNodeTest {
                 name, "Terminal", Toolset.TERMINAL,
                 JsonNodeFactory.instance.objectNode(),
                 args -> null,
-                args -> new ApprovalRequest("req-1", name, args, "危险命令", "session-1"));
+                args -> new ApprovalRequest("req-1", name, args, "dangerous command", "session-1"));
     }
 
     private AssistantMessage.ToolCall toolCall(String name, String args) {

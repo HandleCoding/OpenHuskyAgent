@@ -13,10 +13,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * SessionRepository — checkpoint_id 关联写入、读取及 rewind 截断测试。
- * 每个测试用独立的 SQLite 文件 DB（@TempDir），无需 Spring 容器。
- */
 class SessionRepositoryRewindTest {
 
     @TempDir
@@ -42,7 +38,6 @@ class SessionRepositoryRewindTest {
         dataSource.close();
     }
 
-    // ── checkpoint_id 写入 / 读取 ──────────────────────────────────────────────
 
     @Test
     void saveMessage_withCheckpointId_persistsAndReads() {
@@ -80,7 +75,6 @@ class SessionRepositoryRewindTest {
         assertNull(messages.get(3).getCheckpointId());
     }
 
-    // ── findUserMessagesBySessionId 包含 checkpoint_id ────────────────────────
 
     @Test
     void findUserMessages_returnsCheckpointId() {
@@ -94,7 +88,6 @@ class SessionRepositoryRewindTest {
         assertEquals("cp-bbb", users.get(1).getCheckpointId());
     }
 
-    // ── deleteMessagesAfter 截断逻辑 ──────────────────────────────────────────
 
     @Test
     void deleteMessagesAfter_removesCorrectMessages() {
@@ -103,7 +96,6 @@ class SessionRepositoryRewindTest {
         Long id3 = repo.saveMessage("s1", "user", "msg2", "cp-2");
         repo.saveMessage("s1", "assistant", "reply2", null);
 
-        // 截断 id3 之前（id >= id3 的删除）
         repo.deleteMessagesAfter("s1", id3 - 1);
 
         List<MessageEntity> remaining = repo.findMessagesBySessionId("s1");
@@ -138,11 +130,9 @@ class SessionRepositoryRewindTest {
         assertEquals("active", activeSession.getStatus());
     }
 
-    // ── migration 幂等性：重复初始化不报错 ────────────────────────────────────
 
     @Test
     void constructorTwice_migrationsAreIdempotent() {
-        // 用同一 DataSource 再构造一次，migration 应幂等不抛异常
         assertDoesNotThrow(() -> new SessionRepository(dataSource));
     }
 }

@@ -12,11 +12,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
-/**
- * Prompt 组装上下文
- *
- * 包含构建系统提示所需的所有信息
- */
 public class PromptContext {
 
     private final String sessionId;
@@ -24,7 +19,6 @@ public class PromptContext {
     private RuntimePolicy runtimePolicy;
     private SessionScope sessionScope;
 
-    // 可选的额外信息
     private String gatewaySystemPrompt;
     private String memoryContent;
     private String userContent;

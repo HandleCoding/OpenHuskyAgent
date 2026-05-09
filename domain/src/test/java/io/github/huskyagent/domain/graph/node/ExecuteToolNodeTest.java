@@ -58,7 +58,7 @@ class ExecuteToolNodeTest {
 
         Exception error = assertThrows(Exception.class, () -> node.build().apply(state, null).get());
 
-        assertTrue(rootMessage(error).contains("找不到工具定义"));
+        assertTrue(rootMessage(error).contains("could not find tool definition"));
     }
 
     @Test

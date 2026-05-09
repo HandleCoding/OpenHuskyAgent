@@ -42,7 +42,6 @@
                 <scope>import</scope>
             </dependency>
 
-            <!-- 内部模块 -->
             <dependency>
                 <groupId>io.github.huskyagent</groupId>
                 <artifactId>husky-agent-infra</artifactId>
@@ -64,7 +63,6 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- 外部依赖 -->
             <dependency>
                 <groupId>org.java-websocket</groupId>
                 <artifactId>Java-WebSocket</artifactId>

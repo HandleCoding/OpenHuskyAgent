@@ -20,10 +20,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Web 抓取工具
- * 抓取 URL 内容并转换为文本，支持 LLM 摘要化大内容
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -84,24 +80,20 @@ public class WebFetchTool implements ToolProvider {
             return ToolResult.failure("url is required", false, "Provide a URL to fetch");
         }
 
-        // 自动添加 https://
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             url = "https://" + url;
         }
 
-        // 安全检查: 嵌入的秘密信息
         if (UrlSafety.containsSecret(url)) {
             return ToolResult.failure("Blocked: URL contains what appears to be an API key or token",
                 false, "Remove embedded secrets from the URL");
         }
 
-        // 安全检查: SSRF 防护
         if (!UrlSafety.isSafeUrl(url)) {
             return ToolResult.failure("Blocked: URL targets a private or internal network address",
                 false, "Use a public URL instead");
         }
 
-        // 域名黑名单检查
         String host = extractHost(url);
         for (String blocked : config.getBlockedDomains()) {
             if (host.equals(blocked) || host.endsWith("." + blocked)) {

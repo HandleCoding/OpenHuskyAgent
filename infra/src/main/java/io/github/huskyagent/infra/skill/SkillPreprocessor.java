@@ -5,13 +5,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.regex.Pattern;
 
-/**
- * Skill 预处理 — 替换 SKILL.md 内容中的模板变量。
- *
- * 支持的变量：
- * - ${HUSKY_SKILL_DIR} → skill 目录的绝对路径
- * - ${CURRENT_DATE} → 当前日期 yyyy-MM-dd
- */
 public class SkillPreprocessor {
 
     private static final Pattern TEMPLATE_VAR_PATTERN =

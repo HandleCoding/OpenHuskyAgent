@@ -1,8 +1,5 @@
 package io.github.huskyagent.domain.context;
 
-/**
- * 摘要配置
- */
 public record SummaryConfig(
     int maxTokens,
     String focusTopic

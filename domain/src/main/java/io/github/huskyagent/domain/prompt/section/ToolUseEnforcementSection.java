@@ -5,19 +5,6 @@ import io.github.huskyagent.domain.prompt.PromptContext;
 
 import java.util.List;
 
-/**
- * 工具使用强制指导 Section
- *
- * <p>对标 Hermes TOOL_USE_ENFORCEMENT_GUIDANCE + 模型级别指导。
- * 防止 LLM 只描述意图而不实际调用工具。</p>
- *
- * <p>注入逻辑：</p>
- * <ul>
- *   <li>通用强制指导 — 所有触发 enforcement 的模型</li>
- *   <li>Google 模型指导 (Gemini/Gemma) — 绝对路径、并行调用、先验验证</li>
- *   <li>OpenAI 模型指导 (GPT/Codex) — 工具持久性、强制工具使用、验证闭环</li>
- * </ul>
- */
 public class ToolUseEnforcementSection extends AbstractPromptSection {
 
     private static final List<String> DEFAULT_ENFORCEMENT_MODELS = List.of(
@@ -106,7 +93,6 @@ public class ToolUseEnforcementSection extends AbstractPromptSection {
         return DEFAULT_ENFORCEMENT_MODELS.stream().anyMatch(modelLower::contains);
     }
 
-    // ── Prompt 内容常量 ──────────────────────────────────────────────────────
 
     private static final String TOOL_USE_ENFORCEMENT_GUIDANCE = """
             Use tools when the user has asked you to act, verify mutable state, inspect files, \

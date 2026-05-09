@@ -6,11 +6,6 @@ import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 
 import java.util.List;
 
-/**
- * Tool Section
- *
- * 动态生成可用工具列表说明
- */
 public class ToolSection extends AbstractPromptSection {
 
     @Override
@@ -20,12 +15,12 @@ public class ToolSection extends AbstractPromptSection {
 
     @Override
     public int getPriority() {
-        return 500;  // 在 Memory 和 Skills 之后
+        return 500;
     }
 
     @Override
     public boolean isDynamic() {
-        return true;  // 工具列表可能在启动后变化（如 memory 工具延迟注册）
+        return true;
     }
 
     @Override
@@ -39,7 +34,6 @@ public class ToolSection extends AbstractPromptSection {
         sb.append("## Available Tools\n\n");
         sb.append("You have access to the following tools:\n\n");
 
-        // 按工具集分组
         tools.stream()
             .collect(java.util.stream.Collectors.groupingBy(ToolDefinition::toolset))
             .forEach((toolset, toolList) -> {
