@@ -206,6 +206,54 @@ class RuntimeExecutionServiceTest {
         assertNull(sessionResolver.lastRequestedSessionId);
     }
 
+    @Test
+    void defaultPersistenceModeIsStateful() {
+        FakeSessionResolver sessionResolver = new FakeSessionResolver(completeScope());
+        FakeAgentApp agentApp = new FakeAgentApp();
+        RuntimeExecutionService service = new RuntimeExecutionService(
+                sessionResolver,
+                agentApp,
+                inbound -> Optional.empty(),
+                new FakeCommandService(null),
+                new FakeRouteRegistry(),
+                new FakeSceneRouter(),
+                new ScopedRuntimeContext()
+        );
+
+        RuntimeExecutionResult result = service.execute(RuntimeExecutionRequest.builder()
+                .inbound(inbound("hello"))
+                .build());
+
+        assertTrue(result.chatResult().success());
+        assertEquals(RuntimeExecutionRequest.PersistenceMode.STATEFUL, agentApp.persistenceMode);
+    }
+
+    @Test
+    void explicitStatelessPersistenceModeCreatesEphemeralScope() {
+        FakeSessionResolver sessionResolver = new FakeSessionResolver(completeScope());
+        FakeAgentApp agentApp = new FakeAgentApp();
+        RuntimeExecutionService service = new RuntimeExecutionService(
+                sessionResolver,
+                agentApp,
+                inbound -> Optional.empty(),
+                new FakeCommandService(null),
+                new FakeRouteRegistry(),
+                new FakeSceneRouter(),
+                new ScopedRuntimeContext()
+        );
+
+        RuntimeExecutionResult result = service.execute(RuntimeExecutionRequest.builder()
+                .inbound(inbound("hello"))
+                .persistenceMode(RuntimeExecutionRequest.PersistenceMode.STATELESS)
+                .build());
+
+        assertTrue(result.chatResult().success());
+        assertEquals(RuntimeExecutionRequest.PersistenceMode.STATELESS, agentApp.persistenceMode);
+        assertEquals(1, sessionResolver.ephemeralCalls);
+        assertEquals(0, sessionResolver.createCalls);
+        assertEquals(1, sessionResolver.releaseCalls);
+    }
+
     private static RuntimeScope completeScope() {
         SceneConfig scene = new SceneConfig();
         scene.setSceneId("assistant");
@@ -255,8 +303,17 @@ class RuntimeExecutionServiceTest {
     }
 
     private static class FakeAgentApp implements AgentRuntimeExecutor {
+        RuntimeExecutionRequest.PersistenceMode persistenceMode;
+
         @Override
         public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks) {
+            return ChatResult.success("ok", scope.getSessionId(), false);
+        }
+
+        @Override
+        public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks,
+                                  RuntimeExecutionRequest.PersistenceMode persistenceMode) {
+            this.persistenceMode = persistenceMode;
             return ChatResult.success("ok", scope.getSessionId(), false);
         }
     }
@@ -265,6 +322,8 @@ class RuntimeExecutionServiceTest {
         private final RuntimeScope scope;
         int resolveCalls;
         int createCalls;
+        int ephemeralCalls;
+        int releaseCalls;
         String lastRequestedSessionId;
         boolean failWithSecurityException;
 
@@ -287,6 +346,17 @@ class RuntimeExecutionServiceTest {
         public RuntimeScope createSession(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
             createCalls++;
             return scope;
+        }
+
+        @Override
+        public RuntimeScope createEphemeralScope(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
+            ephemeralCalls++;
+            return scope;
+        }
+
+        @Override
+        public void releaseEphemeralScope(RuntimeScope scope) {
+            releaseCalls++;
         }
     }
 

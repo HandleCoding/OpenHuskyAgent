@@ -274,6 +274,13 @@ channels:
         send-typing-status: ${SLACK_ASSISTANT_SEND_TYPING_STATUS:false}
         reply-broadcast: ${SLACK_ASSISTANT_REPLY_BROADCAST:false}
 
+# OpenAI-compatible Agent-as-a-Model API; runtime behavior is configured by scenes.
+openai-compatible:
+  enabled: ${OPENAI_COMPATIBLE_ENABLED:false}
+  platform-account-id: openai-compatible
+  default-user-id: openai-client
+  stream-timeout-ms: 300000
+
 # Chatbot endpoint switch; runtime behavior is configured by scenes.configs.chatbot.
 chatbot:
   enabled: true

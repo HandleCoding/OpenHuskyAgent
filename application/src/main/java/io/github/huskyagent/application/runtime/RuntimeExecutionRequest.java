@@ -17,9 +17,18 @@ public class RuntimeExecutionRequest {
     Path workingDirectoryOverride;
     boolean forceNewSession;
     RuntimeCallbacks callbacks;
+    PersistenceMode persistenceMode;
 
     public RuntimeCallbacks callbacksOrNoop() {
         return callbacks != null ? callbacks : RuntimeCallbacks.NOOP;
+    }
+
+    public PersistenceMode persistenceModeOrDefault() {
+        return persistenceMode != null ? persistenceMode : PersistenceMode.STATEFUL;
+    }
+
+    public boolean isStateless() {
+        return persistenceModeOrDefault() == PersistenceMode.STATELESS;
     }
 
     public String requestedSessionIdOrInbound() {
@@ -34,5 +43,10 @@ public class RuntimeExecutionRequest {
             return message;
         }
         return inbound != null ? inbound.getText() : null;
+    }
+
+    public enum PersistenceMode {
+        STATEFUL,
+        STATELESS
     }
 }

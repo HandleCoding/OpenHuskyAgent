@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -63,13 +64,8 @@ public class SessionResolver {
             updateIsolationMetadata(sessionId, requestedScope, sessionKey);
         }
 
-        Path workingDirectory = resolveWorkingDirectory(runtimePolicy);
-        Path dockerWorkspace = resolveDockerWorkspaceForFiles(runtimePolicy, sessionId);
-        if (dockerWorkspace != null) {
-            workingDirectory = dockerWorkspace;
-        }
-
-        RuntimeScope scope = buildRuntimeScope(sessionId, principal, channelIdentity, runtimePolicy, workingDirectory);
+        RuntimeScope scope = buildRuntimeScope(sessionId, principal, channelIdentity, runtimePolicy,
+                resolveEffectiveWorkingDirectory(runtimePolicy, sessionId));
         registerBackend(scope);
         return scope;
     }
@@ -83,15 +79,26 @@ public class SessionResolver {
         updateIsolationMetadata(sessionId, requestedScope, sessionKey);
         sessionRepository.deactivateOtherSessionsForKey(sessionKey, sessionId);
 
-        Path workingDirectory = resolveWorkingDirectory(runtimePolicy);
-        Path dockerWorkspace = resolveDockerWorkspaceForFiles(runtimePolicy, sessionId);
-        if (dockerWorkspace != null) {
-            workingDirectory = dockerWorkspace;
-        }
-
-        RuntimeScope scope = buildRuntimeScope(sessionId, principal, channelIdentity, runtimePolicy, workingDirectory);
+        RuntimeScope scope = buildRuntimeScope(sessionId, principal, channelIdentity, runtimePolicy,
+                resolveEffectiveWorkingDirectory(runtimePolicy, sessionId));
         registerBackend(scope);
         return scope;
+    }
+
+    public RuntimeScope createEphemeralScope(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
+        SceneConfig sceneConfig = sceneResolver.resolve(sceneId);
+        RuntimePolicy runtimePolicy = runtimePolicyResolver.resolve(sceneConfig, toolRegistry.getAllEnabled());
+        String sessionId = UUID.randomUUID().toString();
+        RuntimeScope scope = buildRuntimeScope(sessionId, principal, channelIdentity, runtimePolicy,
+                resolveEffectiveWorkingDirectory(runtimePolicy, sessionId));
+        registerBackend(scope);
+        return scope;
+    }
+
+    public void releaseEphemeralScope(RuntimeScope scope) {
+        if (scope != null && scope.getSessionId() != null) {
+            backendFactory.release(scope.getSessionId());
+        }
     }
 
     public Optional<String> findActiveSessionId(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
@@ -127,6 +134,12 @@ public class SessionResolver {
         backendFactory.registerSession(scope.getSessionId(),
                 buildBackendConfig(scope.getRuntimePolicy(), scope.getWorkingDirectory().toString()));
         backendFactory.touchSession(scope.getSessionId());
+    }
+
+    private Path resolveEffectiveWorkingDirectory(RuntimePolicy runtimePolicy, String sessionId) {
+        Path workingDirectory = resolveWorkingDirectory(runtimePolicy);
+        Path dockerWorkspace = resolveDockerWorkspaceForFiles(runtimePolicy, sessionId);
+        return dockerWorkspace != null ? dockerWorkspace : workingDirectory;
     }
 
     private Path resolveWorkingDirectory(RuntimePolicy runtimePolicy) {

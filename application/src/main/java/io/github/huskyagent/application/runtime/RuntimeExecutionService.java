@@ -61,6 +61,7 @@ public class RuntimeExecutionService {
         } catch (SecurityException e) {
             return RuntimeExecutionResult.rejected(ChatResult.failure(e.getMessage(), ChatResult.ErrorCode.SESSION_ERROR));
         }
+        boolean stateless = request.isStateless();
         if (request.getWorkingDirectoryOverride() != null) {
             scope = scope.withWorkingDirectory(request.getWorkingDirectoryOverride());
         }
@@ -78,7 +79,8 @@ public class RuntimeExecutionService {
             ChatResult result = scopedRuntimeContext.call(finalScope, () -> agentRuntimeExecutor.execute(
                     finalScope,
                     AgentInput.fromInbound(inbound),
-                    callbacks
+                    callbacks,
+                    request.persistenceModeOrDefault()
             ));
             if (result.success()) {
                 callbacks.completed(finalScope, result);
@@ -93,6 +95,9 @@ public class RuntimeExecutionService {
             return RuntimeExecutionResult.executed(ChatResult.failure(e.getMessage()), scope);
         } finally {
             routeRegistry.unregister(route);
+            if (stateless) {
+                sessionResolver.releaseEphemeralScope(scope);
+            }
         }
     }
 
@@ -112,6 +117,9 @@ public class RuntimeExecutionService {
 
     private RuntimeScope resolveScope(RuntimeExecutionRequest request, InboundMessage inbound, String sceneId) {
         String requestedSessionId = request.requestedSessionIdOrInbound();
+        if (request.isStateless() && (requestedSessionId == null || requestedSessionId.isBlank())) {
+            return sessionResolver.createEphemeralScope(inbound.getPrincipal(), inbound.getChannelIdentity(), sceneId);
+        }
         if (request.isForceNewSession() && (requestedSessionId == null || requestedSessionId.isBlank())) {
             return sessionResolver.createSession(inbound.getPrincipal(), inbound.getChannelIdentity(), sceneId);
         }

@@ -70,11 +70,22 @@ public class AgentGraph {
             String systemPromptOverride,
             HookRegistry hookRegistryOverride,
             ChannelIdentity channelIdentity, Principal principal) throws GraphStateException {
+        return buildGraph(sessionId, workingDirectory, sessionScope, runtimePolicy, systemPromptOverride,
+                hookRegistryOverride, channelIdentity, principal, false);
+    }
+
+    public CompiledGraph<ReActAgentState> buildGraph(String sessionId, Path workingDirectory,
+            SessionScope sessionScope,
+            RuntimePolicy runtimePolicy,
+            String systemPromptOverride,
+            HookRegistry hookRegistryOverride,
+            ChannelIdentity channelIdentity, Principal principal,
+            boolean forceMemoryCheckpoint) throws GraphStateException {
 
         HookRegistry effectiveHookRegistry = hookRegistryOverride != null ? hookRegistryOverride : hookRegistry;
 
         return buildGraphInternal(sessionId, workingDirectory, sessionScope, systemPromptOverride,
-                effectiveHookRegistry, runtimePolicy, channelIdentity, principal);
+                effectiveHookRegistry, runtimePolicy, channelIdentity, principal, forceMemoryCheckpoint);
     }
 
     private CompiledGraph<ReActAgentState> buildGraphInternal(String sessionId,
@@ -83,7 +94,8 @@ public class AgentGraph {
                                                              String systemPromptOverride,
                                                              HookRegistry effectiveHookRegistry,
                                                              RuntimePolicy runtimePolicy,
-                                                             ChannelIdentity channelIdentity, Principal principal) throws GraphStateException {
+                                                             ChannelIdentity channelIdentity, Principal principal,
+                                                             boolean forceMemoryCheckpoint) throws GraphStateException {
 
         log.debug("Building graph: sessionId={}", sessionId);
 
@@ -110,7 +122,7 @@ public class AgentGraph {
                 systemPrompt));
 
         CheckpointStore checkpointStore = checkpointStoreFactory.forCheckpointType(runtimePolicy.effectiveCheckpointType());
-        var saver = checkpointStore.isPersistent() ? checkpointStore : new MemorySaver();
+        var saver = forceMemoryCheckpoint || !checkpointStore.isPersistent() ? new MemorySaver() : checkpointStore;
         return graph.compile(CompileConfig.builder()
                 .checkpointSaver(saver)
                 .recursionLimit(10000)

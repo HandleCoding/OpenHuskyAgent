@@ -21,7 +21,7 @@ class ReActAgentAppApiTest {
         assertFalse(hasPublicMethodNamed(publicMethods, "chat"));
         assertFalse(hasPublicMethodNamed(publicMethods, "chatWithApproval"));
         assertFalse(hasPublicMethodNamed(publicMethods, "chatWithInterrupts"));
-        assertEquals(1, Arrays.stream(publicMethods)
+        assertEquals(2, Arrays.stream(publicMethods)
                 .filter(method -> Modifier.isPublic(method.getModifiers()))
                 .filter(method -> method.getName().equals("execute"))
                 .count());

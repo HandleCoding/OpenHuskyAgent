@@ -5,6 +5,7 @@ import io.github.huskyagent.application.agent.ClarifyContext;
 import io.github.huskyagent.application.agent.TextEvent;
 import io.github.huskyagent.application.runtime.AgentRuntimeExecutor;
 import io.github.huskyagent.application.runtime.RuntimeCallbacks;
+import io.github.huskyagent.application.runtime.RuntimeExecutionRequest;
 import io.github.huskyagent.application.session.GraphCacheKey;
 import io.github.huskyagent.application.session.RuntimeScope;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
@@ -96,20 +97,34 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
 
     @Override
     public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks) {
+        return execute(scope, input, callbacks, RuntimeExecutionRequest.PersistenceMode.STATEFUL);
+    }
+
+    @Override
+    public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks,
+                              RuntimeExecutionRequest.PersistenceMode persistenceMode) {
         RuntimeCallbacks executionCallbacks = callbacks != null ? callbacks : RuntimeCallbacks.NOOP;
+        RuntimeExecutionRequest.PersistenceMode mode = persistenceMode != null
+                ? persistenceMode
+                : RuntimeExecutionRequest.PersistenceMode.STATEFUL;
+        boolean stateless = mode == RuntimeExecutionRequest.PersistenceMode.STATELESS;
         final String sid = scope.getSessionId();
         try {
             scope.requireCompleteForExecution();
             log.info("Starting graph execution: sessionId={}, scene={}", sid, scope.getRuntimePolicy().getSceneId());
-            initSession(sid);
-            CompiledGraph<ReActAgentState> graph = getOrBuildGraph(scope);
-            sessionManager.saveUserMessage(sid, multimodalMessageBuilder.persistenceText(input),
-                    currentCheckpointId(graph, sid));
+            if (!stateless) {
+                initSession(sid);
+            }
+            CompiledGraph<ReActAgentState> graph = stateless ? buildStatelessGraph(scope) : getOrBuildGraph(scope);
+            if (!stateless) {
+                sessionManager.saveUserMessage(sid, multimodalMessageBuilder.persistenceText(input),
+                        currentCheckpointId(graph, sid));
+            }
             String turnId = UUID.randomUUID().toString();
             RunnableConfig config = buildConfig(sid, turnId, scope);
             try {
                 return runWithInterruptLoop(scope, graph, config, buildInputs(input), sid,
-                        executionCallbacks);
+                        executionCallbacks, stateless);
             } finally {
                 dynamicPromptSnapshotCache.clearTurn(sid, turnId);
             }
@@ -143,7 +158,8 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
             RunnableConfig config,
             Map<String, Object> inputs,
             String sessionId,
-            RuntimeCallbacks callbacks) throws Exception {
+            RuntimeCallbacks callbacks,
+            boolean stateless) throws Exception {
 
         Map<String, Object> currentInputs = inputs;
         ReActAgentState finalState = null;
@@ -183,9 +199,29 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
             currentInputs = null;
         }
 
-        recordProviderTokenUsage(sessionId, finalState);
-        compactActiveCheckpointIfNeeded(scope, graph, config, finalState);
-        return handleFinalState(sessionId, finalState, hasModelOutput);
+        if (!stateless) {
+            recordProviderTokenUsage(sessionId, finalState);
+            compactActiveCheckpointIfNeeded(scope, graph, config, finalState);
+        }
+        return handleFinalState(sessionId, finalState, hasModelOutput, stateless);
+    }
+
+
+    private CompiledGraph<ReActAgentState> buildStatelessGraph(RuntimeScope scope) throws Exception {
+        RuntimePolicy runtimePolicy = scope.getRuntimePolicy();
+        log.info("Building stateless CompiledGraph: sceneId={}, workDir={}, policy={}",
+                runtimePolicy.getSceneId(), scope.getWorkingDirectory(), runtimePolicy.fingerprint());
+        return agentGraph.buildGraph(
+                scope.getSessionId(),
+                scope.getWorkingDirectory(),
+                scope.toSessionScope(),
+                runtimePolicy,
+                null,
+                runtimePolicy.getApprovalPolicy() == SceneConfig.ApprovalPolicy.NONE ? null : defaultHookRegistry,
+                scope.getChannelIdentity(),
+                scope.getPrincipal(),
+                true
+        );
     }
 
 
@@ -334,11 +370,19 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
     }
 
     private ChatResult handleFinalState(String sessionId, ReActAgentState finalState, boolean streamed) {
+        return handleFinalState(sessionId, finalState, streamed, false);
+    }
+
+    private ChatResult handleFinalState(String sessionId, ReActAgentState finalState, boolean streamed, boolean stateless) {
         String response = extractResponse(finalState);
-        sessionManager.saveAssistantMessage(sessionId, response);
         List<Message> allMessages = finalState != null ? finalState.messages() : List.of();
         TokenUsage estimatedUsage = estimateTokenUsage(allMessages, response);
         TokenUsage tokenUsage = providerTokenUsage(finalState).orElse(estimatedUsage);
+        if (stateless) {
+            log.info("Stateless chat completed: sessionId={}", sessionId);
+            return ChatResult.success(response, sessionId, streamed, tokenUsage);
+        }
+        sessionManager.saveAssistantMessage(sessionId, response);
         updateTokenUsage(sessionId, tokenUsage);
 
         Long startTime = sessionStartTimes.getOrDefault(sessionId, 0L);
