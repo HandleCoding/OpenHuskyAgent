@@ -26,10 +26,10 @@ SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # ── Find the Husky Client JAR ──────────────────────────────────────────────
-if [ -f "$PROJECT_DIR/client/target/husky-agent-client-0.0.1-SNAPSHOT.jar" ]; then
-    CLIENT_JAR="$PROJECT_DIR/client/target/husky-agent-client-0.0.1-SNAPSHOT.jar"
-elif [ -f "$PROJECT_DIR/target/husky-agent-client-0.0.1-SNAPSHOT.jar" ]; then
-    CLIENT_JAR="$PROJECT_DIR/target/husky-agent-client-0.0.1-SNAPSHOT.jar"
+if [ -f "$PROJECT_DIR/client/target/husky-agent-client-0.1.5.jar" ]; then
+    CLIENT_JAR="$PROJECT_DIR/client/target/husky-agent-client-0.1.5.jar"
+elif [ -f "$PROJECT_DIR/target/husky-agent-client-0.1.5.jar" ]; then
+    CLIENT_JAR="$PROJECT_DIR/target/husky-agent-client-0.1.5.jar"
 else
     CLIENT_JAR=""
 fi

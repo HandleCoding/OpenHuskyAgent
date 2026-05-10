@@ -13,6 +13,7 @@
 #   husky status                                 Show background service status
 #   husky logs                                   Tail background service logs
 #   husky update                                 Upgrade this checkout via install.sh --upgrade
+#   husky browser install                         Install Playwright Chromium for browser tools
 #   husky install                                Create a symlink in /usr/local/bin for global access
 
 set -e
@@ -169,6 +170,7 @@ run_init() {
     echo "  2. Choose one startup mode: foreground with husky serve"
     echo "  3. Or background with husky start"
     echo "  4. If you use background mode, check status/logs with: husky status && husky logs"
+    echo "  5. Optional browser tools: set BROWSER_ENABLED=true, then run husky browser install"
 }
 
 service_installed() {
@@ -247,18 +249,18 @@ wait_for_service() {
 }
 
 # Find the Husky JARs
-if [ -f "$PROJECT_DIR/service/target/husky-agent-service-0.0.1-SNAPSHOT.jar" ]; then
-    JAR="$PROJECT_DIR/service/target/husky-agent-service-0.0.1-SNAPSHOT.jar"
-elif [ -f "$PROJECT_DIR/target/husky-agent-service-0.0.1-SNAPSHOT.jar" ]; then
-    JAR="$PROJECT_DIR/target/husky-agent-service-0.0.1-SNAPSHOT.jar"
+if [ -f "$PROJECT_DIR/service/target/husky-agent-service-0.1.5.jar" ]; then
+    JAR="$PROJECT_DIR/service/target/husky-agent-service-0.1.5.jar"
+elif [ -f "$PROJECT_DIR/target/husky-agent-service-0.1.5.jar" ]; then
+    JAR="$PROJECT_DIR/target/husky-agent-service-0.1.5.jar"
 else
     JAR=""
 fi
 
-if [ -f "$PROJECT_DIR/client/target/husky-agent-client-0.0.1-SNAPSHOT.jar" ]; then
-    CLIENT_JAR="$PROJECT_DIR/client/target/husky-agent-client-0.0.1-SNAPSHOT.jar"
-elif [ -f "$PROJECT_DIR/target/husky-agent-client-0.0.1-SNAPSHOT.jar" ]; then
-    CLIENT_JAR="$PROJECT_DIR/target/husky-agent-client-0.0.1-SNAPSHOT.jar"
+if [ -f "$PROJECT_DIR/client/target/husky-agent-client-0.1.5.jar" ]; then
+    CLIENT_JAR="$PROJECT_DIR/client/target/husky-agent-client-0.1.5.jar"
+elif [ -f "$PROJECT_DIR/target/husky-agent-client-0.1.5.jar" ]; then
+    CLIENT_JAR="$PROJECT_DIR/target/husky-agent-client-0.1.5.jar"
 else
     CLIENT_JAR=""
 fi
@@ -267,6 +269,20 @@ MVNW="$PROJECT_DIR/mvnw"
 if [ ! -f "$MVNW" ]; then
     MVNW=""
 fi
+
+run_browser_install() {
+    echo "Installing Playwright Chromium for Husky browser tools..."
+    if [ -n "$MVNW" ]; then
+        exec "$MVNW" -B -ntp exec:java -pl infra \
+            -Dexec.mainClass="com.microsoft.playwright.CLI" \
+            -Dexec.args="install chromium"
+    fi
+    if [ -n "$JAR" ]; then
+        exec java -cp "$JAR" com.microsoft.playwright.CLI install chromium
+    fi
+    echo "Error: Cannot find Husky JAR or mvnw to run Playwright installer"
+    exit 1
+}
 
 case "${1:-serve}" in
     --version|-v|version)
@@ -450,6 +466,19 @@ case "${1:-serve}" in
         print_systemd_hint
         exit 1
         ;;
+    browser)
+        shift
+        case "${1:-}" in
+            install)
+                shift
+                run_browser_install "$@"
+                ;;
+            *)
+                echo "Usage: husky browser install"
+                exit 1
+                ;;
+        esac
+        ;;
     update)
         shift
         if [ ! -d "$PROJECT_DIR/.git" ]; then
@@ -490,7 +519,7 @@ case "${1:-serve}" in
         echo "Now you can run 'husky serve' or 'husky tui' from anywhere."
         ;;
     *)
-        echo "Usage: husky {init|serve|tui|dev|start|stop|status|logs|update|install|--version}"
+        echo "Usage: husky {init|serve|tui|dev|start|stop|status|logs|update|browser|install|--version}"
         echo ""
         echo "Start here:"
         echo "  husky init                  Create ~/.husky config and runtime directories"
@@ -498,7 +527,7 @@ case "${1:-serve}" in
         echo "  husky tui                   Open the TUI and connect to localhost"
         echo "  husky start                 Start the service in background"
         echo "  husky status                Check background service status"
-        echo "  husky update                Upgrade this checkout with install.sh --upgrade"
+        echo "  husky browser install       Install Playwright Chromium for browser tools"
         echo ""
         echo "Commands:"
         echo "  init     Initialize ~/.husky config and runtime files"
@@ -510,6 +539,7 @@ case "${1:-serve}" in
         echo "  status   Show background service status"
         echo "  logs     Tail background service logs"
         echo "  update   Run the recommended local upgrade path"
+        echo "  browser install  Install Playwright Chromium for browser tools"
         echo "  install  Create a symlink in /usr/local/bin for global access"
         echo "  --version  Print Husky CLI version"
         echo ""

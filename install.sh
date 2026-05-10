@@ -246,8 +246,8 @@ build() {
         bail "Full log: $build_log"
     fi
 
-    local service_jar="$INSTALL_DIR/service/target/husky-agent-service-0.0.1-SNAPSHOT.jar"
-    local client_jar="$INSTALL_DIR/client/target/husky-agent-client-0.0.1-SNAPSHOT.jar"
+    local service_jar="$INSTALL_DIR/service/target/husky-agent-service-0.1.5.jar"
+    local client_jar="$INSTALL_DIR/client/target/husky-agent-client-0.1.5.jar"
 
     [ -f "$service_jar" ] || bail "Service JAR not found after build. Check $build_log"
     [ -f "$client_jar" ]  || bail "Client JAR not found after build. Check $build_log"
@@ -369,7 +369,7 @@ setup_systemd() {
         sed \
             -e "s|WorkingDirectory=.*|WorkingDirectory=$INSTALL_DIR|g" \
             -e "s|EnvironmentFile=.*|EnvironmentFile=$ENV_FILE|g" \
-            -e "s|ExecStart=.*|ExecStart=$JAVA_HOME/bin/java -jar $INSTALL_DIR/service/target/husky-agent-service-0.0.1-SNAPSHOT.jar|g" \
+            -e "s|ExecStart=.*|ExecStart=$JAVA_HOME/bin/java -jar $INSTALL_DIR/service/target/husky-agent-service-0.1.5.jar|g" \
             -e "s|^User=.*|User=$service_user|g" \
             -e "s|ReadWritePaths=.*|ReadWritePaths=$systemd_readwrite_paths|g" \
             "$service_src" > /tmp/husky-agent.service
@@ -386,7 +386,7 @@ User=$service_user
 WorkingDirectory=$INSTALL_DIR
 EnvironmentFile=$ENV_FILE
 Environment=JAVA_HOME=$JAVA_HOME
-ExecStart=$JAVA_HOME/bin/java -jar $INSTALL_DIR/service/target/husky-agent-service-0.0.1-SNAPSHOT.jar
+ExecStart=$JAVA_HOME/bin/java -jar $INSTALL_DIR/service/target/husky-agent-service-0.1.5.jar
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal

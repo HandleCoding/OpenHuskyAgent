@@ -196,11 +196,28 @@ public class BrowserToolProvider implements ToolProvider {
             return ToolResult.failure(e.getMessage(), true, "Close idle sessions or increase browser.max-sessions");
         } catch (PlaywrightException e) {
             String message = e.getMessage() == null ? "Browser operation failed" : e.getMessage();
+            if (isMissingBrowserRuntime(message)) {
+                return ToolResult.failure(missingBrowserRuntimeMessage(), false, "Run husky browser install, restart Husky, then try the browser tool again");
+            }
             return ToolResult.failure(message, true, "Try browser_snapshot, browser_back, or browser_navigate again");
         } catch (Exception e) {
             log.error("browser tool failed: {}", e.getMessage(), e);
             return ToolResult.failure("Browser operation failed: " + e.getMessage(), true, "Try browser_snapshot or browser_navigate again");
         }
+    }
+
+    private boolean isMissingBrowserRuntime(String message) {
+        String lower = message.toLowerCase(Locale.ROOT);
+        return lower.contains("executable doesn't exist")
+                || lower.contains("browser executable not found")
+                || lower.contains("playwright install")
+                || lower.contains("install chromium");
+    }
+
+    private String missingBrowserRuntimeMessage() {
+        return "Browser runtime is not installed. Run `husky browser install`, restart Husky, then try the browser tool again. "
+                + "If you are running from a source checkout, you can also run `./mvnw -B -ntp exec:java -pl infra "
+                + "-Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args=\"install chromium\"`.";
     }
 
     private String validateUrl(String url) {

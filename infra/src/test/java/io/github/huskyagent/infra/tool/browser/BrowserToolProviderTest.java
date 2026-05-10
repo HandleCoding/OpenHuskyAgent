@@ -1,11 +1,14 @@
 package io.github.huskyagent.infra.tool.browser;
 
+import com.microsoft.playwright.PlaywrightException;
 import io.github.huskyagent.infra.config.BrowserConfig;
 import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
+import io.github.huskyagent.infra.tool.registry.ToolResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -59,5 +62,25 @@ class BrowserToolProviderTest {
             .orElseThrow();
         assertEquals("up", scroll.parametersSchema().at("/properties/direction/enum/0").asText());
         assertEquals("down", scroll.parametersSchema().at("/properties/direction/enum/1").asText());
+    }
+
+    @Test
+    void missingBrowserRuntimeReturnsInstallInstruction() {
+        BrowserConfig config = new BrowserConfig();
+        config.setEnabled(true);
+        BrowserSessionManager sessionManager = new BrowserSessionManager(config, null, null, null) {
+            @Override
+            public BrowserSession getOrCreate() {
+                throw new PlaywrightException("Executable doesn't exist at /path/to/chromium. Please run playwright install");
+            }
+        };
+        BrowserToolProvider provider = new BrowserToolProvider(config, sessionManager);
+
+        ToolResult result = provider.handleSnapshot(Map.of());
+
+        assertFalse(result.success());
+        assertFalse(result.retryable());
+        assertTrue(result.error().contains("husky browser install"));
+        assertTrue(result.suggestedFix().contains("husky browser install"));
     }
 }
