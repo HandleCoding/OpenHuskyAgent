@@ -248,22 +248,44 @@ wait_for_service() {
     return 1
 }
 
-# Find the Husky JARs
-if [ -f "$PROJECT_DIR/service/target/husky-agent-service-0.1.5.jar" ]; then
-    JAR="$PROJECT_DIR/service/target/husky-agent-service-0.1.5.jar"
-elif [ -f "$PROJECT_DIR/target/husky-agent-service-0.1.5.jar" ]; then
-    JAR="$PROJECT_DIR/target/husky-agent-service-0.1.5.jar"
-else
-    JAR=""
-fi
+find_packaged_jar() {
+    local module_dir="$1"
+    local artifact_id="$2"
+    local candidate
+    local newest=""
 
-if [ -f "$PROJECT_DIR/client/target/husky-agent-client-0.1.5.jar" ]; then
-    CLIENT_JAR="$PROJECT_DIR/client/target/husky-agent-client-0.1.5.jar"
-elif [ -f "$PROJECT_DIR/target/husky-agent-client-0.1.5.jar" ]; then
-    CLIENT_JAR="$PROJECT_DIR/target/husky-agent-client-0.1.5.jar"
-else
-    CLIENT_JAR=""
-fi
+    if [ -n "$VERSION" ] && [ "$VERSION" != "unknown" ]; then
+        candidate="$PROJECT_DIR/$module_dir/target/$artifact_id-$VERSION.jar"
+        if [ -f "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+
+        candidate="$PROJECT_DIR/target/$artifact_id-$VERSION.jar"
+        if [ -f "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    fi
+
+    for candidate in "$PROJECT_DIR/$module_dir"/target/"$artifact_id"-*.jar "$PROJECT_DIR"/target/"$artifact_id"-*.jar; do
+        [ -f "$candidate" ] || continue
+        case "$candidate" in
+            *-sources.jar|*-javadoc.jar|*.original) continue ;;
+        esac
+        if [ -z "$newest" ] || [ "$candidate" -nt "$newest" ]; then
+            newest="$candidate"
+        fi
+    done
+
+    if [ -n "$newest" ]; then
+        printf '%s\n' "$newest"
+    fi
+}
+
+# Find the Husky JARs
+JAR="$(find_packaged_jar service husky-agent-service || true)"
+CLIENT_JAR="$(find_packaged_jar client husky-agent-client || true)"
 
 MVNW="$PROJECT_DIR/mvnw"
 if [ ! -f "$MVNW" ]; then

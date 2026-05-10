@@ -98,23 +98,70 @@ detect_os() {
 
 # ── Step 2: Install system dependencies ──────────────────────────────────
 install_deps() {
-    info "Installing system dependencies..."
+    info "Checking system dependencies..."
 
+    local missing=()
+    for cmd in git curl unzip; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            missing+=("$cmd")
+        fi
+    done
+
+    if [ "${#missing[@]}" -eq 0 ]; then
+        ok "System dependencies already installed: git curl unzip"
+        return 0
+    fi
+
+    info "Installing missing system dependencies: ${missing[*]}"
     if command -v apt-get >/dev/null 2>&1; then
         sudo apt-get update -qq
-        sudo apt-get install -y -qq git curl unzip > /dev/null 2>&1
+        sudo apt-get install -y -qq "${missing[@]}" > /dev/null 2>&1
         ok "apt packages installed"
     elif command -v yum >/dev/null 2>&1; then
-        sudo yum install -y -q git curl unzip > /dev/null 2>&1
+        sudo yum install -y -q "${missing[@]}" > /dev/null 2>&1
         ok "yum packages installed"
     elif command -v dnf >/dev/null 2>&1; then
-        sudo dnf install -y -q git curl unzip > /dev/null 2>&1
+        sudo dnf install -y -q "${missing[@]}" > /dev/null 2>&1
         ok "dnf packages installed"
     elif command -v apk >/dev/null 2>&1; then
-        sudo apk add --no-cache git curl unzip > /dev/null 2>&1
+        sudo apk add --no-cache "${missing[@]}" > /dev/null 2>&1
         ok "apk packages installed"
     else
-        warn "Unknown package manager — skipping dependency install. Ensure git/curl/unzip are available."
+        warn "Unknown package manager — skipping dependency install. Ensure ${missing[*]} are available."
+    fi
+}
+
+project_version() {
+    ./mvnw -q -DforceStdout help:evaluate -Dexpression=project.version 2>/dev/null | tail -1
+}
+
+find_packaged_jar() {
+    local module_dir="$1"
+    local artifact_id="$2"
+    local preferred_version="$3"
+    local candidate
+    local newest=""
+
+    if [ -n "$preferred_version" ]; then
+        candidate="$INSTALL_DIR/$module_dir/target/$artifact_id-$preferred_version.jar"
+        if [ -f "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    fi
+
+    for candidate in "$INSTALL_DIR/$module_dir"/target/"$artifact_id"-*.jar; do
+        [ -f "$candidate" ] || continue
+        case "$candidate" in
+            *-sources.jar|*-javadoc.jar|*.original) continue ;;
+        esac
+        if [ -z "$newest" ] || [ "$candidate" -nt "$newest" ]; then
+            newest="$candidate"
+        fi
+    done
+
+    if [ -n "$newest" ]; then
+        printf '%s\n' "$newest"
     fi
 }
 
@@ -246,11 +293,15 @@ build() {
         bail "Full log: $build_log"
     fi
 
-    local service_jar="$INSTALL_DIR/service/target/husky-agent-service-0.1.5.jar"
-    local client_jar="$INSTALL_DIR/client/target/husky-agent-client-0.1.5.jar"
+    local version
+    local service_jar
+    local client_jar
+    version="$(project_version || true)"
+    service_jar="$(find_packaged_jar service husky-agent-service "$version")"
+    client_jar="$(find_packaged_jar client husky-agent-client "$version")"
 
-    [ -f "$service_jar" ] || bail "Service JAR not found after build. Check $build_log"
-    [ -f "$client_jar" ]  || bail "Client JAR not found after build. Check $build_log"
+    [ -n "$service_jar" ] && [ -f "$service_jar" ] || bail "Service JAR not found after build. Check $build_log"
+    [ -n "$client_jar" ] && [ -f "$client_jar" ]  || bail "Client JAR not found after build. Check $build_log"
 
     ok "Build complete — service: $(du -h "$service_jar" | cut -f1), client: $(du -h "$client_jar" | cut -f1)"
     log "JARs: $service_jar, $client_jar"
@@ -361,15 +412,18 @@ setup_systemd() {
     local service_src="$INSTALL_DIR/deploy/husky.service"
     local service_user
     local systemd_readwrite_paths
+    local service_jar
     service_user="$(id -un)"
     systemd_readwrite_paths="$DATA_DIR $DATA_DIR/config $DATA_DIR/skills $DATA_DIR/db $DATA_DIR/logs"
+    service_jar="$(find_packaged_jar service husky-agent-service "$(project_version || true)")"
+    [ -n "$service_jar" ] && [ -f "$service_jar" ] || bail "Service JAR not found. Run the build step first."
 
     if [ -f "$service_src" ]; then
         # Patch the template with actual paths and user
         sed \
             -e "s|WorkingDirectory=.*|WorkingDirectory=$INSTALL_DIR|g" \
             -e "s|EnvironmentFile=.*|EnvironmentFile=$ENV_FILE|g" \
-            -e "s|ExecStart=.*|ExecStart=$JAVA_HOME/bin/java -jar $INSTALL_DIR/service/target/husky-agent-service-0.1.5.jar|g" \
+            -e "s|ExecStart=.*|ExecStart=$JAVA_HOME/bin/java -jar $service_jar|g" \
             -e "s|^User=.*|User=$service_user|g" \
             -e "s|ReadWritePaths=.*|ReadWritePaths=$systemd_readwrite_paths|g" \
             "$service_src" > /tmp/husky-agent.service
@@ -386,7 +440,7 @@ User=$service_user
 WorkingDirectory=$INSTALL_DIR
 EnvironmentFile=$ENV_FILE
 Environment=JAVA_HOME=$JAVA_HOME
-ExecStart=$JAVA_HOME/bin/java -jar $INSTALL_DIR/service/target/husky-agent-service-0.1.5.jar
+ExecStart=$JAVA_HOME/bin/java -jar $service_jar
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
