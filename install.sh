@@ -131,23 +131,16 @@ install_deps() {
     fi
 }
 
-project_version() {
-    ./mvnw -q -DforceStdout help:evaluate -Dexpression=project.version 2>/dev/null | tail -1
-}
-
 find_packaged_jar() {
     local module_dir="$1"
     local artifact_id="$2"
-    local preferred_version="$3"
     local candidate
     local newest=""
 
-    if [ -n "$preferred_version" ]; then
-        candidate="$INSTALL_DIR/$module_dir/target/$artifact_id-$preferred_version.jar"
-        if [ -f "$candidate" ]; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
+    candidate="$INSTALL_DIR/$module_dir/target/$artifact_id.jar"
+    if [ -f "$candidate" ]; then
+        printf '%s\n' "$candidate"
+        return 0
     fi
 
     for candidate in "$INSTALL_DIR/$module_dir"/target/"$artifact_id"-*.jar; do
@@ -293,12 +286,10 @@ build() {
         bail "Full log: $build_log"
     fi
 
-    local version
     local service_jar
     local client_jar
-    version="$(project_version || true)"
-    service_jar="$(find_packaged_jar service husky-agent-service "$version")"
-    client_jar="$(find_packaged_jar client husky-agent-client "$version")"
+    service_jar="$(find_packaged_jar service husky-agent-service)"
+    client_jar="$(find_packaged_jar client husky-agent-client)"
 
     [ -n "$service_jar" ] && [ -f "$service_jar" ] || bail "Service JAR not found after build. Check $build_log"
     [ -n "$client_jar" ] && [ -f "$client_jar" ]  || bail "Client JAR not found after build. Check $build_log"
@@ -420,7 +411,7 @@ setup_systemd() {
     local service_jar
     service_user="$(id -un)"
     systemd_readwrite_paths="$DATA_DIR $DATA_DIR/config $DATA_DIR/skills $DATA_DIR/db $DATA_DIR/logs"
-    service_jar="$(find_packaged_jar service husky-agent-service "$(project_version || true)")"
+    service_jar="$(find_packaged_jar service husky-agent-service)"
     [ -n "$service_jar" ] && [ -f "$service_jar" ] || bail "Service JAR not found. Run the build step first."
 
     if [ -f "$service_src" ]; then

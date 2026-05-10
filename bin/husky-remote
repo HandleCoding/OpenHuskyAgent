@@ -25,14 +25,36 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
+find_packaged_jar() {
+    local module_dir="$1"
+    local artifact_id="$2"
+    local candidate
+    local newest=""
+
+    for candidate in "$PROJECT_DIR/$module_dir/target/$artifact_id.jar" "$PROJECT_DIR/target/$artifact_id.jar"; do
+        if [ -f "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    for candidate in "$PROJECT_DIR/$module_dir"/target/"$artifact_id"-*.jar "$PROJECT_DIR"/target/"$artifact_id"-*.jar; do
+        [ -f "$candidate" ] || continue
+        case "$candidate" in
+            *-sources.jar|*-javadoc.jar|*.original) continue ;;
+        esac
+        if [ -z "$newest" ] || [ "$candidate" -nt "$newest" ]; then
+            newest="$candidate"
+        fi
+    done
+
+    if [ -n "$newest" ]; then
+        printf '%s\n' "$newest"
+    fi
+}
+
 # ── Find the Husky Client JAR ──────────────────────────────────────────────
-if [ -f "$PROJECT_DIR/client/target/husky-agent-client-0.1.5.jar" ]; then
-    CLIENT_JAR="$PROJECT_DIR/client/target/husky-agent-client-0.1.5.jar"
-elif [ -f "$PROJECT_DIR/target/husky-agent-client-0.1.5.jar" ]; then
-    CLIENT_JAR="$PROJECT_DIR/target/husky-agent-client-0.1.5.jar"
-else
-    CLIENT_JAR=""
-fi
+CLIENT_JAR="$(find_packaged_jar client husky-agent-client || true)"
 
 MVNW="$PROJECT_DIR/mvnw"
 if [ ! -f "$MVNW" ]; then

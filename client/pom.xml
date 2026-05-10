@@ -64,6 +64,7 @@
     </dependencies>
 
     <build>
+        <finalName>husky-agent-client</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

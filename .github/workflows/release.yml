@@ -34,9 +34,8 @@ jobs:
         id: artifacts
         run: |
           RELEASE_TAG="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}"
-          PROJECT_VERSION="$(./mvnw -q -DforceStdout help:evaluate -Dexpression=project.version)"
-          SERVICE_JAR="service/target/husky-agent-service-${PROJECT_VERSION}.jar"
-          CLIENT_JAR="client/target/husky-agent-client-${PROJECT_VERSION}.jar"
+          SERVICE_JAR="service/target/husky-agent-service.jar"
+          CLIENT_JAR="client/target/husky-agent-client.jar"
           test -f "$SERVICE_JAR"
           test -f "$CLIENT_JAR"
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"

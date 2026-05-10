@@ -254,19 +254,12 @@ find_packaged_jar() {
     local candidate
     local newest=""
 
-    if [ -n "$VERSION" ] && [ "$VERSION" != "unknown" ]; then
-        candidate="$PROJECT_DIR/$module_dir/target/$artifact_id-$VERSION.jar"
+    for candidate in "$PROJECT_DIR/$module_dir/target/$artifact_id.jar" "$PROJECT_DIR/target/$artifact_id.jar"; do
         if [ -f "$candidate" ]; then
             printf '%s\n' "$candidate"
             return 0
         fi
-
-        candidate="$PROJECT_DIR/target/$artifact_id-$VERSION.jar"
-        if [ -f "$candidate" ]; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
-    fi
+    done
 
     for candidate in "$PROJECT_DIR/$module_dir"/target/"$artifact_id"-*.jar "$PROJECT_DIR"/target/"$artifact_id"-*.jar; do
         [ -f "$candidate" ] || continue
