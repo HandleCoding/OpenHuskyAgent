@@ -37,6 +37,18 @@ class ConfigChannelBindingResolverTest {
         assertEquals("telegram-assistant", resolved.bindingId());
         assertEquals("assistant", resolved.sceneId());
     }
+
+    @Test
+    void resolvesSlackBindingByBotUserId() {
+        ChannelBindingProperties properties = new ChannelBindingProperties();
+        properties.setBindings(Map.of("slack-assistant", binding("slack", "U123BOT", "assistant", true)));
+        ConfigChannelBindingResolver resolver = new ConfigChannelBindingResolver(properties);
+
+        ChannelInstanceBinding resolved = resolver.resolve(identity(ChannelType.SLACK, "U123BOT")).orElseThrow();
+
+        assertEquals("slack-assistant", resolved.bindingId());
+        assertEquals("assistant", resolved.sceneId());
+    }
     @Test
     void ignoresDisabledBinding() {
         ChannelBindingProperties properties = new ChannelBindingProperties();

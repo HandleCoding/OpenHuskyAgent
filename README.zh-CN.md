@@ -30,7 +30,7 @@ Husky 可以用于：
 |------|----------------|
 | 个人 AI 助手 | TUI、本地文件、终端/进程工具、浏览器工具、记忆、审批 |
 | 在线 Chatbot 后端 | HTTP SSE `/api/chat`、API Key 鉴权、多用户 session、scene 过滤工具 |
-| 企业助手 | 飞书多实例 bot、channel binding、知识库、审计标签 |
+| 企业助手 | 飞书、Telegram 和 Slack 多实例 bot、channel binding、知识库、审计标签 |
 | Agent 平台 | 分层 Java 模块、ToolProvider、Scene、Hook、RuntimePolicy、MCP |
 
 ## 快速开始
@@ -301,6 +301,18 @@ SSE events 包括 `token`、`reasoning`、`message`、`tool_started`、`tool_com
 
 Husky 支持飞书 WebSocket/webhook adapter，并支持 `channels.feishu.instances.*` 下的多 app 实例。每个实例可通过 `channel-bindings.*` 绑定到不同 scene，从而暴露不同 prompt、tools、memory 和 approval policy。
 
+### Telegram Channel
+
+Husky 支持默认关闭的 Telegram long-polling adapter，并支持 `channels.telegram.instances.*` 下的多 bot 实例。配置 `TELEGRAM_ASSISTANT_ENABLED=true`、`TELEGRAM_ASSISTANT_BOT_TOKEN`，并建议配置 `TELEGRAM_ASSISTANT_BOT_USERNAME`，这样 `channel-bindings.*` 才能把 bot 路由到指定 scene。
+
+Telegram v1 支持文本消息、群组 mention gating、forum topic threads、typing indicators、inline approval buttons 和 clarification buttons/replies。Long polling 对同一个 bot token 是单消费者模式，因此每个启用的 Telegram token 只运行一个 Husky 进程。
+
+### Slack Channel
+
+Husky 支持默认关闭的 Slack Socket Mode adapter，并支持 `channels.slack.instances.*` 下的多 bot 实例。配置 `SLACK_ASSISTANT_ENABLED=true`、`SLACK_ASSISTANT_BOT_TOKEN`、`SLACK_ASSISTANT_APP_TOKEN` 和 `SLACK_ASSISTANT_BOT_USER_ID` 后，`channel-bindings.*` 才能把 bot 路由到指定 scene。启用 Slack 时 bot user id 是必填项，避免 Socket Mode 路由静默落到全局默认 scene。
+
+Slack v1 支持文本消息、DM、频道/thread 路由、频道 mention gating、threaded replies、Block Kit 审批按钮和澄清按钮/回复。创建 Slack App 时需要启用 Socket Mode，创建带 `connections:write` scope 的 app-level token，配置 bot scopes（例如 `app_mentions:read`、`chat:write`、`im:history` 以及按需启用的 channel/group history scopes），订阅 `app_mention`、`message.im` 和可选 channel/group message events，并启用 Interactivity。若要 DM bot，需要在 App Home 打开 Messages Tab 并允许用户从该 tab 发送消息；私有频道测试前需要先邀请 bot。`SLACK_ASSISTANT_SEND_TYPING_STATUS=false` 默认关闭，因为 Slack 普通消息没有真正的 typing indicator API。
+
 ## 能力
 
 - **ReAct Graph Runtime** — LangGraph4j 驱动 model -> tool -> observation 循环，并支持 interrupt/resume approval。
@@ -349,7 +361,7 @@ Transport -> Channel -> Channel Instance -> Scene -> Runtime Scope -> ReAct Grap
 | LLM | `spring.ai.openai.*`、`agent.auxiliary.*` |
 | Agent loop | `agent.graph.max-react-loops`、`agent.llm.*`、`agent.tool.*`、`agent.checkpoint.enabled` |
 | Context | `context.threshold-percent`、`context.context-length`、`context.model-context-lengths`、`context.tail-token-budget` |
-| Channels | `channel-bindings.*`、`channels.feishu.instances.*`、`tui.ws.*`、`chatbot.enabled` |
+| Channels | `channel-bindings.*`、`channels.feishu.instances.*`、`channels.telegram.instances.*`、`channels.slack.instances.*`、`tui.ws.*`、`chatbot.enabled` |
 | Scenes | `scenes.default-scene`、`scenes.configs.*.toolsets`、`allowed-tools`、`denied-tools`、`approval`、`backend`、`working-dir`、`memory`、`storage` |
 | Execution | `execution.backend.docker.*`、`execution.backend.idle-ttl-seconds` |
 | Web | `web.backend`、`web.proxy.*`、`BRAVE_SEARCH_API_KEY`、`TAVILY_API_KEY` |

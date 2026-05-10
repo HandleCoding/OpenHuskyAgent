@@ -5,6 +5,7 @@ public enum ChannelType {
     TUI("tui", "local TUI personal assistant"),
     FEISHU("feishu", "Feishu bot"),
     TELEGRAM("telegram", "Telegram bot"),
+    SLACK("slack", "Slack bot"),
     HTTP("http", "HTTP Chatbot");
 
     private final String name;

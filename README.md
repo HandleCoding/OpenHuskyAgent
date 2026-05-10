@@ -30,7 +30,7 @@ Husky can be used as:
 |----------|--------------|
 | Personal AI assistant | TUI, local files, terminal/process tools, browser tools, memory, approvals |
 | Online chatbot backend | HTTP SSE `/api/chat`, API key auth, per-user sessions, scene-filtered tools |
-| Enterprise assistant | Feishu multi-instance bots, channel bindings, knowledge sources, audit tags |
+| Enterprise assistant | Feishu, Telegram, and Slack multi-instance bots, channel bindings, knowledge sources, audit tags |
 | Agent platform | Layered Java modules, tool providers, scenes, hooks, runtime policies, MCP |
 
 ## Quick Start
@@ -307,6 +307,12 @@ Husky supports a disabled-by-default Telegram long-polling adapter with multiple
 
 Telegram v1 supports text messages, group mention gating, forum topic threads, typing indicators, inline approval buttons, and clarification buttons/replies. Long polling is single-consumer per bot token, so run only one Husky process per enabled Telegram token.
 
+### Slack Channel
+
+Husky supports a disabled-by-default Slack Socket Mode adapter with multiple bot instances under `channels.slack.instances.*`. Configure `SLACK_ASSISTANT_ENABLED=true`, `SLACK_ASSISTANT_BOT_TOKEN`, `SLACK_ASSISTANT_APP_TOKEN`, and `SLACK_ASSISTANT_BOT_USER_ID` so `channel-bindings.*` can route the bot to the intended scene. When Slack is enabled, the bot user id is required because Socket Mode routing should not silently fall back to the global default scene.
+
+Slack v1 supports text messages, DM and channel/thread routing, channel mention gating, threaded replies, Block Kit approval buttons, and clarification buttons/replies. Create a Slack app with Socket Mode enabled, an app-level token with `connections:write`, bot scopes such as `app_mentions:read`, `chat:write`, `im:history`, and the channel/group history scopes you enable, event subscriptions for `app_mention`, `message.im`, and optional channel/group message events, plus Interactivity enabled for Block Kit callbacks. To DM the bot, enable App Home -> Messages Tab and allow users to send messages from that tab. Invite the bot to private channels before testing there; `SLACK_ASSISTANT_SEND_TYPING_STATUS=false` by default because Slack normal messages do not have a true typing indicator API.
+
 ## Capabilities
 
 - **ReAct graph runtime** — LangGraph4j drives model -> tool -> observation loops with interrupt/resume approvals.
@@ -355,7 +361,7 @@ Most runtime defaults live in `service/src/main/resources/application.yml`.
 | LLM | `spring.ai.openai.*`, `agent.auxiliary.*` |
 | Agent loop | `agent.graph.max-react-loops`, `agent.llm.*`, `agent.tool.*`, `agent.checkpoint.enabled` |
 | Context | `context.threshold-percent`, `context.context-length`, `context.model-context-lengths`, `context.tail-token-budget` |
-| Channels | `channel-bindings.*`, `channels.feishu.instances.*`, `channels.telegram.instances.*`, `tui.ws.*`, `chatbot.enabled` |
+| Channels | `channel-bindings.*`, `channels.feishu.instances.*`, `channels.telegram.instances.*`, `channels.slack.instances.*`, `tui.ws.*`, `chatbot.enabled` |
 | Scenes | `scenes.default-scene`, `scenes.configs.*.toolsets`, `allowed-tools`, `denied-tools`, `approval`, `backend`, `working-dir`, `memory`, `storage` |
 | Execution | `execution.backend.docker.*`, `execution.backend.idle-ttl-seconds` |
 | Web | `web.backend`, `web.proxy.*`, `BRAVE_SEARCH_API_KEY`, `TAVILY_API_KEY` |

@@ -201,6 +201,12 @@ channel-bindings:
       scene-id: assistant
       enabled: ${TELEGRAM_ASSISTANT_ENABLED:false}
 
+    slack-assistant-bot:
+      channel-type: slack
+      platform-account-id: ${SLACK_ASSISTANT_BOT_USER_ID:}
+      scene-id: assistant
+      enabled: ${SLACK_ASSISTANT_ENABLED:false}
+
     http-chatbot:
       channel-type: http
       platform-account-id: chatbot
@@ -250,6 +256,23 @@ channels:
         show-tool-calls: ${TELEGRAM_ASSISTANT_SHOW_TOOL_CALLS:true}
         approval-timeout-seconds: ${TELEGRAM_ASSISTANT_APPROVAL_TIMEOUT_SECONDS:300}
         long-polling-timeout-seconds: ${TELEGRAM_ASSISTANT_LONG_POLLING_TIMEOUT_SECONDS:50}
+
+  slack:
+    instances:
+      assistant-bot:
+        enabled: ${SLACK_ASSISTANT_ENABLED:false}
+        bot-token: ${SLACK_ASSISTANT_BOT_TOKEN:}
+        app-token: ${SLACK_ASSISTANT_APP_TOKEN:}
+        bot-user-id: ${SLACK_ASSISTANT_BOT_USER_ID:}
+        bot-name: ${SLACK_ASSISTANT_BOT_NAME:}
+        team-id: ${SLACK_ASSISTANT_TEAM_ID:}
+        default-scene: assistant
+        mention-required-in-channel: ${SLACK_ASSISTANT_MENTION_REQUIRED_IN_CHANNEL:true}
+        group-session-scope: ${SLACK_ASSISTANT_GROUP_SESSION_SCOPE:THREAD}
+        show-tool-calls: ${SLACK_ASSISTANT_SHOW_TOOL_CALLS:true}
+        approval-timeout-seconds: ${SLACK_ASSISTANT_APPROVAL_TIMEOUT_SECONDS:300}
+        send-typing-status: ${SLACK_ASSISTANT_SEND_TYPING_STATUS:false}
+        reply-broadcast: ${SLACK_ASSISTANT_REPLY_BROADCAST:false}
 
 # Chatbot endpoint switch; runtime behavior is configured by scenes.configs.chatbot.
 chatbot:
