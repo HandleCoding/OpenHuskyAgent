@@ -11,13 +11,13 @@ import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.approval.ApprovalInfo;
 import io.github.huskyagent.infra.tool.approval.ApprovalRequest;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
+import org.bsc.langgraph4j.RunnableConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -26,12 +26,12 @@ class ApprovalNodeTest {
     @Test
     void interruptUsesQueueHeadToolMetadata() {
         ToolDefinition tool = approvalTool("terminal");
-        ApprovalNode node = new ApprovalNode(Map.of("terminal", tool), hooks());
+        ApprovalNode node = new ApprovalNode(hooks());
         ReActAgentState state = new ReActAgentState(Map.of(
                 ReActAgentState.TOOL_EXECUTION_REQUESTS,
                 List.of(toolCall("terminal", "{\"command\":\"rm -rf /tmp/a\"}"))));
 
-        var interruption = node.interrupt(AgentGraph.NODE_APPROVAL, state, null);
+        var interruption = node.interrupt(AgentGraph.NODE_APPROVAL, state, config(tool));
 
         assertTrue(interruption.isPresent());
         assertEquals("terminal", interruption.get().metadata(ApprovalInfo.TOOL_NAME_KEY).orElse(null));
@@ -42,13 +42,13 @@ class ApprovalNodeTest {
     @Test
     void interruptDoesNotSuspendWhenApprovalResultExists() {
         ToolDefinition tool = approvalTool("terminal");
-        ApprovalNode node = new ApprovalNode(Map.of("terminal", tool), hooks());
+        ApprovalNode node = new ApprovalNode(hooks());
         ReActAgentState state = new ReActAgentState(Map.of(
                 ReActAgentState.APPROVAL_RESULT, "APPROVED",
                 ReActAgentState.TOOL_EXECUTION_REQUESTS,
                 List.of(toolCall("terminal", "{}"))));
 
-        assertTrue(node.interrupt(AgentGraph.NODE_APPROVAL, state, null).isEmpty());
+        assertTrue(node.interrupt(AgentGraph.NODE_APPROVAL, state, config(tool)).isEmpty());
     }
 
     @Test
@@ -58,49 +58,57 @@ class ApprovalNodeTest {
                 JsonNodeFactory.instance.objectNode(),
                 args -> null,
                 args -> null);
-        ApprovalNode node = new ApprovalNode(Map.of("terminal", tool), hooks());
+        ApprovalNode node = new ApprovalNode(hooks());
         ReActAgentState state = new ReActAgentState(Map.of(
                 ReActAgentState.TOOL_EXECUTION_REQUESTS,
                 List.of(toolCall("terminal", "{\"command\":\"ls\"}"))));
 
-        assertTrue(node.interrupt(AgentGraph.NODE_APPROVAL, state, null).isEmpty());
-        Map<String, Object> update = node.apply(state, null).get();
+        assertTrue(node.interrupt(AgentGraph.NODE_APPROVAL, state, config(tool)).isEmpty());
+        Map<String, Object> update = node.apply(state, config(tool)).get();
 
         assertEquals("APPROVED", update.get(ReActAgentState.APPROVAL_RESULT));
     }
 
     @Test
     void applyDoesNotFailWhenApprovalResultExistsAndQueueIsEmpty() throws Exception {
-        ApprovalNode node = new ApprovalNode(Map.of(), hooks());
+        ApprovalNode node = new ApprovalNode(hooks());
         ReActAgentState state = new ReActAgentState(Map.of(ReActAgentState.APPROVAL_RESULT, "APPROVED"));
 
-        Map<String, Object> update = node.apply(state, null).get();
+        Map<String, Object> update = node.apply(state, config()).get();
 
         assertEquals(Map.of(), update);
     }
 
     @Test
     void missingQueueHeadFailsClearly() {
-        ApprovalNode node = new ApprovalNode(Map.of(), hooks());
+        ApprovalNode node = new ApprovalNode(hooks());
         ReActAgentState state = new ReActAgentState(Map.of());
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> node.interrupt(AgentGraph.NODE_APPROVAL, state, null));
+                () -> node.interrupt(AgentGraph.NODE_APPROVAL, state, config()));
 
         assertTrue(error.getMessage().contains("empty tool queue"));
     }
 
     @Test
     void missingToolDefinitionFailsClearly() {
-        ApprovalNode node = new ApprovalNode(Map.of(), hooks());
+        ApprovalNode node = new ApprovalNode(hooks());
         ReActAgentState state = new ReActAgentState(Map.of(
                 ReActAgentState.TOOL_EXECUTION_REQUESTS,
                 List.of(toolCall("missing", "{}"))));
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
-                () -> node.interrupt(AgentGraph.NODE_APPROVAL, state, null));
+                () -> node.interrupt(AgentGraph.NODE_APPROVAL, state, config()));
 
         assertTrue(error.getMessage().contains("could not find tool definition"));
+    }
+
+    private RunnableConfig config(ToolDefinition... tools) {
+        List<ToolDefinition> definitions = List.of(tools);
+        return RunnableConfig.builder()
+                .threadId("session-1")
+                .putMetadata(RequestToolContext.METADATA_KEY, RequestToolContext.of(definitions, List.of()))
+                .build();
     }
 
     private ToolDefinition approvalTool(String name) {

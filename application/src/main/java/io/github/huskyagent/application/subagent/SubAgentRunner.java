@@ -6,6 +6,7 @@ import io.github.huskyagent.application.session.RuntimeScope;
 import io.github.huskyagent.domain.capability.CapabilityView;
 import io.github.huskyagent.domain.graph.AgentGraph;
 import io.github.huskyagent.domain.graph.ReActAgentState;
+import io.github.huskyagent.domain.graph.RequestToolContext;
 import io.github.huskyagent.domain.hook.HookDataKeys;
 import io.github.huskyagent.domain.hook.HookEvent;
 import io.github.huskyagent.domain.hook.HookRegistry;
@@ -20,6 +21,7 @@ import io.github.huskyagent.infra.ai.DynamicPromptSnapshotCache;
 import io.github.huskyagent.infra.session.SessionContext;
 import io.github.huskyagent.infra.session.SessionScope;
 import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
+import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.ChannelType;
 import io.github.huskyagent.infra.channel.ConversationType;
@@ -55,6 +57,7 @@ public class SubAgentRunner {
     private final CapabilityVisibilityResolver capabilityVisibilityResolver;
     private final RuntimePolicyResolver runtimePolicyResolver;
     private final DynamicPromptSnapshotCache dynamicPromptSnapshotCache;
+    private final ToolCallbackFactory toolCallbackFactory;
 
     private final List<SubAgentMessage.ToolTraceEntry> toolTrace = new ArrayList<>();
 
@@ -98,7 +101,8 @@ public class SubAgentRunner {
                           String parentSessionId, ToolExecutionContext parentExecutionContext,
                           CapabilityVisibilityResolver capabilityVisibilityResolver,
                           RuntimePolicyResolver runtimePolicyResolver,
-                          DynamicPromptSnapshotCache dynamicPromptSnapshotCache) {
+                          DynamicPromptSnapshotCache dynamicPromptSnapshotCache,
+                          ToolCallbackFactory toolCallbackFactory) {
         this.sessionManager = sessionManager;
         this.agentGraph = agentGraph;
         this.config = config;
@@ -109,6 +113,7 @@ public class SubAgentRunner {
         this.capabilityVisibilityResolver = capabilityVisibilityResolver;
         this.runtimePolicyResolver = runtimePolicyResolver;
         this.dynamicPromptSnapshotCache = dynamicPromptSnapshotCache;
+        this.toolCallbackFactory = toolCallbackFactory;
     }
 
     public SubAgentMessage run() {
@@ -136,6 +141,9 @@ public class SubAgentRunner {
                     RunnableConfig runConfig = RunnableConfig.builder()
                             .threadId(childSessionId)
                             .putMetadata(DYNAMIC_PROMPT_TURN_ID_METADATA, turnId)
+                            .putMetadata(RequestToolContext.METADATA_KEY, buildRequestToolContext(childSessionId, childScope))
+                            .putMetadata("channelIdentity", childScope.getChannelIdentity())
+                            .putMetadata("principal", childScope.getPrincipal())
                             .build();
 
                     Map<String, Object> inputs = new HashMap<>();
@@ -200,6 +208,21 @@ public class SubAgentRunner {
         SubAgentExecutionException(Throwable cause) {
             super(cause);
         }
+    }
+
+    private RequestToolContext buildRequestToolContext(String sessionId, RuntimeScope scope) {
+        var runtimePolicy = scope.getRuntimePolicy();
+        var capabilityView = runtimePolicy.getCapabilityView();
+        var toolDefinitions = capabilityView.getVisibleTools();
+        var executionContext = new ToolExecutionContext(
+                sessionId,
+                scope.toSessionScope(),
+                toolDefinitions,
+                capabilityView.getVisibleToolsets(),
+                capabilityView.getVisibleSkillNames(),
+                capabilityView.getVisiblePromptSections());
+        return RequestToolContext.of(toolDefinitions,
+                toolCallbackFactory.build(toolDefinitions, sessionId, executionContext));
     }
 
     private RuntimeScope buildChildRuntimeScope(String childSessionId, SceneConfig sceneConfig, RuntimePolicy runtimePolicy) {

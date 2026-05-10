@@ -12,6 +12,7 @@ import io.github.huskyagent.infra.channel.Principal;
 import io.github.huskyagent.domain.context.ContextManager;
 import io.github.huskyagent.domain.graph.AgentGraph;
 import io.github.huskyagent.domain.graph.ReActAgentState;
+import io.github.huskyagent.domain.graph.RequestToolContext;
 import io.github.huskyagent.domain.hook.HookDataKeys;
 import io.github.huskyagent.domain.hook.HookEvent;
 import io.github.huskyagent.domain.hook.HookRegistry;
@@ -25,6 +26,8 @@ import io.github.huskyagent.domain.scene.SceneConfig;
 import io.github.huskyagent.infra.session.SessionScope;
 import io.github.huskyagent.infra.tool.approval.ApprovalInfo;
 import io.github.huskyagent.infra.tool.approval.ApprovalService;
+import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
+import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.async.AsyncGenerator;
@@ -68,6 +71,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
     private final io.github.huskyagent.infra.tool.todo.TodoStore todoStore;
     private final MultimodalMessageBuilder multimodalMessageBuilder;
     private final DynamicPromptSnapshotCache dynamicPromptSnapshotCache;
+    private final ToolCallbackFactory toolCallbackFactory;
 
     /**
      * Caches compiled graphs by runtime-policy fingerprint so scenes, principals,
@@ -242,9 +246,25 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
         return RunnableConfig.builder()
                 .threadId(sessionId)
                 .putMetadata(DYNAMIC_PROMPT_TURN_ID_METADATA, turnId)
+                .putMetadata(RequestToolContext.METADATA_KEY, buildRequestToolContext(sessionId, scope))
                 .putMetadata("channelIdentity", scope.getChannelIdentity())
                 .putMetadata("principal", scope.getPrincipal())
                 .build();
+    }
+
+    private RequestToolContext buildRequestToolContext(String sessionId, RuntimeScope scope) {
+        var runtimePolicy = scope.getRuntimePolicy();
+        var capabilityView = runtimePolicy.getCapabilityView();
+        var toolDefinitions = capabilityView.getVisibleTools();
+        var executionContext = new ToolExecutionContext(
+                sessionId,
+                scope.toSessionScope(),
+                toolDefinitions,
+                capabilityView.getVisibleToolsets(),
+                capabilityView.getVisibleSkillNames(),
+                capabilityView.getVisiblePromptSections());
+        return RequestToolContext.of(toolDefinitions,
+                toolCallbackFactory.build(toolDefinitions, sessionId, executionContext));
     }
 
     private Map<String, Object> buildInputs(AgentInput input) {

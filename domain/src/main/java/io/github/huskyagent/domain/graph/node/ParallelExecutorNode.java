@@ -1,6 +1,7 @@
 package io.github.huskyagent.domain.graph.node;
 
 import io.github.huskyagent.domain.graph.ReActAgentState;
+import io.github.huskyagent.domain.graph.RequestToolContext;
 import io.github.huskyagent.domain.graph.util.GraphUtils;
 import io.github.huskyagent.domain.hook.HookDataKeys;
 import io.github.huskyagent.domain.hook.HookEvent;
@@ -9,7 +10,6 @@ import io.github.huskyagent.domain.hook.HookResult;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.AsyncNodeActionWithConfig;
-import org.bsc.langgraph4j.spring.ai.tool.SpringAIToolService;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 
@@ -25,30 +25,21 @@ import static java.util.concurrent.CompletableFuture.completedFuture;
 @Slf4j
 public class ParallelExecutorNode {
 
-    private final SpringAIToolService toolService;
-    private final Set<String> approvalToolNames;
     private final Set<String> interruptToolNames;
-    private final Map<String, ToolDefinition> toolDefinitionMap;
     private final int maxToolRetries;
     private final int defaultToolTimeoutSeconds;
     private final HookRegistry hookRegistry;
     private final ExecutorService toolExecutor;
 
     public ParallelExecutorNode(Dependencies dependencies) {
-        this.toolService       = dependencies.toolService();
-        this.approvalToolNames = dependencies.approvalToolNames();
         this.interruptToolNames = dependencies.interruptToolNames() != null ? dependencies.interruptToolNames() : Set.of();
-        this.toolDefinitionMap = dependencies.toolDefinitionMap();
         this.maxToolRetries    = dependencies.maxToolRetries();
         this.defaultToolTimeoutSeconds = dependencies.defaultToolTimeoutSeconds();
         this.hookRegistry      = dependencies.hookRegistry();
         this.toolExecutor      = dependencies.toolExecutor();
     }
 
-    public record Dependencies(SpringAIToolService toolService,
-                               Set<String> approvalToolNames,
-                               Set<String> interruptToolNames,
-                               Map<String, ToolDefinition> toolDefinitionMap,
+    public record Dependencies(Set<String> interruptToolNames,
                                int maxToolRetries,
                                int defaultToolTimeoutSeconds,
                                HookRegistry hookRegistry,
@@ -69,12 +60,15 @@ public class ParallelExecutorNode {
             }
 
             String sessionId = config != null ? config.threadId().orElse(null) : null;
+            RequestToolContext requestToolContext = RequestToolContext.from(config);
 
             List<AssistantMessage.ToolCall> safeTools     = new ArrayList<>();
             List<AssistantMessage.ToolCall> approvalTools = new ArrayList<>();
             for (AssistantMessage.ToolCall call : allCalls) {
-                if (interruptToolNames.contains(call.name())
-                        || GraphUtils.requiresApproval(call, approvalToolNames, toolDefinitionMap)) {
+                boolean visibleInterruptTool = interruptToolNames.contains(call.name())
+                        && requestToolContext.toolDefinitionMap().containsKey(call.name());
+                if (visibleInterruptTool
+                        || GraphUtils.requiresApproval(call, requestToolContext.approvalToolNames(), requestToolContext.toolDefinitionMap())) {
                     approvalTools.add(call);
                 } else {
                     safeTools.add(call);
@@ -94,8 +88,8 @@ public class ParallelExecutorNode {
 
             CompletableFuture<ToolResponseMessage.ToolResponse>[] futures = safeTools.stream()
                     .map(call -> {
-                        Duration timeout = resolveToolTimeout(call, defaultTimeout);
-                        return CompletableFuture.supplyAsync(() -> executeToolCall(call, stateData, sessionId), toolExecutor)
+                        Duration timeout = resolveToolTimeout(call, defaultTimeout, requestToolContext.toolDefinitionMap());
+                        return CompletableFuture.supplyAsync(() -> executeToolCall(call, stateData, sessionId, requestToolContext), toolExecutor)
                                 .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
                                 .exceptionally(ex -> exceptionResponse(call, ex, timeout));
                     })
@@ -153,7 +147,8 @@ public class ParallelExecutorNode {
 
     private ToolResponseMessage.ToolResponse executeToolCall(AssistantMessage.ToolCall call,
                                                              Map<String, Object> stateData,
-                                                             String sessionId) {
+                                                             String sessionId,
+                                                             RequestToolContext requestToolContext) {
         String argsPreview = GraphUtils.truncate(call.arguments(), 200);
 
         Map<String, Object> beforeData = new HashMap<>();
@@ -176,7 +171,7 @@ public class ParallelExecutorNode {
         hookRegistry.fireAfter(HookEvent.TOOL_CALL_START, sessionId, startData);
 
         long start = System.currentTimeMillis();
-        ToolResponseMessage.ToolResponse resp = GraphUtils.executeSingleToolCall(toolService, call, stateData);
+        ToolResponseMessage.ToolResponse resp = GraphUtils.executeSingleToolCall(requestToolContext.toolService(), call, stateData);
         long duration = System.currentTimeMillis() - start;
         boolean failed = resp.responseData() != null && resp.responseData().contains("\"error\":true");
 
@@ -194,7 +189,8 @@ public class ParallelExecutorNode {
         return resp;
     }
 
-    private Duration resolveToolTimeout(AssistantMessage.ToolCall call, Duration defaultTimeout) {
+    private Duration resolveToolTimeout(AssistantMessage.ToolCall call, Duration defaultTimeout,
+                                        Map<String, ToolDefinition> toolDefinitionMap) {
         ToolDefinition definition = toolDefinitionMap.get(call.name());
         if (definition == null) {
             return defaultTimeout;

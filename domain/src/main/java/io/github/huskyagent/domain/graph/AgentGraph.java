@@ -3,7 +3,6 @@ package io.github.huskyagent.domain.graph;
 import io.github.huskyagent.domain.event.ChannelEventBus;
 import io.github.huskyagent.domain.graph.edge.*;
 import io.github.huskyagent.domain.graph.node.*;
-import io.github.huskyagent.domain.graph.util.GraphUtils;
 import io.github.huskyagent.domain.hook.HookRegistry;
 import io.github.huskyagent.domain.prompt.PromptBuilder;
 import io.github.huskyagent.domain.prompt.PromptContext;
@@ -18,19 +17,14 @@ import io.github.huskyagent.infra.context.TokenCounter;
 import io.github.huskyagent.infra.session.CheckpointStore;
 import io.github.huskyagent.infra.session.CheckpointStoreFactory;
 import io.github.huskyagent.infra.session.SessionScope;
-import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
-import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
-import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.*;
 import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.bsc.langgraph4j.spring.ai.serializer.jackson.SpringAIJacksonStateSerializer;
-import org.bsc.langgraph4j.spring.ai.tool.SpringAIToolService;
 import org.bsc.langgraph4j.utils.EdgeMappings;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
-import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -58,7 +52,6 @@ public class AgentGraph {
 
     private final org.springframework.ai.chat.model.ChatModel chatModel;
     private final PromptBuilder promptBuilder;
-    private final ToolCallbackFactory toolCallbackFactory;
     private final LlmRetryPolicy llmRetryPolicy;
     private final LlmUsageDetailsExtractor usageDetailsExtractor;
     private final DynamicPromptSnapshotCache dynamicPromptSnapshotCache;
@@ -78,27 +71,21 @@ public class AgentGraph {
             HookRegistry hookRegistryOverride,
             ChannelIdentity channelIdentity, Principal principal) throws GraphStateException {
 
-        List<ToolDefinition> toolDefinitions = runtimePolicy.getCapabilityView().getVisibleTools();
         HookRegistry effectiveHookRegistry = hookRegistryOverride != null ? hookRegistryOverride : hookRegistry;
 
-        return buildGraphInternal(sessionId, workingDirectory, sessionScope, toolDefinitions, systemPromptOverride,
+        return buildGraphInternal(sessionId, workingDirectory, sessionScope, systemPromptOverride,
                 effectiveHookRegistry, runtimePolicy, channelIdentity, principal);
     }
 
     private CompiledGraph<ReActAgentState> buildGraphInternal(String sessionId,
                                                              Path workingDirectory,
                                                              SessionScope sessionScope,
-                                                             List<ToolDefinition> toolDefinitions,
                                                              String systemPromptOverride,
                                                              HookRegistry effectiveHookRegistry,
                                                              RuntimePolicy runtimePolicy,
                                                              ChannelIdentity channelIdentity, Principal principal) throws GraphStateException {
 
-        List<ToolCallback> toolCallbacks     = toolCallbackFactory.build(toolDefinitions, sessionId,
-                buildToolExecutionContext(sessionId, sessionScope, runtimePolicy));
-        SpringAIToolService toolService      = new SpringAIToolService(toolCallbacks);
-
-        log.debug("Building graph: sessionId={}, tools={}", sessionId, toolDefinitions.size());
+        log.debug("Building graph: sessionId={}", sessionId);
 
         PromptContext promptContext = PromptContext.of(sessionId, workingDirectory)
                 .runtimePolicy(runtimePolicy)
@@ -114,19 +101,10 @@ public class AgentGraph {
                         .internalToolExecutionEnabled(false)
                         .build())
                 .defaultSystem(systemPrompt)
-                .defaultToolCallbacks(toolCallbacks)
                 .build();
-
-        Set<String> approvalToolNames = GraphUtils.collectApprovalToolNames(toolDefinitions);
-        Map<String, ToolDefinition> toolDefinitionMap = new HashMap<>();
-        for (ToolDefinition def : toolDefinitions) toolDefinitionMap.put(def.name(), def);
 
         StateGraph<ReActAgentState> graph = buildStateGraph(new GraphBuildContext(
                 chatClient,
-                toolService,
-                toolDefinitions,
-                approvalToolNames,
-                toolDefinitionMap,
                 effectiveHookRegistry,
                 promptContext,
                 systemPrompt));
@@ -138,18 +116,6 @@ public class AgentGraph {
                 .recursionLimit(10000)
                 .build());
     }
-
-    private ToolExecutionContext buildToolExecutionContext(String sessionId, SessionScope sessionScope, RuntimePolicy runtimePolicy) {
-        var capabilityView = runtimePolicy.getCapabilityView();
-        return new ToolExecutionContext(
-                sessionId,
-                sessionScope,
-                capabilityView.getVisibleTools(),
-                capabilityView.getVisibleToolsets(),
-                capabilityView.getVisibleSkillNames(),
-                capabilityView.getVisiblePromptSections());
-    }
-
 
     private StateGraph<ReActAgentState> buildStateGraph(GraphBuildContext context) throws GraphStateException {
 
@@ -168,17 +134,12 @@ public class AgentGraph {
                 context.systemPrompt(),
                 tokenCounter);
         var parallelDependencies = new ParallelExecutorNode.Dependencies(
-                context.toolService(),
-                context.approvalToolNames(),
                 USER_INTERRUPT_TOOL_NAMES,
-                context.toolDefinitionMap(),
                 agentConfig.getTool().getMaxRetries(),
                 agentConfig.getTool().getExecutionTimeoutSeconds(),
                 context.effectiveHookRegistry(),
                 toolExecutor);
         var executeToolDependencies = new ExecuteToolNode.Dependencies(
-                context.toolService(),
-                context.toolDefinitionMap(),
                 agentConfig.getTool().getMaxRetries(),
                 agentConfig.getTool().getExecutionTimeoutSeconds(),
                 context.effectiveHookRegistry());
@@ -186,8 +147,9 @@ public class AgentGraph {
         graph.addNode(NODE_MODEL,             new CallModelNode(modelDependencies).build());
         graph.addNode(NODE_PARALLEL_EXECUTOR, new ParallelExecutorNode(parallelDependencies).build());
         graph.addNode(NODE_DISPATCHER,        new DispatchToolsNode(USER_INTERRUPT_TOOL_NAMES).build());
-        graph.addNode(NODE_APPROVAL,          new ApprovalNode(context.toolDefinitionMap(), context.effectiveHookRegistry()));
+        graph.addNode(NODE_APPROVAL,          new ApprovalNode(context.effectiveHookRegistry()));
         graph.addNode(NODE_EXECUTE_TOOL,      new ExecuteToolNode(executeToolDependencies).build());
+        graph.addNode("clarify", new UserInterruptNode("clarify", ReActAgentState.CLARIFY_RESULT, context.effectiveHookRegistry()));
         graph.addEdge(START, NODE_MODEL);
 
         // ── model → parallel_executor ─────────────────────────────────────────
@@ -209,14 +171,11 @@ public class AgentGraph {
                 .toEND()
                 .to(NODE_APPROVAL);
 
-        if (context.toolDefinitionMap().containsKey("clarify")) {
-            graph.addNode("clarify", new UserInterruptNode("clarify", ReActAgentState.CLARIFY_RESULT, context.effectiveHookRegistry()));
-            graph.addConditionalEdges("clarify", new UserInterruptEdge(ReActAgentState.CLARIFY_RESULT).build(),
-                    EdgeMappings.builder()
-                            .to(NODE_MODEL, UserInterruptEdge.LABEL_ANSWERED)
-                            .build());
-            dispatchMappingBuilder.to("clarify");
-        }
+        graph.addConditionalEdges("clarify", new UserInterruptEdge(ReActAgentState.CLARIFY_RESULT).build(),
+                EdgeMappings.builder()
+                        .to(NODE_MODEL, UserInterruptEdge.LABEL_ANSWERED)
+                        .build());
+        dispatchMappingBuilder.to("clarify");
 
         graph.addConditionalEdges(NODE_EXECUTE_TOOL, new AfterToolEdge().build(),
                 EdgeMappings.builder()
@@ -237,10 +196,6 @@ public class AgentGraph {
     }
 
     private record GraphBuildContext(ChatClient chatClient,
-                                     SpringAIToolService toolService,
-                                     List<ToolDefinition> toolDefinitions,
-                                     Set<String> approvalToolNames,
-                                     Map<String, ToolDefinition> toolDefinitionMap,
                                      HookRegistry effectiveHookRegistry,
                                      PromptContext promptContext,
                                      String systemPrompt) {

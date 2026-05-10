@@ -25,10 +25,10 @@ class ParallelExecutorNodeTest {
         ToolDefinition tool = ToolDefinition.of("slow_tool", "Slow", Toolset.CORE, (com.fasterxml.jackson.databind.JsonNode) null, args -> null)
             .withTimeout(args -> Duration.ofSeconds(((Number) args.get("timeout")).longValue()));
         ParallelExecutorNode node = new ParallelExecutorNode(new ParallelExecutorNode.Dependencies(
-                null, Set.of(), Set.of(), Map.of("slow_tool", tool), 3, 30, null, testExecutor));
+                Set.of(), 3, 30, null, testExecutor));
         AssistantMessage.ToolCall call = new AssistantMessage.ToolCall("call-1", "function", "slow_tool", "{\"timeout\":5}");
 
-        Duration timeout = invokeResolveToolTimeout(node, call, Duration.ofSeconds(30));
+        Duration timeout = invokeResolveToolTimeout(node, call, Duration.ofSeconds(30), Map.of("slow_tool", tool));
 
         assertEquals(Duration.ofSeconds(5), timeout);
     }
@@ -36,7 +36,7 @@ class ParallelExecutorNodeTest {
     @Test
     void timeoutResponseUsesToolSpecificDuration() throws Exception {
         ParallelExecutorNode node = new ParallelExecutorNode(new ParallelExecutorNode.Dependencies(
-                null, Set.of(), Set.of(), Map.of(), 3, 30, null, testExecutor));
+                Set.of(), 3, 30, null, testExecutor));
         AssistantMessage.ToolCall call = new AssistantMessage.ToolCall("call-1", "function", "slow_tool", "{}");
 
         ToolResponseMessage.ToolResponse response = invokeTimeoutResponse(node, call, Duration.ofSeconds(7));
@@ -47,10 +47,10 @@ class ParallelExecutorNodeTest {
     }
 
     @SuppressWarnings("unchecked")
-    private Duration invokeResolveToolTimeout(ParallelExecutorNode node, AssistantMessage.ToolCall call, Duration defaultTimeout) throws Exception {
-        Method method = ParallelExecutorNode.class.getDeclaredMethod("resolveToolTimeout", AssistantMessage.ToolCall.class, Duration.class);
+    private Duration invokeResolveToolTimeout(ParallelExecutorNode node, AssistantMessage.ToolCall call, Duration defaultTimeout, Map<String, ToolDefinition> tools) throws Exception {
+        Method method = ParallelExecutorNode.class.getDeclaredMethod("resolveToolTimeout", AssistantMessage.ToolCall.class, Duration.class, Map.class);
         method.setAccessible(true);
-        return (Duration) method.invoke(node, call, defaultTimeout);
+        return (Duration) method.invoke(node, call, defaultTimeout, tools);
     }
 
     private ToolResponseMessage.ToolResponse invokeTimeoutResponse(ParallelExecutorNode node, AssistantMessage.ToolCall call, Duration timeout) throws Exception {

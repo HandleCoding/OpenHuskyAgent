@@ -2,7 +2,11 @@ package io.github.huskyagent.domain.graph.edge;
 
 import io.github.huskyagent.domain.graph.AgentGraph;
 import io.github.huskyagent.domain.graph.ReActAgentState;
+import io.github.huskyagent.domain.graph.RequestToolContext;
 import io.github.huskyagent.domain.graph.node.DispatchToolsNode;
+import io.github.huskyagent.infra.tool.Toolset;
+import io.github.huskyagent.infra.tool.registry.ToolDefinition;
+import org.bsc.langgraph4j.RunnableConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
@@ -28,7 +32,7 @@ class SerialApprovalFlowTest {
                 .build()
                 .apply(new ReActAgentState(Map.of(
                         "messages", List.of(new AssistantMessage("test")),
-                        ReActAgentState.TOOL_EXECUTION_REQUESTS, List.of(second))), null)
+                        ReActAgentState.TOOL_EXECUTION_REQUESTS, List.of(second))), config("process"))
                 .get();
 
         assertEquals("continue", command.gotoNode());
@@ -62,13 +66,23 @@ class SerialApprovalFlowTest {
 
         Map<String, Object> clarifyFirst = dispatcher.build().apply(new ReActAgentState(Map.of(
                 "messages", List.of(new AssistantMessage("test")),
-                ReActAgentState.TOOL_EXECUTION_REQUESTS, List.of(clarify, terminal))), null).get();
+                ReActAgentState.TOOL_EXECUTION_REQUESTS, List.of(clarify, terminal))), config("clarify", "terminal")).get();
         Map<String, Object> approvalFirst = dispatcher.build().apply(new ReActAgentState(Map.of(
                 "messages", List.of(new AssistantMessage("test")),
-                ReActAgentState.TOOL_EXECUTION_REQUESTS, List.of(terminal, clarify))), null).get();
+                ReActAgentState.TOOL_EXECUTION_REQUESTS, List.of(terminal, clarify))), config("clarify", "terminal")).get();
 
         assertEquals("clarify", clarifyFirst.get(ReActAgentState.NEXT_ACTION));
         assertEquals(AgentGraph.NODE_APPROVAL, approvalFirst.get(ReActAgentState.NEXT_ACTION));
+    }
+
+    private RunnableConfig config(String... toolNames) {
+        List<ToolDefinition> definitions = java.util.Arrays.stream(toolNames)
+                .map(name -> ToolDefinition.of(name, name, Toolset.CORE, (com.fasterxml.jackson.databind.JsonNode) null, args -> null))
+                .toList();
+        return RunnableConfig.builder()
+                .threadId("session-1")
+                .putMetadata(RequestToolContext.METADATA_KEY, RequestToolContext.of(definitions, List.of()))
+                .build();
     }
 
     private AssistantMessage.ToolCall toolCall(String name, String args) {

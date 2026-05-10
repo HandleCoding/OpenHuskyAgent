@@ -1,6 +1,7 @@
 package io.github.huskyagent.domain.graph.node;
 
 import io.github.huskyagent.domain.graph.ReActAgentState;
+import io.github.huskyagent.domain.graph.RequestToolContext;
 import io.github.huskyagent.domain.graph.util.GraphUtils;
 import io.github.huskyagent.domain.hook.HookDataKeys;
 import io.github.huskyagent.domain.hook.HookEvent;
@@ -9,7 +10,6 @@ import io.github.huskyagent.domain.hook.HookResult;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.AsyncNodeActionWithConfig;
-import org.bsc.langgraph4j.spring.ai.tool.SpringAIToolService;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 
@@ -26,23 +26,17 @@ import static java.util.concurrent.CompletableFuture.failedFuture;
 @Slf4j
 public class ExecuteToolNode {
 
-    private final SpringAIToolService toolService;
-    private final Map<String, ToolDefinition> toolDefinitionMap;
     private final int maxToolRetries;
     private final int defaultToolTimeoutSeconds;
     private final HookRegistry hookRegistry;
 
     public ExecuteToolNode(Dependencies dependencies) {
-        this.toolService = dependencies.toolService();
-        this.toolDefinitionMap = dependencies.toolDefinitionMap();
         this.maxToolRetries = dependencies.maxToolRetries();
         this.defaultToolTimeoutSeconds = dependencies.defaultToolTimeoutSeconds();
         this.hookRegistry = dependencies.hookRegistry();
     }
 
-    public record Dependencies(SpringAIToolService toolService,
-                               Map<String, ToolDefinition> toolDefinitionMap,
-                               int maxToolRetries,
+    public record Dependencies(int maxToolRetries,
                                int defaultToolTimeoutSeconds,
                                HookRegistry hookRegistry) {
     }
@@ -54,7 +48,8 @@ public class ExecuteToolNode {
                 return failedFuture(new IllegalStateException("Tool queue is empty; cannot execute"));
             }
             AssistantMessage.ToolCall toolCall = requests.get(0);
-            ToolDefinition toolDefinition = toolDefinitionMap.get(toolCall.name());
+            RequestToolContext requestToolContext = RequestToolContext.from(config);
+            ToolDefinition toolDefinition = requestToolContext.toolDefinitionMap().get(toolCall.name());
             if (toolDefinition == null) {
                 return failedFuture(new IllegalStateException("Execution node could not find tool definition: " + toolCall.name()));
             }
@@ -103,7 +98,7 @@ public class ExecuteToolNode {
             Duration timeout = resolveToolTimeout(toolName, toolDefinition, toolCall,
                     Duration.ofSeconds(Math.max(1, defaultToolTimeoutSeconds)));
 
-            return toolService.executeFunctions(List.of(toolCall), state.data(), "messages")
+            return requestToolContext.toolService().executeFunctions(List.of(toolCall), state.data(), "messages")
                     .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
                     .handle((command, ex) -> {
                         long duration = System.currentTimeMillis() - startTime;

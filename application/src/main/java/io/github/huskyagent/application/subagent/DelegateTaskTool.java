@@ -47,6 +47,7 @@ public class DelegateTaskTool implements ToolProvider {
     private final CapabilityVisibilityResolver capabilityVisibilityResolver;
     private final RuntimePolicyResolver runtimePolicyResolver;
     private final DynamicPromptSnapshotCache dynamicPromptSnapshotCache;
+    private final ToolCallbackFactory toolCallbackFactory;
 
     public DelegateTaskTool(ObjectProvider<AgentGraph> agentGraphProvider,
                             SessionManager sessionManager,
@@ -54,7 +55,8 @@ public class DelegateTaskTool implements ToolProvider {
                             SubAgentConfig subAgentConfig,
                             CapabilityVisibilityResolver capabilityVisibilityResolver,
                             RuntimePolicyResolver runtimePolicyResolver,
-                            DynamicPromptSnapshotCache dynamicPromptSnapshotCache) {
+                            DynamicPromptSnapshotCache dynamicPromptSnapshotCache,
+                            ToolCallbackFactory toolCallbackFactory) {
         this.agentGraphProvider = agentGraphProvider;
         this.sessionManager = sessionManager;
         this.hookRegistry = hookRegistry;
@@ -62,6 +64,7 @@ public class DelegateTaskTool implements ToolProvider {
         this.capabilityVisibilityResolver = capabilityVisibilityResolver;
         this.runtimePolicyResolver = runtimePolicyResolver;
         this.dynamicPromptSnapshotCache = dynamicPromptSnapshotCache;
+        this.toolCallbackFactory = toolCallbackFactory;
     }
 
     @Override
@@ -270,7 +273,7 @@ public class DelegateTaskTool implements ToolProvider {
         SubAgentRunner runner = new SubAgentRunner(
                 sessionManager, agentGraphProvider.getObject(), subAgentConfig,
                 task, queue, parentSessionId, executionContext,
-                capabilityVisibilityResolver, runtimePolicyResolver, dynamicPromptSnapshotCache);
+                capabilityVisibilityResolver, runtimePolicyResolver, dynamicPromptSnapshotCache, toolCallbackFactory);
 
         CompletableFuture<SubAgentMessage> future = CompletableFuture.supplyAsync(runner::run);
         SubAgentMessage finalMsg = pollQueueUntilDone(queue, future, parentSessionId, timeoutSeconds, task.taskIndex());
@@ -294,7 +297,7 @@ public class DelegateTaskTool implements ToolProvider {
             SubAgentRunner runner = new SubAgentRunner(
                     sessionManager, agentGraphProvider.getObject(), subAgentConfig,
                     tasks.get(i), queue, parentSessionId, executionContext,
-                    capabilityVisibilityResolver, runtimePolicyResolver, dynamicPromptSnapshotCache);
+                    capabilityVisibilityResolver, runtimePolicyResolver, dynamicPromptSnapshotCache, toolCallbackFactory);
             runners.add(runner);
             final int taskIndex = i;
             futures.add(CompletableFuture.supplyAsync(runner::run, executor)

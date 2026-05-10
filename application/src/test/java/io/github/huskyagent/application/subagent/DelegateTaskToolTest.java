@@ -17,7 +17,7 @@ class DelegateTaskToolTest {
     void exposesModelControlledTimeoutParameter() {
         SubAgentConfig config = new SubAgentConfig();
         config.setChildTimeoutSeconds(600);
-        DelegateTaskTool tool = new DelegateTaskTool(null, null, null, config, null, null, null);
+        DelegateTaskTool tool = new DelegateTaskTool(null, null, null, config, null, null, null, null);
 
         ToolDefinition definition = tool.getTools().get(0);
 
@@ -29,7 +29,7 @@ class DelegateTaskToolTest {
     void resolvesToolTimeoutFromTimeoutSecondsArgument() {
         SubAgentConfig config = new SubAgentConfig();
         config.setChildTimeoutSeconds(600);
-        DelegateTaskTool tool = new DelegateTaskTool(null, null, null, config, null, null, null);
+        DelegateTaskTool tool = new DelegateTaskTool(null, null, null, config, null, null, null, null);
         ToolDefinition definition = tool.getTools().get(0);
 
         Duration timeout = definition.resolveTimeout(Map.of("timeout_seconds", 900), Duration.ofSeconds(120));
@@ -41,7 +41,7 @@ class DelegateTaskToolTest {
     void resolvesDefaultToolTimeoutFromSubAgentConfig() {
         SubAgentConfig config = new SubAgentConfig();
         config.setChildTimeoutSeconds(600);
-        DelegateTaskTool tool = new DelegateTaskTool(null, null, null, config, null, null, null);
+        DelegateTaskTool tool = new DelegateTaskTool(null, null, null, config, null, null, null, null);
         ToolDefinition definition = tool.getTools().get(0);
 
         Duration timeout = definition.resolveTimeout(Map.of(), Duration.ofSeconds(120));

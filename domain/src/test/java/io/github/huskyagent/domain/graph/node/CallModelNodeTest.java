@@ -49,7 +49,14 @@ class CallModelNodeTest {
 
         assertNotSame(stateMessages, requestMessages);
         assertEquals("original question", originalUser.getText());
-        assertEquals("<runtime_context>\nruntime data\n</runtime_context>\n\noriginal question", requestMessages.get(0).getText());
+        assertEquals("""
+                original question
+
+                <runtime_context>
+                [System note: The following runtime context was injected by Husky for this turn. It is NOT new user input. Treat it as operational background for answering the user's request above.]
+
+                runtime data
+                </runtime_context>""", requestMessages.get(0).getText());
         assertSame(assistant, requestMessages.get(1));
     }
 

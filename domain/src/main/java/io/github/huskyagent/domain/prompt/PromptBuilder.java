@@ -1,16 +1,11 @@
 package io.github.huskyagent.domain.prompt;
 
-import io.github.huskyagent.domain.capability.CapabilityView;
 import io.github.huskyagent.domain.prompt.section.*;
 import io.github.huskyagent.infra.knowledge.KnowledgeManager;
 import io.github.huskyagent.infra.memory.MemoryManager;
 import io.github.huskyagent.infra.mcp.McpServerConnector;
-import io.github.huskyagent.infra.mcp.McpToolNames;
 import io.github.huskyagent.infra.skill.SkillManager;
-import io.github.huskyagent.infra.tool.Toolset;
-import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import io.github.huskyagent.infra.tool.todo.TodoStore;
-import io.modelcontextprotocol.spec.McpSchema;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -91,13 +86,7 @@ public class PromptBuilder {
 
         registerSection(new ContextFileSection(contextFileLoader));
 
-        registerSection(new ToolSection());
-
         registerSection(new ToolUseEnforcementSection(modelName, toolUseEnforcementConfig));
-
-        McpSection mcpSection = new McpSection();
-        mcpSection.setDescriptionSupplier(context -> buildMcpToolsDescription(context));
-        registerSection(mcpSection);
 
         registerSection(new TodoSection(todoStore));
 
@@ -240,43 +229,5 @@ public class PromptBuilder {
         };
 
         abstract boolean includes(PromptSection section);
-    }
-
-    private String buildMcpToolsDescription(PromptContext context) {
-        List<ToolDefinition> visibleTools = visibleMcpTools(context);
-        if (visibleTools.isEmpty()) {
-            return "";
-        }
-
-        StringBuilder sb = new StringBuilder();
-        visibleTools.stream()
-                .collect(java.util.stream.Collectors.groupingBy(this::mcpServerName, java.util.LinkedHashMap::new, java.util.stream.Collectors.toList()))
-                .forEach((serverName, tools) -> {
-                    sb.append("### Server: ").append(serverName).append("\n");
-                    for (ToolDefinition tool : tools) {
-                        sb.append("- **").append(tool.name()).append("**: ");
-                        sb.append(tool.description() != null ? tool.description() : "No description");
-                        sb.append("\n");
-                    }
-                    sb.append("\n");
-                });
-        return sb.toString();
-    }
-
-    private List<ToolDefinition> visibleMcpTools(PromptContext context) {
-        CapabilityView capabilityView = context.getRuntimePolicy().getCapabilityView();
-        if (capabilityView == null || capabilityView.getVisibleTools() == null) {
-            return List.of();
-        }
-        return capabilityView.getVisibleTools().stream()
-                .filter(tool -> tool.toolset() == Toolset.MCP)
-                .sorted(Comparator.comparing(ToolDefinition::name))
-                .toList();
-    }
-
-    private String mcpServerName(ToolDefinition tool) {
-        String name = tool.name();
-        String serverName = McpToolNames.serverName(name);
-        return serverName != null ? serverName : "unknown";
     }
 }

@@ -2,6 +2,7 @@ package io.github.huskyagent.domain.graph.node;
 
 import io.github.huskyagent.domain.graph.AgentGraph;
 import io.github.huskyagent.domain.graph.ReActAgentState;
+import io.github.huskyagent.domain.graph.RequestToolContext;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.AsyncNodeActionWithConfig;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -32,7 +33,9 @@ public class DispatchToolsNode {
 
             if (!existing.isEmpty()) {
                 String toolName = existing.get(0).name();
-                String nextNode = interruptToolNames.contains(toolName)
+                boolean visibleInterruptTool = interruptToolNames.contains(toolName)
+                        && RequestToolContext.from(config).toolDefinitionMap().containsKey(toolName);
+                String nextNode = visibleInterruptTool
                         ? toolName
                         : AgentGraph.NODE_APPROVAL;
                 log.info("[action_dispatcher] currentTool={}, next={}", toolName, nextNode);

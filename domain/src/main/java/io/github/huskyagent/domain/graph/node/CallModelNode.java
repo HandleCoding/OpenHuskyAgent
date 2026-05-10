@@ -2,6 +2,7 @@ package io.github.huskyagent.domain.graph.node;
 
 import io.github.huskyagent.domain.event.ChannelEventBus;
 import io.github.huskyagent.domain.graph.ReActAgentState;
+import io.github.huskyagent.domain.graph.RequestToolContext;
 import io.github.huskyagent.domain.graph.util.GraphUtils;
 import io.github.huskyagent.domain.hook.HookDataKeys;
 import io.github.huskyagent.domain.hook.HookEvent;
@@ -97,6 +98,7 @@ public class CallModelNode {
                     identity, principalVal, messages);
             String dynamicSystemPrompt = dynamicPromptSnapshot.prompt();
             String systemPrompt = stableSystemPrompt == null ? "" : stableSystemPrompt;
+            RequestToolContext requestToolContext = RequestToolContext.from(config);
             List<Message> requestMessages = withDynamicSystemPrompt(messages, dynamicSystemPrompt);
             int estimatedHistoryTokens = estimateMessages(messages);
             int estimatedRequestTokens = estimateMessages(requestMessages);
@@ -159,6 +161,7 @@ public class CallModelNode {
                     try {
                         chatClient.prompt()
                                 .messages(requestMessages)
+                                .toolCallbacks(requestToolContext.toolCallbacks())
                                 .stream()
                                 .chatResponse()
                                 .doOnNext(chunk -> {
@@ -376,6 +379,11 @@ public class CallModelNode {
 
     private static String enrichUserText(String userText, String dynamicPrompt) {
         String text = userText == null ? "" : userText;
-        return "<runtime_context>\n" + dynamicPrompt.trim() + "\n</runtime_context>\n\n" + text;
+        String runtimeContext = "<runtime_context>\n"
+                + "[System note: The following runtime context was injected by Husky for this turn. "
+                + "It is NOT new user input. Treat it as operational background for answering the user's request above.]\n\n"
+                + dynamicPrompt.trim()
+                + "\n</runtime_context>";
+        return text.isBlank() ? runtimeContext : text + "\n\n" + runtimeContext;
     }
 }

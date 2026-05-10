@@ -30,11 +30,9 @@ class ApprovalNode
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
-    private final Map<String, ToolDefinition> toolDefinitionMap;
     private final HookRegistry hookRegistry;
 
-    ApprovalNode(Map<String, ToolDefinition> toolDefinitionMap, HookRegistry hookRegistry) {
-        this.toolDefinitionMap = toolDefinitionMap;
+    ApprovalNode(HookRegistry hookRegistry) {
         this.hookRegistry = hookRegistry;
     }
 
@@ -46,13 +44,13 @@ class ApprovalNode
         String sessionId = config != null ? config.threadId().orElse(null) : null;
         String decision = state.approvalResult().orElse("");
         if (!decision.isEmpty()) {
-            currentToolIfPresent(state).ifPresent(current -> hookRegistry.fireAfter(HookEvent.APPROVAL_AFTER, sessionId,
+            currentToolIfPresent(state, config).ifPresent(current -> hookRegistry.fireAfter(HookEvent.APPROVAL_AFTER, sessionId,
                     Map.of(HookDataKeys.TOOL_NAME, current.name(),
                            HookDataKeys.APPROVAL_DECISION, decision)));
             return completedFuture(Map.of());
         }
 
-        CurrentTool current = currentTool(state);
+        CurrentTool current = currentTool(state, config);
         log.debug("[{}] Approval not required; allowlist or approvalChecker allowed it, injecting APPROVED", current.name());
         return completedFuture(Map.of(ReActAgentState.APPROVAL_RESULT, "APPROVED"));
     }
@@ -64,7 +62,7 @@ class ApprovalNode
         String sessionId = config != null ? config.threadId().orElse(null) : null;
 
         // ── APPROVAL_BEFORE Hook ──────────────────────────────────────────────
-        CurrentTool current = currentTool(state);
+        CurrentTool current = currentTool(state, config);
         String toolArgs = current.call().arguments();
 
         HookResult beforeResult = hookRegistry.fireBefore(
@@ -103,26 +101,26 @@ class ApprovalNode
                 .build());
     }
 
-    private CurrentTool currentTool(ReActAgentState state) {
+    private CurrentTool currentTool(ReActAgentState state, RunnableConfig config) {
         List<AssistantMessage.ToolCall> requests = state.toolExecutionRequests();
         if (requests.isEmpty()) {
             throw new IllegalStateException("Approval node executed with an empty tool queue");
         }
         AssistantMessage.ToolCall call = requests.get(0);
-        ToolDefinition definition = toolDefinitionMap.get(call.name());
+        ToolDefinition definition = RequestToolContext.from(config).toolDefinitionMap().get(call.name());
         if (definition == null) {
             throw new IllegalStateException("Approval node could not find tool definition: " + call.name());
         }
         return new CurrentTool(call.name(), call, definition);
     }
 
-    private Optional<CurrentTool> currentToolIfPresent(ReActAgentState state) {
+    private Optional<CurrentTool> currentToolIfPresent(ReActAgentState state, RunnableConfig config) {
         List<AssistantMessage.ToolCall> requests = state.toolExecutionRequests();
         if (requests.isEmpty()) {
             return Optional.empty();
         }
         AssistantMessage.ToolCall call = requests.get(0);
-        ToolDefinition definition = toolDefinitionMap.get(call.name());
+        ToolDefinition definition = RequestToolContext.from(config).toolDefinitionMap().get(call.name());
         if (definition == null) {
             return Optional.empty();
         }

@@ -2,10 +2,12 @@ package io.github.huskyagent.domain.graph.node;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import io.github.huskyagent.domain.graph.ReActAgentState;
+import io.github.huskyagent.domain.graph.RequestToolContext;
 import io.github.huskyagent.domain.hook.HookRegistry;
 import io.github.huskyagent.domain.hook.HookResult;
 import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
+import org.bsc.langgraph4j.RunnableConfig;
 import org.bsc.langgraph4j.action.Command;
 import org.bsc.langgraph4j.spring.ai.tool.SpringAIToolService;
 import org.junit.jupiter.api.Test;
@@ -15,6 +17,7 @@ import org.springframework.ai.chat.messages.ToolResponseMessage;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -32,8 +35,6 @@ class ExecuteToolNodeTest {
         when(toolService.executeFunctions(anyList(), anyMap(), eq("messages")))
                 .thenReturn(CompletableFuture.completedFuture(new Command(Map.of("messages", response))));
         ExecuteToolNode node = new ExecuteToolNode(new ExecuteToolNode.Dependencies(
-                toolService,
-                Map.of("terminal", tool("terminal"), "another", tool("another")),
                 3,
                 30,
                 allowHooks()));
@@ -41,7 +42,7 @@ class ExecuteToolNodeTest {
                 ReActAgentState.APPROVAL_RESULT, "APPROVED",
                 ReActAgentState.TOOL_EXECUTION_REQUESTS, List.of(first, second)));
 
-        Map<String, Object> update = node.build().apply(state, null).get();
+        Map<String, Object> update = node.build().apply(state, config(toolService, tool("terminal"), tool("another"))).get();
 
         assertEquals(List.of(second), update.get(ReActAgentState.TOOL_EXECUTION_REQUESTS));
         assertEquals("", update.get(ReActAgentState.APPROVAL_RESULT));
@@ -52,11 +53,11 @@ class ExecuteToolNodeTest {
     @Test
     void missingDefinitionFailsClearly() {
         ExecuteToolNode node = new ExecuteToolNode(new ExecuteToolNode.Dependencies(
-                mock(SpringAIToolService.class), Map.of(), 3, 30, allowHooks()));
+                3, 30, allowHooks()));
         ReActAgentState state = new ReActAgentState(Map.of(
                 ReActAgentState.TOOL_EXECUTION_REQUESTS, List.of(toolCall("missing", "{}"))));
 
-        Exception error = assertThrows(Exception.class, () -> node.build().apply(state, null).get());
+        Exception error = assertThrows(Exception.class, () -> node.build().apply(state, config(mock(SpringAIToolService.class))).get());
 
         assertTrue(rootMessage(error).contains("could not find tool definition"));
     }
@@ -70,16 +71,27 @@ class ExecuteToolNodeTest {
         ToolDefinition slow = tool("slow")
                 .withTimeout(args -> Duration.ofMillis(((Number) args.get("timeout")).longValue()));
         ExecuteToolNode node = new ExecuteToolNode(new ExecuteToolNode.Dependencies(
-                toolService, Map.of("slow", slow), 3, 30, allowHooks()));
+                3, 30, allowHooks()));
         ReActAgentState state = new ReActAgentState(Map.of(
                 ReActAgentState.TOOL_EXECUTION_REQUESTS, List.of(call)));
 
-        Map<String, Object> update = node.build().apply(state, null).get();
+        Map<String, Object> update = node.build().apply(state, config(toolService, slow)).get();
 
         ToolResponseMessage message = (ToolResponseMessage) update.get("messages");
         assertTrue(message.getResponses().get(0).responseData().contains("timed out after 0 seconds"));
         assertEquals(List.of(), update.get(ReActAgentState.TOOL_EXECUTION_REQUESTS));
         assertEquals(true, update.get(ReActAgentState.LAST_TOOL_FAILED));
+    }
+
+    private RunnableConfig config(SpringAIToolService toolService, ToolDefinition... tools) {
+        List<ToolDefinition> definitions = List.of(tools);
+        Map<String, ToolDefinition> definitionMap = definitions.stream()
+                .collect(java.util.stream.Collectors.toMap(ToolDefinition::name, definition -> definition));
+        return RunnableConfig.builder()
+                .threadId("session-1")
+                .putMetadata(RequestToolContext.METADATA_KEY, new RequestToolContext(
+                        definitions, List.of(), toolService, definitionMap, Set.of()))
+                .build();
     }
 
     private AssistantMessage.ToolCall toolCall(String name, String args) {
