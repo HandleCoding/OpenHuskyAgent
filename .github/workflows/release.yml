@@ -30,6 +30,20 @@ jobs:
       - name: Build release artifacts
         run: ./mvnw -B -ntp -DskipTests package
 
+      - name: Resolve release metadata
+        id: artifacts
+        run: |
+          RELEASE_TAG="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}"
+          PROJECT_VERSION="$(./mvnw -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          SERVICE_JAR="service/target/husky-agent-service-${PROJECT_VERSION}.jar"
+          CLIENT_JAR="client/target/husky-agent-client-${PROJECT_VERSION}.jar"
+          test -f "$SERVICE_JAR"
+          test -f "$CLIENT_JAR"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "release_version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "service_jar=$SERVICE_JAR" >> "$GITHUB_OUTPUT"
+          echo "client_jar=$CLIENT_JAR" >> "$GITHUB_OUTPUT"
+
       - name: Prepare Homebrew bundle
         run: |
           rm -rf dist husky-macos-universal.tar.gz husky-macos-universal.tar.gz.sha256
@@ -37,12 +51,12 @@ jobs:
           mkdir -p dist/husky-macos-universal/service/target
           mkdir -p dist/husky-macos-universal/client/target
 
-          printf '%s\n' "${GITHUB_REF_NAME#v}" > dist/husky-macos-universal/VERSION
+          printf '%s\n' "${{ steps.artifacts.outputs.release_version }}" > dist/husky-macos-universal/VERSION
           cp bin/husky dist/husky-macos-universal/bin/
           cp .env.example dist/husky-macos-universal/
           cp LICENSE dist/husky-macos-universal/
-          cp service/target/husky-agent-service-0.0.1-SNAPSHOT.jar dist/husky-macos-universal/service/target/
-          cp client/target/husky-agent-client-0.0.1-SNAPSHOT.jar dist/husky-macos-universal/client/target/
+          cp "${{ steps.artifacts.outputs.service_jar }}" dist/husky-macos-universal/service/target/
+          cp "${{ steps.artifacts.outputs.client_jar }}" dist/husky-macos-universal/client/target/
 
           chmod +x dist/husky-macos-universal/bin/husky
           tar -czf husky-macos-universal.tar.gz -C dist husky-macos-universal
@@ -51,9 +65,9 @@ jobs:
       - name: Upload release artifacts
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
+          tag_name: ${{ steps.artifacts.outputs.release_tag }}
           files: |
-            service/target/husky-agent-service-0.0.1-SNAPSHOT.jar
-            client/target/husky-agent-client-0.0.1-SNAPSHOT.jar
+            ${{ steps.artifacts.outputs.service_jar }}
+            ${{ steps.artifacts.outputs.client_jar }}
             husky-macos-universal.tar.gz
             husky-macos-universal.tar.gz.sha256
