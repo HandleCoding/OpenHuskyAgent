@@ -511,8 +511,10 @@ case "${1:-serve}" in
             echo "Error: Cannot find install.sh in $PROJECT_DIR"
             exit 1
         fi
-        if [ -n "$(git -C "$PROJECT_DIR" status --porcelain)" ]; then
+        dirty_status="$(git -C "$PROJECT_DIR" status --porcelain --untracked-files=all | grep -v '^?? build.log$' || true)"
+        if [ -n "$dirty_status" ]; then
             echo "Error: Working tree is not clean. Commit, stash, or discard local changes before running husky update."
+            echo "$dirty_status"
             exit 1
         fi
 

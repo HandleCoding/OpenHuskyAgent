@@ -33,6 +33,9 @@ build/
 ### VS Code ###
 .vscode/
 
+### Local logs ###
+build.log
+
 ### Database ###
 *.db
 *.db-shm

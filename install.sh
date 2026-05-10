@@ -286,7 +286,7 @@ build() {
     # Increase Maven heap for low-memory VPS
     export MAVEN_OPTS="${MAVEN_OPTS:--Xmx512m}"
 
-    local build_log="$INSTALL_DIR/build.log"
+    local build_log="/tmp/husky-build-$(date +%Y%m%d%H%M%S).log"
     if ! ./mvnw clean install -DskipTests > "$build_log" 2>&1; then
         err "Build failed. Last 30 lines of build log:"
         tail -30 "$build_log"
@@ -401,7 +401,12 @@ setup_systemd() {
         return 0
     fi
 
-    if [ "$NON_INTERACTIVE" = false ]; then
+    if [ "$UPGRADE" = true ] && [ ! -f /etc/systemd/system/husky-agent.service ]; then
+        ok "systemd service not installed; skipping during upgrade"
+        return 0
+    fi
+
+    if [ "$UPGRADE" = false ] && [ "$NON_INTERACTIVE" = false ]; then
         echo ""
         read -rp "Install as systemd service for auto-start? [Y/n] " install_service
         if [[ "$install_service" =~ ^[Nn]$ ]]; then
@@ -460,16 +465,26 @@ SVCEOF
     sudo systemctl daemon-reload
     sudo systemctl enable husky-agent
 
-    ok "systemd service installed: husky-agent.service"
-    info "Start with: sudo systemctl start husky-agent"
-    info "Logs with:  journalctl -u husky-agent -f"
+    if [ "$UPGRADE" = true ]; then
+        ok "systemd service refreshed: husky-agent.service"
+    else
+        ok "systemd service installed: husky-agent.service"
+        info "Start with: sudo systemctl start husky-agent"
+        info "Logs with:  journalctl -u husky-agent -f"
+    fi
 }
 
 # ── Step 9: Make bin/husky globally accessible ──────────────────────────
 setup_cli() {
     chmod +x "$INSTALL_DIR/bin/husky"
 
-    if [ "$NON_INTERACTIVE" = false ]; then
+    local target="/usr/local/bin/husky"
+    if [ "$UPGRADE" = true ] && [ ! -L "$target" ]; then
+        ok "global husky command not linked; skipping during upgrade"
+        return 0
+    fi
+
+    if [ "$UPGRADE" = false ] && [ "$NON_INTERACTIVE" = false ]; then
         echo ""
         read -rp "Add 'husky' command to PATH? [Y/n] " add_path
         if [[ "$add_path" =~ ^[Nn]$ ]]; then
@@ -477,7 +492,6 @@ setup_cli() {
         fi
     fi
 
-    local target="/usr/local/bin/husky"
     if [ -L "$target" ]; then
         sudo ln -sf "$INSTALL_DIR/bin/husky" "$target"
     elif [ -e "$target" ]; then
@@ -487,7 +501,11 @@ setup_cli() {
         sudo ln -s "$INSTALL_DIR/bin/husky" "$target"
     fi
 
-    ok "'husky' command linked to $target"
+    if [ "$UPGRADE" = true ]; then
+        ok "global husky command link refreshed: $target"
+    else
+        ok "'husky' command linked to $target"
+    fi
 }
 
 # ── Step 10: Open firewall port ─────────────────────────────────────────
@@ -497,6 +515,11 @@ setup_firewall() {
         return 0
     fi
     if ! sudo ufw status 2>/dev/null | grep -q "active"; then
+        return 0
+    fi
+
+    if [ "$UPGRADE" = true ]; then
+        ok "firewall unchanged during upgrade"
         return 0
     fi
 
@@ -516,7 +539,11 @@ setup_firewall() {
 print_success() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${GREEN}  Husky installed successfully!${NC}"
+    if [ "$UPGRADE" = true ]; then
+        echo -e "${GREEN}  Husky upgraded successfully!${NC}"
+    else
+        echo -e "${GREEN}  Husky installed successfully!${NC}"
+    fi
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "  Install dir : $INSTALL_DIR"
