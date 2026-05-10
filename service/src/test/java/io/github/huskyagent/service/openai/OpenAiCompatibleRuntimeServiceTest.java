@@ -20,6 +20,7 @@ import io.github.huskyagent.infra.channel.ChannelType;
 import io.github.huskyagent.infra.channel.InboundMessage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.messages.UserMessage;
 
 import java.util.LinkedHashMap;
 import java.util.Set;
@@ -78,6 +79,31 @@ class OpenAiCompatibleRuntimeServiceTest {
         assertFalse(captured.isForceNewSession());
         assertEquals("session-1", captured.getInbound().getRequestedSessionId());
         assertEquals(RuntimeExecutionRequest.PersistenceMode.STATEFUL, captured.persistenceModeOrDefault());
+    }
+
+    @Test
+    void passesStructuredMessagesAndDisplayTextToRuntime() throws Exception {
+        RecordingRuntimeExecutionService runtime = new RecordingRuntimeExecutionService();
+        OpenAiCompatibleRuntimeService service = newService(runtime);
+        OpenAiChatCompletionRequest request = objectMapper.readValue("""
+                {"model":"assistant","messages":[
+                  {"role":"system","content":"Be concise."},
+                  {"role":"user","content":"hello"},
+                  {"role":"assistant","content":"hi"},
+                  {"role":"user","content":"next"}
+                ]}
+                """, OpenAiChatCompletionRequest.class);
+
+        service.execute(request, null, new OpenAiCollectingRuntimeCallbacks());
+
+        RuntimeExecutionRequest captured = runtime.captured.get();
+        assertNotNull(captured.getAgentInput());
+        assertTrue(captured.getAgentInput().hasStructuredMessages());
+        assertEquals(4, captured.getAgentInput().structuredMessagesOrEmpty().size());
+        assertInstanceOf(UserMessage.class, captured.getAgentInput().structuredMessagesOrEmpty().get(3));
+        assertEquals("next", captured.getAgentInput().structuredMessagesOrEmpty().get(3).getText());
+        assertEquals("next", captured.getInbound().getText());
+        assertFalse(captured.commandParsingEnabledOrDefault());
     }
 
     @Test

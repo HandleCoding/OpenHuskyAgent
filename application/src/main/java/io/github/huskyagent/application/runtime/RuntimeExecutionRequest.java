@@ -1,5 +1,6 @@
 package io.github.huskyagent.application.runtime;
 
+import io.github.huskyagent.application.AgentInput;
 import io.github.huskyagent.application.channel.binding.EffectiveChannelRoute;
 import io.github.huskyagent.infra.channel.InboundMessage;
 import lombok.Builder;
@@ -18,6 +19,8 @@ public class RuntimeExecutionRequest {
     boolean forceNewSession;
     RuntimeCallbacks callbacks;
     PersistenceMode persistenceMode;
+    AgentInput agentInput;
+    Boolean commandParsingEnabled;
 
     public RuntimeCallbacks callbacksOrNoop() {
         return callbacks != null ? callbacks : RuntimeCallbacks.NOOP;
@@ -29,6 +32,10 @@ public class RuntimeExecutionRequest {
 
     public boolean isStateless() {
         return persistenceModeOrDefault() == PersistenceMode.STATELESS;
+    }
+
+    public boolean commandParsingEnabledOrDefault() {
+        return commandParsingEnabled == null || commandParsingEnabled;
     }
 
     public String requestedSessionIdOrInbound() {

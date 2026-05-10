@@ -3,6 +3,9 @@ package io.github.huskyagent.application;
 import io.github.huskyagent.infra.channel.InboundContentPart;
 import io.github.huskyagent.infra.channel.MessageAttachment;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.content.Media;
 import org.springframework.core.io.ByteArrayResource;
@@ -39,6 +42,9 @@ public class MultimodalMessageBuilder {
 
     public String persistenceText(AgentInput input) {
         AgentInput safeInput = input != null ? input : AgentInput.textOnly("");
+        if (safeInput.hasStructuredMessages()) {
+            return structuredPersistenceText(safeInput.structuredMessagesOrEmpty());
+        }
         StringBuilder text = new StringBuilder(safeInput.getText() != null ? safeInput.getText().trim() : "");
         List<MessageAttachment> attachments = attachments(safeInput.getContentParts());
         for (MessageAttachment attachment : attachments) {
@@ -57,6 +63,27 @@ public class MultimodalMessageBuilder {
             text.append(']');
         }
         return text.toString();
+    }
+
+    private String structuredPersistenceText(List<Message> messages) {
+        return messages.stream()
+                .filter(message -> message != null && message.getText() != null && !message.getText().isBlank())
+                .map(message -> roleLabel(message) + ": " + message.getText().trim())
+                .reduce((left, right) -> left + "\n\n" + right)
+                .orElse("");
+    }
+
+    private String roleLabel(Message message) {
+        if (message instanceof UserMessage) {
+            return "User";
+        }
+        if (message instanceof AssistantMessage) {
+            return "Assistant";
+        }
+        if (message instanceof SystemMessage) {
+            return "System";
+        }
+        return message.getMessageType().getValue();
     }
 
     private List<Media> imageMedia(List<InboundContentPart> parts) {

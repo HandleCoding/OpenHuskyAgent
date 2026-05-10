@@ -304,8 +304,11 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
     }
 
     private Map<String, Object> buildInputs(AgentInput input) {
+        Object messages = input != null && input.hasStructuredMessages()
+                ? input.structuredMessagesOrEmpty()
+                : multimodalMessageBuilder.buildUserMessage(input);
         return Map.of(
-                "messages", multimodalMessageBuilder.buildUserMessage(input),
+                "messages", messages,
                 ReActAgentState.MODEL_CALL_COUNT, 0
         );
     }

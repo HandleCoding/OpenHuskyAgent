@@ -1,5 +1,6 @@
 package io.github.huskyagent.service.openai;
 
+import io.github.huskyagent.application.AgentInput;
 import io.github.huskyagent.application.ChatResult;
 import io.github.huskyagent.application.channel.ChannelInboundQueue;
 import io.github.huskyagent.application.channel.ChannelRuntimeQueueKeyFactory;
@@ -95,10 +96,11 @@ class OpenAiCompatibleRuntimeService {
 
     private RuntimeContext buildContext(OpenAiChatCompletionRequest request, String sessionId) {
         String sceneId = modelCatalog.resolveSceneId(request.model());
-        String prompt = promptMapper.toPrompt(request);
-        InboundMessage inbound = buildInbound(request, sceneId, prompt, sessionId);
+        OpenAiPromptMapper.MappedPrompt mappedPrompt = promptMapper.map(request);
+        InboundMessage inbound = buildInbound(request, sceneId, mappedPrompt.displayText(), sessionId);
         EffectiveChannelRoute route = sceneRouter.resolve(inbound);
-        return new RuntimeContext(inbound, route, normalize(sessionId) != null);
+        AgentInput agentInput = AgentInput.structuredMessages(mappedPrompt.messages(), mappedPrompt.displayText());
+        return new RuntimeContext(inbound, route, agentInput, normalize(sessionId) != null);
     }
 
     private RuntimeExecutionResult executeNow(RuntimeContext context, io.github.huskyagent.application.runtime.RuntimeCallbacks callbacks) {
@@ -107,6 +109,8 @@ class OpenAiCompatibleRuntimeService {
                 .effectiveRoute(context.route())
                 .forceNewSession(false)
                 .persistenceMode(context.persistenceMode())
+                .agentInput(context.agentInput())
+                .commandParsingEnabled(false)
                 .callbacks(callbacks)
                 .build());
         context.result(result);
@@ -198,12 +202,14 @@ class OpenAiCompatibleRuntimeService {
     private static final class RuntimeContext {
         private final InboundMessage inbound;
         private final EffectiveChannelRoute route;
+        private final AgentInput agentInput;
         private final boolean stateful;
         private RuntimeExecutionResult result;
 
-        private RuntimeContext(InboundMessage inbound, EffectiveChannelRoute route, boolean stateful) {
+        private RuntimeContext(InboundMessage inbound, EffectiveChannelRoute route, AgentInput agentInput, boolean stateful) {
             this.inbound = inbound;
             this.route = route;
+            this.agentInput = agentInput;
             this.stateful = stateful;
         }
 
@@ -213,6 +219,10 @@ class OpenAiCompatibleRuntimeService {
 
         EffectiveChannelRoute route() {
             return route;
+        }
+
+        AgentInput agentInput() {
+            return agentInput;
         }
 
         boolean stateful() {

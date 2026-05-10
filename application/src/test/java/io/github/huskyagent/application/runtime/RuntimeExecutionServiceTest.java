@@ -23,8 +23,10 @@ import io.github.huskyagent.infra.channel.InboundMessage;
 import io.github.huskyagent.infra.channel.OutboundMessage;
 import io.github.huskyagent.infra.channel.Principal;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.messages.UserMessage;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -254,6 +256,58 @@ class RuntimeExecutionServiceTest {
         assertEquals(1, sessionResolver.releaseCalls);
     }
 
+    @Test
+    void explicitAgentInputIsPassedToExecutor() {
+        FakeAgentApp agentApp = new FakeAgentApp();
+        RuntimeExecutionService service = new RuntimeExecutionService(
+                new FakeSessionResolver(completeScope()),
+                agentApp,
+                inbound -> Optional.empty(),
+                new FakeCommandService(null),
+                new FakeRouteRegistry(),
+                new FakeSceneRouter(),
+                new ScopedRuntimeContext()
+        );
+        AgentInput explicitInput = AgentInput.structuredMessages(List.of(new UserMessage("structured hello")), null);
+
+        RuntimeExecutionResult result = service.execute(RuntimeExecutionRequest.builder()
+                .inbound(inbound(""))
+                .agentInput(explicitInput)
+                .build());
+
+        assertTrue(result.chatResult().success());
+        assertSame(explicitInput, agentApp.input);
+    }
+
+    @Test
+    void disabledCommandParsingTreatsSlashTextAsChatInput() {
+        FakeSessionResolver sessionResolver = new FakeSessionResolver(completeScope());
+        FakeAgentApp agentApp = new FakeAgentApp();
+        RuntimeExecutionService service = new RuntimeExecutionService(
+                sessionResolver,
+                agentApp,
+                inbound -> Optional.of(new ChannelCommand("help", "", "/help")),
+                new FakeCommandService(OutboundMessage.builder()
+                        .kind(OutboundMessage.Kind.TEXT)
+                        .sessionId("command-session")
+                        .text("command ok")
+                        .build()),
+                new FakeRouteRegistry(),
+                new FakeSceneRouter(),
+                new ScopedRuntimeContext()
+        );
+
+        RuntimeExecutionResult result = service.execute(RuntimeExecutionRequest.builder()
+                .inbound(inbound("/help"))
+                .commandParsingEnabled(false)
+                .build());
+
+        assertFalse(result.commandHandled());
+        assertTrue(result.chatResult().success());
+        assertEquals(1, sessionResolver.resolveCalls);
+        assertEquals("/help", agentApp.input.getText());
+    }
+
     private static RuntimeScope completeScope() {
         SceneConfig scene = new SceneConfig();
         scene.setSceneId("assistant");
@@ -304,9 +358,11 @@ class RuntimeExecutionServiceTest {
 
     private static class FakeAgentApp implements AgentRuntimeExecutor {
         RuntimeExecutionRequest.PersistenceMode persistenceMode;
+        AgentInput input;
 
         @Override
         public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks) {
+            this.input = input;
             return ChatResult.success("ok", scope.getSessionId(), false);
         }
 
@@ -314,6 +370,7 @@ class RuntimeExecutionServiceTest {
         public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks,
                                   RuntimeExecutionRequest.PersistenceMode persistenceMode) {
             this.persistenceMode = persistenceMode;
+            this.input = input;
             return ChatResult.success("ok", scope.getSessionId(), false);
         }
     }

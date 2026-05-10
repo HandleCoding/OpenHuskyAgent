@@ -1,5 +1,9 @@
 package io.github.huskyagent.service.openai;
 
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -10,7 +14,7 @@ import java.util.Map;
 @Component
 class OpenAiPromptMapper {
 
-    String toPrompt(OpenAiChatCompletionRequest request) {
+    MappedPrompt map(OpenAiChatCompletionRequest request) {
         if (request == null) {
             throw new OpenAiProtocolException("Missing request body", "messages", "missing_request_body");
         }
@@ -18,24 +22,41 @@ class OpenAiPromptMapper {
             throw new OpenAiProtocolException("messages must not be empty", "messages", "missing_messages");
         }
 
-        List<String> lines = new ArrayList<>();
+        List<Message> messages = new ArrayList<>();
+        String displayText = null;
         for (OpenAiChatCompletionRequest.Message message : request.messages()) {
             String role = normalizeRole(message.role());
+            if (hasToolCalls(message.toolCalls())) {
+                throw new OpenAiProtocolException("Assistant tool calls are not supported", "messages.tool_calls", "unsupported_tool_calls");
+            }
             String content = textContent(message.content(), "messages.content");
             switch (role) {
-                case "system" -> lines.add("System: " + content);
-                case "user" -> lines.add("User: " + content);
-                case "assistant" -> lines.add("Assistant: " + content);
-                case "tool" -> lines.add("Tool: " + content);
-                case "developer" -> throw new OpenAiProtocolException("Unsupported message role: developer", "messages", "unsupported_message_role");
+                case "system", "developer" -> messages.add(new SystemMessage(content));
+                case "user" -> {
+                    messages.add(new UserMessage(content));
+                    if (!content.isBlank()) {
+                        displayText = content;
+                    }
+                }
+                case "assistant" -> messages.add(new AssistantMessage(content));
+                case "tool" -> throw new OpenAiProtocolException("Unsupported message role: tool", "messages", "unsupported_message_role");
                 default -> throw new OpenAiProtocolException("Unsupported message role: " + role, "messages", "unsupported_message_role");
             }
         }
-        String prompt = String.join("\n\n", lines).trim();
-        if (prompt.isBlank()) {
+        if (messages.isEmpty()) {
             throw new OpenAiProtocolException("messages must contain text content", "messages", "empty_messages");
         }
-        return prompt;
+        if (displayText == null) {
+            displayText = messages.get(messages.size() - 1).getText();
+        }
+        if (displayText == null || displayText.isBlank()) {
+            throw new OpenAiProtocolException("messages must contain text content", "messages", "empty_messages");
+        }
+        return new MappedPrompt(List.copyOf(messages), displayText);
+    }
+
+    String toPrompt(OpenAiChatCompletionRequest request) {
+        return map(request).displayText();
     }
 
     private String normalizeRole(String role) {
@@ -43,6 +64,19 @@ class OpenAiPromptMapper {
             throw new OpenAiProtocolException("Message role is required", "messages.role", "missing_message_role");
         }
         return role.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean hasToolCalls(Object toolCalls) {
+        if (toolCalls == null) {
+            return false;
+        }
+        if (toolCalls instanceof List<?> list) {
+            return !list.isEmpty();
+        }
+        if (toolCalls instanceof Map<?, ?> map) {
+            return !map.isEmpty();
+        }
+        return true;
     }
 
     private String textContent(Object content, String param) {
@@ -74,5 +108,8 @@ class OpenAiPromptMapper {
             }
         }
         return String.join("\n", texts);
+    }
+
+    record MappedPrompt(List<Message> messages, String displayText) {
     }
 }

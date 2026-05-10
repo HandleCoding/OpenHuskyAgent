@@ -3,6 +3,8 @@ package io.github.huskyagent.application;
 import io.github.huskyagent.infra.channel.InboundContentPart;
 import io.github.huskyagent.infra.channel.MessageAttachment;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 
 import java.util.List;
@@ -71,5 +73,17 @@ class MultimodalMessageBuilderTest {
                 .build();
 
         assertEquals("caption\n[image attached: image/webp, 12 bytes]", builder.persistenceText(input));
+    }
+
+    @Test
+    void preservesStructuredMessageRolesForPersistence() {
+        AgentInput input = AgentInput.structuredMessages(List.of(
+                new SystemMessage("Be concise."),
+                new UserMessage("hello"),
+                new AssistantMessage("hi"),
+                new UserMessage("next")
+        ), "next");
+
+        assertEquals("System: Be concise.\n\nUser: hello\n\nAssistant: hi\n\nUser: next", builder.persistenceText(input));
     }
 }

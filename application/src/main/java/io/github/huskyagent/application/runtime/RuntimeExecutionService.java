@@ -40,14 +40,18 @@ public class RuntimeExecutionService {
         if (inbound.isIgnored()) {
             return RuntimeExecutionResult.rejected(ChatResult.failure("Ignored inbound message", ChatResult.ErrorCode.PARAM_ERROR));
         }
-        if (!inbound.hasContent() && (request.messageOrInboundText() == null || request.messageOrInboundText().isBlank())) {
+        AgentInput agentInput = request.getAgentInput() != null
+                ? request.getAgentInput()
+                : AgentInput.fromInbound(inbound);
+        if (!agentInput.hasContent()) {
             return RuntimeExecutionResult.rejected(ChatResult.failure("Empty inbound message", ChatResult.ErrorCode.PARAM_ERROR));
         }
 
         EffectiveChannelRoute effectiveRoute = request.getEffectiveRoute() != null
                 ? request.getEffectiveRoute()
                 : sceneRouter.resolve(inbound);
-        Optional<ChannelCommand> command = inbound.getText() != null && !inbound.getText().isBlank()
+        Optional<ChannelCommand> command = request.commandParsingEnabledOrDefault()
+                && inbound.getText() != null && !inbound.getText().isBlank()
                 ? commandParser.parse(inbound)
                 : Optional.empty();
         if (command.isPresent() && commandService.supports(command.get())) {
@@ -76,9 +80,10 @@ public class RuntimeExecutionService {
         try {
             callbacks.started(scope);
             RuntimeScope finalScope = scope;
+            AgentInput finalAgentInput = agentInput;
             ChatResult result = scopedRuntimeContext.call(finalScope, () -> agentRuntimeExecutor.execute(
                     finalScope,
-                    AgentInput.fromInbound(inbound),
+                    finalAgentInput,
                     callbacks,
                     request.persistenceModeOrDefault()
             ));

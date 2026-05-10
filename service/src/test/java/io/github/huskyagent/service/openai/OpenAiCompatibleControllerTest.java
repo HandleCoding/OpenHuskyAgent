@@ -67,7 +67,7 @@ class OpenAiCompatibleControllerTest {
 
         RuntimeExecutionRequest captured = runtime.captured.get();
         assertNotNull(captured);
-        assertEquals("User: hello\nworld", captured.getInbound().getText());
+        assertEquals("hello\nworld", captured.getInbound().getText());
     }
 
     @Test

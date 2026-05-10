@@ -17,6 +17,7 @@ import io.github.huskyagent.infra.channel.ReplyTarget;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -163,7 +164,7 @@ class TelegramInstanceAdapterTest {
         ClarifyDecision decision = adapter.requestClarify(prompt);
 
         assertEquals("maintainability", decision.getAnswer());
-        assertEquals("answered", apiClient.lastClarifyStatus);
+        assertTrue(apiClient.awaitClarifyStatus("answered"));
         assertEquals("maintainability", apiClient.lastClarifyAnswer);
     }
 
@@ -279,6 +280,17 @@ class TelegramInstanceAdapterTest {
         public void editClarifyMessage(String chatId, Integer messageId, ClarifyPrompt prompt, String status, String answer) {
             lastClarifyStatus = status;
             lastClarifyAnswer = answer;
+        }
+
+        boolean awaitClarifyStatus(String status) {
+            try {
+                org.awaitility.Awaitility.await()
+                        .atMost(Duration.ofSeconds(1))
+                        .until(() -> status.equals(lastClarifyStatus));
+                return true;
+            } catch (org.awaitility.core.ConditionTimeoutException e) {
+                return false;
+            }
         }
     }
 }
