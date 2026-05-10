@@ -27,6 +27,17 @@ class ConfigChannelBindingResolverTest {
     }
 
     @Test
+    void resolvesTelegramBindingWithLeadingAtUsername() {
+        ChannelBindingProperties properties = new ChannelBindingProperties();
+        properties.setBindings(Map.of("telegram-assistant", binding("telegram", "@assistant_bot", "assistant", true)));
+        ConfigChannelBindingResolver resolver = new ConfigChannelBindingResolver(properties);
+
+        ChannelInstanceBinding resolved = resolver.resolve(identity(ChannelType.TELEGRAM, "assistant_bot")).orElseThrow();
+
+        assertEquals("telegram-assistant", resolved.bindingId());
+        assertEquals("assistant", resolved.sceneId());
+    }
+    @Test
     void ignoresDisabledBinding() {
         ChannelBindingProperties properties = new ChannelBindingProperties();
         properties.setBindings(Map.of("feishu-qa", binding("feishu", "cli_qa", "feishu-qa", false)));

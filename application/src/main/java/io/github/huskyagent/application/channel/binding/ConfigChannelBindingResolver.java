@@ -35,7 +35,8 @@ public class ConfigChannelBindingResolver implements ChannelBindingResolver {
                 continue;
             }
             if (binding.channelType() == identity.getChannelType()
-                    && binding.platformAccountId().equals(identity.getPlatformAccountId())) {
+                    && normalizePlatformAccountId(identity.getChannelType(), binding.platformAccountId())
+                    .equals(normalizePlatformAccountId(identity.getChannelType(), identity.getPlatformAccountId()))) {
                 return Optional.of(binding);
             }
         }
@@ -100,6 +101,14 @@ public class ConfigChannelBindingResolver implements ChannelBindingResolver {
             }
         }
         return Optional.empty();
+    }
+
+    private String normalizePlatformAccountId(ChannelType channelType, String value) {
+        if (channelType != ChannelType.TELEGRAM || value == null) {
+            return value;
+        }
+        String trimmed = value.trim();
+        return trimmed.startsWith("@") ? trimmed.substring(1) : trimmed;
     }
 
     private boolean isBlank(String value) {

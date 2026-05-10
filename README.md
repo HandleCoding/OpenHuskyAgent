@@ -301,6 +301,12 @@ SSE events include `token`, `reasoning`, `message`, `tool_started`, `tool_comple
 
 Husky supports Feishu WebSocket/webhook adapters with multiple app instances under `channels.feishu.instances.*`. Each instance can be bound to a scene through `channel-bindings.*`, allowing different bots/accounts to expose different prompts, tools, memory, and approval policies.
 
+### Telegram Channel
+
+Husky supports a disabled-by-default Telegram long-polling adapter with multiple bot instances under `channels.telegram.instances.*`. Configure `TELEGRAM_ASSISTANT_ENABLED=true`, `TELEGRAM_ASSISTANT_BOT_TOKEN`, and preferably `TELEGRAM_ASSISTANT_BOT_USERNAME` so `channel-bindings.*` can route the bot to the intended scene.
+
+Telegram v1 supports text messages, group mention gating, forum topic threads, typing indicators, inline approval buttons, and clarification buttons/replies. Long polling is single-consumer per bot token, so run only one Husky process per enabled Telegram token.
+
 ## Capabilities
 
 - **ReAct graph runtime** — LangGraph4j drives model -> tool -> observation loops with interrupt/resume approvals.
@@ -349,7 +355,7 @@ Most runtime defaults live in `service/src/main/resources/application.yml`.
 | LLM | `spring.ai.openai.*`, `agent.auxiliary.*` |
 | Agent loop | `agent.graph.max-react-loops`, `agent.llm.*`, `agent.tool.*`, `agent.checkpoint.enabled` |
 | Context | `context.threshold-percent`, `context.context-length`, `context.model-context-lengths`, `context.tail-token-budget` |
-| Channels | `channel-bindings.*`, `channels.feishu.instances.*`, `tui.ws.*`, `chatbot.enabled` |
+| Channels | `channel-bindings.*`, `channels.feishu.instances.*`, `channels.telegram.instances.*`, `tui.ws.*`, `chatbot.enabled` |
 | Scenes | `scenes.default-scene`, `scenes.configs.*.toolsets`, `allowed-tools`, `denied-tools`, `approval`, `backend`, `working-dir`, `memory`, `storage` |
 | Execution | `execution.backend.docker.*`, `execution.backend.idle-ttl-seconds` |
 | Web | `web.backend`, `web.proxy.*`, `BRAVE_SEARCH_API_KEY`, `TAVILY_API_KEY` |
