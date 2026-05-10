@@ -11,7 +11,7 @@
 
     <groupId>io.github.huskyagent</groupId>
     <artifactId>husky-agent</artifactId>
-    <version>0.1.5</version>
+    <version>0.1.7</version>
     <packaging>pom</packaging>
     <name>husky-agent</name>
     <description>husky-agent parent</description>
