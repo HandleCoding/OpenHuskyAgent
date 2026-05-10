@@ -68,7 +68,7 @@ public class ToolResultPruner implements PruneStrategy {
     }
 
     private Message pruneToolResponse(ToolResponseMessage msg, Set<String> seenToolResults) {
-        String content = msg.getText();
+        String content = toolResponseContent(msg);
 
         if (content != null && !content.isEmpty()) {
             String key = content.hashCode() + "_" + content.length();
@@ -79,11 +79,46 @@ public class ToolResultPruner implements PruneStrategy {
             seenToolResults.add(key);
         }
 
-        if (content != null && content.length() > limitsConfig.getPruneMaxToolResultLength()) {
-            log.debug("Tool result is too long ({}) chars, will be handled by summary", content.length());
+        if (hasLongToolResponse(msg)) {
+            log.debug("Truncating long tool result");
+            return truncateToolResponse(msg);
         }
 
         return msg;
+    }
+
+    private String toolResponseContent(ToolResponseMessage msg) {
+        return msg.getResponses().stream()
+                .map(ToolResponseMessage.ToolResponse::responseData)
+                .reduce("", String::concat);
+    }
+
+    private boolean hasLongToolResponse(ToolResponseMessage msg) {
+        return msg.getResponses().stream()
+                .map(ToolResponseMessage.ToolResponse::responseData)
+                .anyMatch(content -> content != null && content.length() > limitsConfig.getPruneMaxToolResultLength());
+    }
+
+    private ToolResponseMessage truncateToolResponse(ToolResponseMessage msg) {
+        int maxLength = limitsConfig.getPruneMaxToolResultLength();
+        return ToolResponseMessage.builder()
+                .responses(msg.getResponses().stream()
+                        .map(response -> new ToolResponseMessage.ToolResponse(
+                                response.id(), response.name(), truncateResponseData(response.responseData(), maxLength)))
+                        .toList())
+                .build();
+    }
+
+    private String truncateResponseData(String content, int maxLength) {
+        if (content == null || content.length() <= maxLength) {
+            return content;
+        }
+        String notice = "... [tool output truncated from " + content.length()
+                + " chars because it exceeded the configured limit]";
+        if (maxLength <= notice.length()) {
+            return notice.substring(0, maxLength);
+        }
+        return content.substring(0, maxLength - notice.length()) + notice;
     }
 
     private Message pruneAssistantMessage(AssistantMessage msg) {

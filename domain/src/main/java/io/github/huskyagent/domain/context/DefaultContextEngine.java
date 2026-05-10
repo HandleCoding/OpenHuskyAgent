@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -92,7 +93,7 @@ public class DefaultContextEngine implements ContextEngine {
         }
 
         List<Message> compressed = compressWithSummary(pruned, config.getProtectFirstN(),
-                config.getTailTokenBudget(), config.getMaxSummaryTokens());
+                config.getMaxSummaryTokens());
 
         log.info("Compression completed: {} -> {} messages",
                 messages.size(), compressed.size());
@@ -104,27 +105,23 @@ public class DefaultContextEngine implements ContextEngine {
         return (int) (policy.getContextLength() * policy.getThresholdPercent());
     }
 
-    private List<Message> compressWithSummary(List<Message> messages, int protectFirstN, int tailTokenBudget, int maxSummaryTokens) {
+    private List<Message> compressWithSummary(List<Message> messages, int protectFirstN, int maxSummaryTokens) {
 
-        int tailBoundary = tokenCounter.findBoundaryByTokens(messages, protectFirstN, tailTokenBudget);
+        ContextCompressionWindow window = ContextCompressionWindow.of(messages, protectFirstN);
 
-        List<Message> head = messages.subList(0, Math.min(protectFirstN, messages.size()));
-        List<Message> middle = messages.subList(protectFirstN, tailBoundary);
-        List<Message> tail = messages.subList(tailBoundary, messages.size());
+        log.debug("Compression boundaries: head={}, middle={}, suffix={}",
+                window.head().size(), window.middle().size(), window.suffix().size());
 
-        log.debug("Compression boundaries: head={}, middle={}, tail={}",
-                head.size(), middle.size(), tail.size());
-
-        String newSummary = summaryStrategy.generate(ContextSummaryMessages.summaryInput(head, middle, tail),
+        String newSummary = summaryStrategy.generate(ContextSummaryMessages.summaryInput(window.head(), window.middle(), window.suffix()),
                 SummaryConfig.of(maxSummaryTokens));
 
-        List<Message> result = new ArrayList<>(ContextSummaryMessages.withoutSummaries(head));
+        List<Message> result = new ArrayList<>(ContextSummaryMessages.withoutSummaries(window.head()));
 
         if (newSummary != null && !newSummary.isEmpty()) {
             result.add(ContextSummaryMessages.summaryMessage(newSummary));
         }
 
-        result.addAll(ContextSummaryMessages.withoutSummaries(tail));
+        result.addAll(window.suffix());
 
         result = sanitizeToolPairs(result);
 
@@ -140,7 +137,8 @@ public class DefaultContextEngine implements ContextEngine {
                 hasPendingToolCall = !assistantMsg.getToolCalls().isEmpty();
             }
 
-            if (msg.getMessageType().getValue().equals("tool_response") ||
+            if (msg instanceof ToolResponseMessage ||
+                    msg.getMessageType().getValue().equals("tool_response") ||
                     msg.getMessageType().getValue().equals("function")) {
                 if (!hasPendingToolCall) {
                     log.debug("Dropping orphan tool response");

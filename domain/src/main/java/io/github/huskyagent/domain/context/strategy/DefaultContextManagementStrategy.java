@@ -1,5 +1,6 @@
 package io.github.huskyagent.domain.context.strategy;
 
+import io.github.huskyagent.domain.context.ContextCompressionWindow;
 import io.github.huskyagent.domain.context.ContextSummaryMessages;
 import io.github.huskyagent.domain.context.ContextManagementRequest;
 import io.github.huskyagent.domain.context.ContextManagementResult;
@@ -14,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -61,7 +63,7 @@ public class DefaultContextManagementStrategy implements ContextManagementStrate
         }
 
         List<Message> compressed = compressWithSummary(pruned, policy.getProtectFirstN(),
-                policy.getTailTokenBudget(), policy.getMaxSummaryTokens());
+                policy.getMaxSummaryTokens());
         return ContextManagementResult.changed(compressed, id(), "summary",
                 Map.of("tokens", tokenCounter.countTokens(compressed), "summary", true));
     }
@@ -70,20 +72,18 @@ public class DefaultContextManagementStrategy implements ContextManagementStrate
         return (int) (policy.getContextLength() * policy.getThresholdPercent());
     }
 
-    private List<Message> compressWithSummary(List<Message> messages, int protectFirstN, int tailTokenBudget, int maxSummaryTokens) {
-        int tailBoundary = tokenCounter.findBoundaryByTokens(messages, protectFirstN, tailTokenBudget);
+    private List<Message> compressWithSummary(List<Message> messages, int protectFirstN, int maxSummaryTokens) {
+        ContextCompressionWindow window = ContextCompressionWindow.of(messages, protectFirstN);
 
-        List<Message> head = messages.subList(0, Math.min(protectFirstN, messages.size()));
-        List<Message> middle = messages.subList(protectFirstN, tailBoundary);
-        List<Message> tail = messages.subList(tailBoundary, messages.size());
+        String newSummary = summaryStrategy.generate(
+                ContextSummaryMessages.summaryInput(window.head(), window.middle(), window.suffix()),
+                SummaryConfig.of(maxSummaryTokens));
 
-        String newSummary = summaryStrategy.generate(ContextSummaryMessages.summaryInput(head, middle, tail), SummaryConfig.of(maxSummaryTokens));
-
-        List<Message> result = new ArrayList<>(ContextSummaryMessages.withoutSummaries(head));
+        List<Message> result = new ArrayList<>(ContextSummaryMessages.withoutSummaries(window.head()));
         if (newSummary != null && !newSummary.isEmpty()) {
             result.add(ContextSummaryMessages.summaryMessage(newSummary));
         }
-        result.addAll(ContextSummaryMessages.withoutSummaries(tail));
+        result.addAll(window.suffix());
         return sanitizeToolPairs(result);
     }
 
@@ -96,7 +96,8 @@ public class DefaultContextManagementStrategy implements ContextManagementStrate
                 hasPendingToolCall = !assistantMsg.getToolCalls().isEmpty();
             }
 
-            if (msg.getMessageType().getValue().equals("tool_response")
+            if (msg instanceof ToolResponseMessage
+                    || msg.getMessageType().getValue().equals("tool_response")
                     || msg.getMessageType().getValue().equals("function")) {
                 if (!hasPendingToolCall) {
                     log.debug("Dropping orphan tool response");

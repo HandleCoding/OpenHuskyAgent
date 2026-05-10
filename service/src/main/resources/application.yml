@@ -242,19 +242,7 @@ scenes:
   configs:
     assistant:
       system-prompt: ""
-      toolsets:
-        - CORE
-        - SKILLS
-        - TERMINAL
-        - SEARCH
-        - WEB
-        - MEMORY
-        - KNOWLEDGE
-        - EXECUTE
-        - DELEGATE
-        - MCP
-        - BROWSER
-        - VISION
+      toolsets: []
       denied-tools: []
       knowledge-sources: [] # empty = all configured knowledge sources
       allowed-mcp-servers: []
