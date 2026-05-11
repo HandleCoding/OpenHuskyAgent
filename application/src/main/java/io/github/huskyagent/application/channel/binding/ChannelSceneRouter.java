@@ -21,6 +21,7 @@ public class ChannelSceneRouter {
 
     public EffectiveChannelRoute resolve(InboundMessage inbound) {
         if (inbound != null && !isBlank(inbound.getSceneId()) && bindingResolver.allowsExplicitSceneOverride(inbound.getChannelIdentity())) {
+            requireScene(inbound.getSceneId(), "explicit scene override");
             return new EffectiveChannelRoute(inbound.getSceneId(), null, EffectiveChannelRoute.Source.EXPLICIT);
         }
 
@@ -30,32 +31,37 @@ public class ChannelSceneRouter {
         Optional<ChannelInstanceBinding> binding = configuredBinding.filter(ChannelInstanceBinding::enabled);
         if (binding.isPresent()) {
             ChannelInstanceBinding value = binding.get();
-            if (sceneExists(value.sceneId())) {
-                return new EffectiveChannelRoute(value.sceneId(), value.bindingId(), EffectiveChannelRoute.Source.BINDING);
-            }
-            log.warn("Ignoring channel binding with unknown scene: bindingId={}, sceneId={}", value.bindingId(), value.sceneId());
+            requireScene(value.sceneId(), "channel binding " + value.bindingId());
+            return new EffectiveChannelRoute(value.sceneId(), value.bindingId(), EffectiveChannelRoute.Source.BINDING);
         }
 
         String legacyScene = legacyDefaultScene(inbound, configuredBinding.isEmpty());
         if (!isBlank(legacyScene)) {
+            requireScene(legacyScene, "legacy channel default");
             return new EffectiveChannelRoute(legacyScene, null, EffectiveChannelRoute.Source.CHANNEL_LEGACY_DEFAULT);
         }
 
         Optional<String> globalDefault = bindingResolver.defaultScene();
-        if (globalDefault.isPresent() && sceneExists(globalDefault.get())) {
+        if (globalDefault.isPresent()) {
+            requireScene(globalDefault.get(), "channel binding global default");
             return new EffectiveChannelRoute(globalDefault.get(), null, EffectiveChannelRoute.Source.GLOBAL_DEFAULT);
         }
-        globalDefault.ifPresent(sceneId -> log.warn("Ignoring channel binding global default with unknown scene: sceneId={}", sceneId));
 
         return new EffectiveChannelRoute(sceneResolver.resolveDefault().getSceneId(), null, EffectiveChannelRoute.Source.SCENE_DEFAULT);
     }
 
-    private boolean sceneExists(String sceneId) {
+    private void requireScene(String sceneId, String source) {
         if (isBlank(sceneId)) {
-            return false;
+            throw new IllegalArgumentException("Missing scene for " + source);
         }
-        SceneConfig resolved = sceneResolver.resolve(sceneId);
-        return resolved != null && sceneId.equals(resolved.getSceneId());
+        try {
+            SceneConfig resolved = sceneResolver.resolve(sceneId);
+            if (resolved == null || !sceneId.equals(resolved.getSceneId())) {
+                throw new IllegalArgumentException("Unknown scene for " + source + ": " + sceneId);
+            }
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Unknown scene for " + source + ": " + sceneId, e);
+        }
     }
 
     private String legacyDefaultScene(InboundMessage inbound, boolean noConfiguredBinding) {

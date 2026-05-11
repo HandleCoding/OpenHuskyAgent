@@ -121,7 +121,7 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
                                                                             OpenAiCompatibleProperties openAiProperties) {
         FilterRegistrationBean<ApiKeyAuthFilter> registration = new FilterRegistrationBean<>();
         registration.setFilter(new ApiKeyAuthFilter(authConfig, openAiProperties));
-        registration.addUrlPatterns("/api/chat/*", "/v1/*");
+        registration.addUrlPatterns("/api/chat", "/api/chat/*", "/v1/*");
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
         registration.setName("apiKeyAuthFilter");
         return registration;

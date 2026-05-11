@@ -77,6 +77,17 @@ class ApiKeyAuthFilterTest {
         assertTrue(response.getContentAsString().contains("authentication_error"));
     }
 
+    @Test
+    void registrationCoversApiChatEndpointWithoutTrailingSlash() {
+        AuthConfig authConfig = new AuthConfig();
+        authConfig.setEnabled(true);
+        OpenAiCompatibleProperties properties = new OpenAiCompatibleProperties();
+
+        var registration = ApiKeyAuthFilter.registrationBean(authConfig, properties);
+
+        assertTrue(registration.getUrlPatterns().contains("/api/chat"));
+    }
+
     private ApiKeyAuthFilter newFilter() {
         AuthConfig authConfig = new AuthConfig();
         authConfig.setEnabled(true);

@@ -286,6 +286,7 @@ chatbot:
   enabled: true
 
 # Scene configuration
+# Scene rate-limit fields are parsed into RuntimePolicy but are not enforced yet.
 scenes:
   default-scene: assistant
   configs:

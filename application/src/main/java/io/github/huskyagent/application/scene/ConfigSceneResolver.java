@@ -24,7 +24,10 @@ public class ConfigSceneResolver implements SceneResolver {
     private final ConcurrentHashMap<String, SceneConfig> resolved = new ConcurrentHashMap<>();
 
     public SceneConfig resolve(String sceneId) {
-        String effectiveSceneId = sceneId != null && configs.containsKey(sceneId) ? sceneId : defaultScene;
+        String effectiveSceneId = sceneId != null && !sceneId.isBlank() ? sceneId : defaultScene;
+        if (effectiveSceneId == null || effectiveSceneId.isBlank() || !configs.containsKey(effectiveSceneId)) {
+            throw new IllegalArgumentException("Unknown scene: " + effectiveSceneId);
+        }
         return resolved.computeIfAbsent(effectiveSceneId, this::buildSceneConfig);
     }
 

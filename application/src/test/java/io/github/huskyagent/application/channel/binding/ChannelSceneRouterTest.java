@@ -115,14 +115,13 @@ class ChannelSceneRouterTest {
     }
 
     @Test
-    void unknownBindingSceneFallsBackToLegacyDefault() {
+    void unknownBindingSceneFailsClosed() {
         ChannelSceneRouter router = router(binding("bad-binding", "missing-scene"), Optional.empty(), "scene-default");
         InboundMessage inbound = inbound(ChannelType.FEISHU, "cli_assistant", "feishu-qa");
 
-        EffectiveChannelRoute route = router.resolve(inbound);
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> router.resolve(inbound));
 
-        assertEquals("feishu-qa", route.sceneId());
-        assertEquals(EffectiveChannelRoute.Source.CHANNEL_LEGACY_DEFAULT, route.source());
+        assertTrue(error.getMessage().contains("missing-scene"));
     }
 
     private ChannelSceneRouter router(Optional<ChannelInstanceBinding> binding,
@@ -159,12 +158,11 @@ class ChannelSceneRouterTest {
         SceneResolver sceneResolver = new SceneResolver() {
             @Override
             public SceneConfig resolve(String sceneId) {
-                SceneConfig config = new SceneConfig();
                 if (sceneId == null || "missing-scene".equals(sceneId)) {
-                    config.setSceneId(sceneDefault);
-                } else {
-                    config.setSceneId(sceneId);
+                    throw new IllegalArgumentException("Unknown scene: " + sceneId);
                 }
+                SceneConfig config = new SceneConfig();
+                config.setSceneId(sceneId);
                 return config;
             }
 
