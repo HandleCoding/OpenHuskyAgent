@@ -306,8 +306,8 @@ public class SlackInstanceAdapter extends AbstractChannelAdapter {
                 String token = entry.getValue().token();
                 pendingClarifications.remove(entry.getKey());
                 clarifyRequestByToken.remove(token);
-                entry.getValue().future().complete(ClarifyDecision.answer(answer));
                 apiClient.editClarifyMessage(entry.getValue().channelId(), entry.getValue().messageTs(), prompt, "answered", answer);
+                entry.getValue().future().complete(ClarifyDecision.answer(answer));
                 return true;
             }
         }
