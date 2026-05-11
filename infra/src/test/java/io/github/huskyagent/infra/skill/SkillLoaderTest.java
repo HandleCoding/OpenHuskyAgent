@@ -125,6 +125,33 @@ class SkillLoaderTest {
     }
 
     @Test
+    void loadUsesConfiguredSkillRootsOnly() throws IOException {
+        Path fixedGlobal = tempDir.resolve("home/.husky/skills");
+        Path fixedClaude = tempDir.resolve("home/.claude/skills");
+        Path fixedProject = tempDir.resolve("project/.claude/skills");
+        String oldUserHome = System.getProperty("user.home");
+        String oldUserDir = System.getProperty("user.dir");
+        try {
+            System.setProperty("user.home", tempDir.resolve("home").toString());
+            System.setProperty("user.dir", tempDir.resolve("project").toString());
+            createSkill(fixedGlobal, "global_husky", "global");
+            createSkill(fixedClaude, "global_claude", "global");
+            createSkill(fixedProject, "project_claude", "project");
+            createManagedSkill("configured", List.of());
+
+            loader.load();
+
+            assertNotNull(skillManager.getSkill("configured"));
+            assertNull(skillManager.getSkill("global_husky"));
+            assertNull(skillManager.getSkill("global_claude"));
+            assertNull(skillManager.getSkill("project_claude"));
+        } finally {
+            System.setProperty("user.home", oldUserHome);
+            System.setProperty("user.dir", oldUserDir);
+        }
+    }
+
+    @Test
     void managedSkillRootsDefaultToSkillDir() {
         assertEquals(List.of(managedSkills.toAbsolutePath().normalize()), loader.managedSkillRoots());
     }

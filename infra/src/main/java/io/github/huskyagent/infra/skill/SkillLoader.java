@@ -60,19 +60,13 @@ public class SkillLoader {
     public void load() {
         skillDirMap.clear();
         List<Skill> skills = new ArrayList<>();
-        Path userHome = Path.of(System.getProperty("user.home"));
-        Path projectDir = Path.of(System.getProperty("user.dir"));
-
-        scanSkillDir(resolveBuiltinSkillDir(),                  "builtin",        skills);
-        scanSkillDir(userHome.resolve(".claude").resolve("skills"),   "global-claude",  skills);
-        scanSkillDir(userHome.resolve(".husky").resolve("skills"),    "global-husky",   skills);
-        scanSkillDir(projectDir.resolve(".claude").resolve("skills"), "project-claude", skills);
+        scanSkillDir(resolveBuiltinSkillDir(), "builtin", skills);
         for (Path managedRoot : scanSkillRoots()) {
             scanSkillDir(managedRoot, "managed-husky", skills);
         }
 
         skillManager.setSkills(skills);
-        log.info("Loaded {} skills (builtin + global + project)", skills.size());
+        log.info("Loaded {} skills (builtin + configured)", skills.size());
     }
 
     private void scanSkillDir(Path dir, String source, List<Skill> skills) {
@@ -285,15 +279,8 @@ public class SkillLoader {
     }
 
     public Set<Path> getWatchedRoots() {
-        Path userHome = Path.of(System.getProperty("user.home"));
-        Path projectDir = Path.of(System.getProperty("user.dir"));
         return Stream.concat(
-                        Stream.of(
-                                resolveSkillDir(builtinDir),
-                                userHome.resolve(".claude").resolve("skills"),
-                                userHome.resolve(".husky").resolve("skills"),
-                                projectDir.resolve(".claude").resolve("skills")
-                        ),
+                        Stream.of(resolveSkillDir(builtinDir)),
                         scanSkillRoots().stream()
                 )
                 .map(Path::toAbsolutePath)

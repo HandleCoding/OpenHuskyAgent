@@ -395,10 +395,9 @@ auth:
 # Skill configuration
 skill:
   builtin-dir: builtin-skills
-  # write target for install/create — also scanned as highest-priority source
-  # auto-scanned (lower priority): ~/.claude/skills, ~/.husky/skills, .claude/skills
+  # write target for install/create; also scanned for installed or user-authored skills
   dir: ${husky.data.dir}/skills
-  # skill_manage patch/delete is restricted to skills loaded from these configured writable roots.
+  # skill_manage patch/delete is restricted to skills loaded from these configured writable roots; these roots are also scanned.
   managed-dirs: ${SKILL_MANAGED_DIRS:${skill.dir}}
   disabled: []
 
