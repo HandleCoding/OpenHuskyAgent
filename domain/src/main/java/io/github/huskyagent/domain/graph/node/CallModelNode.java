@@ -259,17 +259,28 @@ public class CallModelNode {
                 }
 
                 AssistantMessage output;
+                String reasoning = fullReasoning.isEmpty() ? null : fullReasoning.toString();
                 if (lastWithToolCalls[0] != null) {
                     AssistantMessage tc = lastWithToolCalls[0];
                     String finalText = fullText.isEmpty()
                             ? (tc.getText() != null ? tc.getText() : "")
                             : fullText.toString();
-                    output = AssistantMessage.builder()
+                    AssistantMessage.Builder builder = AssistantMessage.builder()
                             .content(finalText)
-                            .toolCalls(tc.getToolCalls())
-                            .build();
+                            .toolCalls(tc.getToolCalls());
+                    if (reasoning != null) {
+                        builder.properties(Map.of("reasoningContent", reasoning));
+                    }
+                    output = builder.build();
                 } else {
-                    output = new AssistantMessage(fullText.toString());
+                    if (reasoning != null) {
+                        output = AssistantMessage.builder()
+                                .content(fullText.toString())
+                                .properties(Map.of("reasoningContent", reasoning))
+                                .build();
+                    } else {
+                        output = new AssistantMessage(fullText.toString());
+                    }
                 }
 
                 GraphUtils.logLlmResponse(output, finalFinishReason[0]);

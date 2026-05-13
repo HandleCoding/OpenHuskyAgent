@@ -1,11 +1,18 @@
 package io.github.huskyagent.infra.config;
 
+import io.micrometer.observation.ObservationRegistry;
+import org.springframework.ai.model.tool.ToolCallingManager;
+import org.springframework.ai.openai.HuskyOpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.ai.retry.RetryUtils;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
@@ -41,5 +48,28 @@ public class OpenAiConfig {
                 .completionsPath(completionsPath)
                 .restClientBuilder(restClientBuilder)
                 .build();
+    }
+
+    @Bean
+    @Primary
+    public HuskyOpenAiChatModel chatModel(
+            OpenAiApi openAiApi,
+            @Value("${spring.ai.openai.chat.options.model:${OPENAI_MODEL:gpt-4o}}") String model,
+            @Value("${spring.ai.openai.chat.options.temperature:0.7}") Double temperature,
+            ToolCallingManager toolCallingManager,
+            ObjectProvider<RetryTemplate> retryTemplateProvider,
+            ObjectProvider<ObservationRegistry> observationRegistryProvider) {
+
+        OpenAiChatOptions options = OpenAiChatOptions.builder()
+                .model(model)
+                .temperature(temperature)
+                .build();
+
+        return new HuskyOpenAiChatModel(
+                openAiApi,
+                options,
+                toolCallingManager,
+                retryTemplateProvider.getIfUnique(() -> RetryUtils.DEFAULT_RETRY_TEMPLATE),
+                observationRegistryProvider.getIfUnique(() -> ObservationRegistry.NOOP));
     }
 }
