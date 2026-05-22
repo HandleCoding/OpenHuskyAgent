@@ -40,35 +40,53 @@ public class LocalBackend implements ExecutionBackend {
         );
     }
 
+    LocalBackend(BackendConfig config, ExecutorService executor) {
+        this.config = config;
+        this.executor = executor;
+    }
+
     @Override
     public ExecResult execute(String command, String cwd, int timeoutSeconds) {
+        Process process = null;
+        BufferedReader reader = null;
         try {
             ProcessBuilder pb = buildProcessBuilder(command, resolveCwd(cwd));
-            Process process = pb.start();
+            process = pb.start();
             StringBuilder output = new StringBuilder();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
-            Future<Void> drainer = executor.submit(() -> {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
-                return null;
-            });
+            BufferedReader outputReader = reader;
+            CompletableFuture<Void> drainer = new CompletableFuture<>();
+            Thread drainerThread = new Thread(() -> drainOutput(outputReader, output, drainer),
+                    "local-foreground-drainer-" + threadCounter.incrementAndGet());
+            drainerThread.setDaemon(true);
+            drainerThread.start();
 
-            try {
-                drainer.get(timeoutSeconds, TimeUnit.SECONDS);
-            } catch (TimeoutException e) {
-                process.destroyForcibly();
-                drainer.cancel(true);
+            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            if (!finished) {
+                destroyProcessTree(process);
+                closeQuietly(reader);
+                cancelDrainer(drainer);
                 return new ExecResult("Command timeout after " + timeoutSeconds + "s", 124, false);
             }
 
-            process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            awaitDrainer(drainer, 30, TimeUnit.SECONDS);
+            closeQuietly(reader);
             int exitCode = process.exitValue();
             return new ExecResult(output.toString(), exitCode, exitCode == 0);
 
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            if (process != null) {
+                destroyProcessTree(process);
+            }
+            closeQuietly(reader);
+            return new ExecResult("Execution interrupted", 1, false);
         } catch (Exception e) {
+            if (process != null) {
+                destroyProcessTree(process);
+            }
+            closeQuietly(reader);
             return new ExecResult("Execution failed: " + e.getMessage(), 1, false);
         }
     }
@@ -193,6 +211,52 @@ public class LocalBackend implements ExecutionBackend {
         return System.getProperty("user.dir");
     }
 
+    private void closeQuietly(BufferedReader reader) {
+        if (reader == null) return;
+        try {
+            reader.close();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void drainOutput(BufferedReader reader, StringBuilder output, CompletableFuture<Void> completion) {
+        String line;
+        try {
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append("\n");
+            }
+            completion.complete(null);
+        } catch (Exception e) {
+            log.debug("Foreground command output reader stopped: {}", e.getMessage());
+            completion.completeExceptionally(e);
+        }
+    }
+
+    private void awaitDrainer(CompletableFuture<Void> drainer, long timeout, TimeUnit unit)
+            throws InterruptedException, ExecutionException {
+        try {
+            drainer.get(timeout, unit);
+        } catch (TimeoutException e) {
+            cancelDrainer(drainer);
+            throw new IllegalStateException("Timed out reading command output", e);
+        }
+    }
+
+    private void cancelDrainer(CompletableFuture<Void> drainer) {
+        drainer.cancel(true);
+    }
+
+    private void destroyProcessTree(Process process) {
+        List<ProcessHandle> descendants = process.descendants().toList();
+        process.destroyForcibly();
+        descendants.forEach(ProcessHandle::destroyForcibly);
+        try {
+            process.waitFor(1, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private void monitorProcess(String taskId) {
         ProcessInfo info = processes.get(taskId);
         if (info == null) return;
@@ -206,7 +270,9 @@ public class LocalBackend implements ExecutionBackend {
             info.exitCode = info.process.exitValue();
             log.debug("Background task {} completed with exit code {}", taskId, info.exitCode);
         } catch (Exception e) {
-            log.error("Background task {} monitor error: {}", taskId, e.getMessage());
+            if (!released) {
+                log.error("Background task {} monitor error: {}", taskId, e.getMessage());
+            }
         }
     }
 
