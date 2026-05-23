@@ -88,10 +88,12 @@ public class ParallelExecutorNode {
 
             CompletableFuture<ToolResponseMessage.ToolResponse>[] futures = safeTools.stream()
                     .map(call -> {
-                        Duration timeout = resolveToolTimeout(call, defaultTimeout, requestToolContext.toolDefinitionMap());
-                        return CompletableFuture.supplyAsync(() -> executeToolCall(call, stateData, sessionId, requestToolContext), toolExecutor)
-                                .orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
-                                .exceptionally(ex -> exceptionResponse(call, ex, timeout));
+                            Duration timeout = resolveToolTimeout(call, defaultTimeout, requestToolContext.toolDefinitionMap());
+                            return TimedToolTask.submit(
+                                    () -> executeToolCall(call, stateData, sessionId, requestToolContext),
+                                    toolExecutor,
+                                    timeout,
+                                    ex -> exceptionResponse(call, ex, timeout));
                     })
                     .toArray(CompletableFuture[]::new);
 
