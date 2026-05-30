@@ -4,6 +4,8 @@ import io.github.huskyagent.domain.graph.ReActAgentState;
 import io.github.huskyagent.domain.graph.RequestToolContext;
 import io.github.huskyagent.domain.hook.HookRegistry;
 import io.github.huskyagent.domain.hook.HookResult;
+import io.github.huskyagent.domain.runtime.RunCancellationRegistry;
+import io.github.huskyagent.domain.runtime.RunHandle;
 import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import org.bsc.langgraph4j.RunnableConfig;
@@ -18,8 +20,12 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -107,10 +113,103 @@ class ParallelExecutorNodeTest {
         executor.shutdownNow();
     }
 
+    @Test
+    void cancelledRunCancelsRegisteredToolFutureAndSuppressesResponses() throws Exception {
+        CountDownLatch toolStarted = new CountDownLatch(1);
+        ToolCallback callback = new ToolCallback() {
+            @Override
+            public org.springframework.ai.tool.definition.ToolDefinition getToolDefinition() {
+                return org.springframework.ai.tool.definition.ToolDefinition.builder()
+                        .name("slow")
+                        .description("Slow")
+                        .inputSchema("{}")
+                        .build();
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return "unused";
+            }
+
+            @Override
+            public String call(String toolInput, ToolContext toolContext) {
+                toolStarted.countDown();
+                try {
+                    Thread.sleep(10_000);
+                    return "done";
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return "interrupted";
+                }
+            }
+        };
+        ToolDefinition slow = ToolDefinition.of("slow", "Slow", Toolset.CORE, (com.fasterxml.jackson.databind.JsonNode) null, args -> null)
+                .withTimeout(args -> Duration.ofSeconds(10));
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        RecordingCancellationRegistry registry = new RecordingCancellationRegistry(toolStarted);
+        RunHandle runHandle = new RunHandle("session-1", "run-1", 1);
+        ParallelExecutorNode node = new ParallelExecutorNode(new ParallelExecutorNode.Dependencies(
+                Set.of(), 3, 30, allowHooks(), executor));
+        AssistantMessage.ToolCall call = new AssistantMessage.ToolCall("call-1", "function", "slow", "{}");
+        ReActAgentState state = new ReActAgentState(Map.of(ReActAgentState.TOOL_EXECUTION_REQUESTS, List.of(call)));
+        RunnableConfig config = RunnableConfig.builder()
+                .threadId("session-1")
+                .putMetadata(RequestToolContext.METADATA_KEY, RequestToolContext.of(
+                        List.of(slow), List.of(callback), runHandle, registry))
+                .build();
+
+        Map<String, Object> update = node.build().apply(state, config).get(1, TimeUnit.SECONDS);
+
+        assertTrue(registry.registeredCount.get() > 0);
+        assertTrue(registry.unregisteredCount.get() > 0);
+        assertEquals(List.of(), update.get(ReActAgentState.TOOL_EXECUTION_REQUESTS));
+        assertEquals(true, update.get(ReActAgentState.LAST_TOOL_FAILED));
+        assertEquals("parallel_executor cancelled", update.get(ReActAgentState.TOOL_ERROR_HISTORY));
+        executor.shutdownNow();
+    }
+
     private HookRegistry allowHooks() {
         HookRegistry registry = mock(HookRegistry.class);
         when(registry.fireBefore(any(), any(), anyMap())).thenReturn(HookResult.allow());
         return registry;
+    }
+
+    private static class RecordingCancellationRegistry implements RunCancellationRegistry {
+        private final CountDownLatch toolStarted;
+        private final AtomicReference<Future<?>> future = new AtomicReference<>();
+        private final AtomicInteger registeredCount = new AtomicInteger();
+        private final AtomicInteger unregisteredCount = new AtomicInteger();
+        private volatile boolean cancelled;
+
+        RecordingCancellationRegistry(CountDownLatch toolStarted) {
+            this.toolStarted = toolStarted;
+        }
+
+        @Override
+        public boolean isCancelled(RunHandle handle) {
+            return cancelled;
+        }
+
+        @Override
+        public void registerToolFuture(RunHandle handle, Future<?> future) {
+            registeredCount.incrementAndGet();
+            this.future.set(future);
+            try {
+                assertTrue(toolStarted.await(1, TimeUnit.SECONDS));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+            cancelled = true;
+            future.cancel(true);
+        }
+
+        @Override
+        public void unregisterToolFuture(RunHandle handle, Future<?> future) {
+            if (this.future.get() == future) {
+                unregisteredCount.incrementAndGet();
+            }
+        }
     }
 
     @SuppressWarnings("unchecked")

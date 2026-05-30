@@ -13,14 +13,13 @@ import io.github.huskyagent.application.session.RuntimeScope;
 import io.github.huskyagent.application.session.ScopedRuntimeContext;
 import io.github.huskyagent.application.session.SessionResolver;
 import io.github.huskyagent.infra.channel.InboundMessage;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class RuntimeExecutionService {
 
@@ -31,6 +30,49 @@ public class RuntimeExecutionService {
     private final SessionRouteRegistry routeRegistry;
     private final ChannelSceneRouter sceneRouter;
     private final ScopedRuntimeContext scopedRuntimeContext;
+    private final SessionRunCoordinator runCoordinator;
+
+    @Autowired
+    public RuntimeExecutionService(SessionResolver sessionResolver,
+                                   AgentRuntimeExecutor agentRuntimeExecutor,
+                                   ChannelCommandParser commandParser,
+                                   ChannelCommandService commandService,
+                                   SessionRouteRegistry routeRegistry,
+                                   ChannelSceneRouter sceneRouter,
+                                   ScopedRuntimeContext scopedRuntimeContext,
+                                   SessionRunCoordinator runCoordinator) {
+        this.sessionResolver = sessionResolver;
+        this.agentRuntimeExecutor = agentRuntimeExecutor;
+        this.commandParser = commandParser;
+        this.commandService = commandService;
+        this.routeRegistry = routeRegistry;
+        this.sceneRouter = sceneRouter;
+        this.scopedRuntimeContext = scopedRuntimeContext;
+        this.runCoordinator = runCoordinator;
+    }
+
+    public RuntimeExecutionService(SessionResolver sessionResolver,
+                                   AgentRuntimeExecutor agentRuntimeExecutor,
+                                   ChannelCommandParser commandParser,
+                                   ChannelCommandService commandService,
+                                   SessionRouteRegistry routeRegistry,
+                                   ChannelSceneRouter sceneRouter,
+                                   ScopedRuntimeContext scopedRuntimeContext) {
+        this(sessionResolver, agentRuntimeExecutor, commandParser, commandService, routeRegistry,
+                sceneRouter, scopedRuntimeContext, new SessionRunCoordinator());
+    }
+
+    public StopResult interruptSession(String sessionId, String reason) {
+        return runCoordinator.interrupt(sessionId, reason);
+    }
+
+    public StopResult expireSessionRun(String sessionId, String reason) {
+        return runCoordinator.expire(sessionId, reason);
+    }
+
+    public SessionRunCoordinator runCoordinator() {
+        return runCoordinator;
+    }
 
     public RuntimeExecutionResult execute(RuntimeExecutionRequest request) {
         if (request == null) {
@@ -76,29 +118,46 @@ public class RuntimeExecutionService {
                 effectiveRoute.sceneId(), effectiveRoute.source(), effectiveRoute.bindingId());
 
         SessionRoute route = buildRoute(scope, inbound);
+        RunHandle runHandle = request.getRunHandle() != null
+                ? request.getRunHandle()
+                : runCoordinator.registerStart(scope.getSessionId(), Thread.currentThread());
+        RuntimeCallbacks guardedCallbacks = guardedCallbacks(callbacks, runHandle);
         routeRegistry.register(route);
         try {
-            callbacks.started(scope);
+            guardedCallbacks.started(scope);
             RuntimeScope finalScope = scope;
             AgentInput finalAgentInput = agentInput;
             ChatResult result = scopedRuntimeContext.call(finalScope, () -> agentRuntimeExecutor.execute(
                     finalScope,
                     finalAgentInput,
-                    callbacks,
-                    request.persistenceModeOrDefault()
+                    guardedCallbacks,
+                    request.persistenceModeOrDefault(),
+                    runHandle
             ));
+            if (!runCoordinator.isCurrent(runHandle)) {
+                return RuntimeExecutionResult.executed(ChatResult.cancelled(finalScope.getSessionId(), "Run cancelled"), finalScope);
+            }
             if (result.success()) {
-                callbacks.completed(finalScope, result);
-            } else {
-                callbacks.failed(finalScope, result.errorMessage());
+                guardedCallbacks.completed(finalScope, result);
+            } else if (result.errorCode() != ChatResult.ErrorCode.CANCELLED) {
+                guardedCallbacks.failed(finalScope, result.errorMessage());
+            }
+            if (!runCoordinator.isCurrent(runHandle)) {
+                return RuntimeExecutionResult.executed(ChatResult.cancelled(finalScope.getSessionId(), "Run cancelled"), finalScope);
             }
             return RuntimeExecutionResult.executed(result, finalScope);
+        } catch (RunCancelledException e) {
+            return RuntimeExecutionResult.executed(ChatResult.cancelled(scope.getSessionId(), e.getMessage()), scope);
         } catch (Exception e) {
+            if (!runCoordinator.isCurrent(runHandle)) {
+                return RuntimeExecutionResult.executed(ChatResult.cancelled(scope.getSessionId(), "Run cancelled"), scope);
+            }
             log.error("Runtime execution failed: channel={}, sessionId={}",
                     inbound.getChannelIdentity().getChannelType(), scope.getSessionId(), e);
             callbacks.failed(scope, e.getMessage());
             return RuntimeExecutionResult.executed(ChatResult.failure(e.getMessage()), scope);
         } finally {
+            runCoordinator.finishIfCurrent(runHandle);
             routeRegistry.unregister(route);
             if (stateless) {
                 sessionResolver.releaseEphemeralScope(scope);
@@ -134,6 +193,57 @@ public class RuntimeExecutionService {
                 sceneId,
                 requestedSessionId
         );
+    }
+
+    private RuntimeCallbacks guardedCallbacks(RuntimeCallbacks delegate, RunHandle handle) {
+        RuntimeCallbacks target = delegate != null ? delegate : RuntimeCallbacks.NOOP;
+        return new RuntimeCallbacks() {
+            @Override
+            public void started(RuntimeScope scope) {
+                if (runCoordinator.isCurrent(handle)) {
+                    target.started(scope);
+                }
+            }
+
+            @Override
+            public void text(RuntimeScope scope, io.github.huskyagent.application.agent.TextEvent event) {
+                if (runCoordinator.isCurrent(handle)) {
+                    target.text(scope, event);
+                }
+            }
+
+            @Override
+            public void approval(RuntimeScope scope, io.github.huskyagent.application.agent.ApprovalContext approval) {
+                if (runCoordinator.isCurrent(handle)) {
+                    target.approval(scope, approval);
+                } else {
+                    approval.approve(false, false);
+                }
+            }
+
+            @Override
+            public void clarify(RuntimeScope scope, io.github.huskyagent.application.agent.ClarifyContext clarify) {
+                if (runCoordinator.isCurrent(handle)) {
+                    target.clarify(scope, clarify);
+                } else {
+                    clarify.respond("");
+                }
+            }
+
+            @Override
+            public void completed(RuntimeScope scope, ChatResult result) {
+                if (runCoordinator.isCurrent(handle)) {
+                    target.completed(scope, result);
+                }
+            }
+
+            @Override
+            public void failed(RuntimeScope scope, String errorMessage) {
+                if (runCoordinator.isCurrent(handle)) {
+                    target.failed(scope, errorMessage);
+                }
+            }
+        };
     }
 
     private SessionRoute buildRoute(RuntimeScope scope, InboundMessage inbound) {

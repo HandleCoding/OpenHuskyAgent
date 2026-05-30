@@ -1,6 +1,8 @@
 package io.github.huskyagent.domain.graph;
 
 import io.github.huskyagent.domain.graph.util.GraphUtils;
+import io.github.huskyagent.domain.runtime.RunCancellationRegistry;
+import io.github.huskyagent.domain.runtime.RunHandle;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import org.bsc.langgraph4j.RunnableConfig;
 import org.bsc.langgraph4j.spring.ai.tool.SpringAIToolService;
@@ -15,7 +17,9 @@ public record RequestToolContext(List<ToolDefinition> toolDefinitions,
                                  List<ToolCallback> toolCallbacks,
                                  SpringAIToolService toolService,
                                  Map<String, ToolDefinition> toolDefinitionMap,
-                                 Set<String> approvalToolNames) {
+                                 Set<String> approvalToolNames,
+                                 RunHandle runHandle,
+                                 RunCancellationRegistry runCoordinator) {
 
     public static final String METADATA_KEY = "requestToolContext";
 
@@ -36,7 +40,25 @@ public record RequestToolContext(List<ToolDefinition> toolDefinitions,
                 toolCallbacks,
                 new SpringAIToolService(toolCallbacks),
                 toolDefinitionMap,
-                GraphUtils.collectApprovalToolNames(toolDefinitions));
+                GraphUtils.collectApprovalToolNames(toolDefinitions),
+                null,
+                null);
+    }
+
+    public static RequestToolContext of(List<ToolDefinition> toolDefinitions, List<ToolCallback> toolCallbacks,
+                                        RunHandle runHandle, RunCancellationRegistry runCoordinator) {
+        Map<String, ToolDefinition> toolDefinitionMap = new HashMap<>();
+        for (ToolDefinition definition : toolDefinitions) {
+            toolDefinitionMap.put(definition.name(), definition);
+        }
+        return new RequestToolContext(
+                toolDefinitions,
+                toolCallbacks,
+                new SpringAIToolService(toolCallbacks),
+                toolDefinitionMap,
+                GraphUtils.collectApprovalToolNames(toolDefinitions),
+                runHandle,
+                runCoordinator);
     }
 
     public static RequestToolContext from(RunnableConfig config) {

@@ -90,6 +90,71 @@ class TuiSessionServiceTest {
         assertEquals(List.of("first"), runtime.texts);
     }
 
+    @Test
+    void createSessionInvalidatesPendingPromptWithoutBlocking() throws Exception {
+        RecordingRuntimeExecutionService runtime = new RecordingRuntimeExecutionService();
+        FakeSessionResolver sessionResolver = new FakeSessionResolver("session-1", "session-2");
+        TuiSessionService service = newService(runtime, sessionResolver, "conn-3");
+        CountDownLatch secondPrepared = new CountDownLatch(1);
+
+        CompletableFuture<ChatResult> first = CompletableFuture.supplyAsync(() -> service.submitPrompt("first", emitter));
+        assertTrue(runtime.firstStarted.await(1, TimeUnit.SECONDS));
+        CompletableFuture<ChatResult> second = CompletableFuture.supplyAsync(() ->
+                service.submitPrompt("second", emitter, ignored -> secondPrepared.countDown()));
+        assertTrue(secondPrepared.await(1, TimeUnit.SECONDS));
+
+        String newSessionId = service.createSession();
+
+        assertEquals("session-2", newSessionId);
+        runtime.releaseFirst.countDown();
+        assertTrue(first.get(1, TimeUnit.SECONDS).success());
+        ChatResult secondResult = second.get(1, TimeUnit.SECONDS);
+        assertFalse(secondResult.success());
+        assertEquals(ChatResult.ErrorCode.CANCELLED, secondResult.errorCode());
+        assertEquals(List.of("first"), runtime.texts);
+        assertEquals(2, sessionResolver.createCalls);
+        assertEquals("session-2", service.getCurrentSessionId());
+    }
+
+    @Test
+    void cancelledOldPromptDoesNotOverwriteNewCurrentSession() throws Exception {
+        RecordingRuntimeExecutionService runtime = new RecordingRuntimeExecutionService();
+        runtime.firstResult = ChatResult.cancelled("session-1", "Run cancelled");
+        FakeSessionResolver sessionResolver = new FakeSessionResolver("session-1", "session-2");
+        TuiSessionService service = newService(runtime, sessionResolver, "conn-5");
+
+        CompletableFuture<ChatResult> first = CompletableFuture.supplyAsync(() -> service.submitPrompt("first", emitter));
+        assertTrue(runtime.firstStarted.await(1, TimeUnit.SECONDS));
+
+        String newSessionId = service.createSession();
+        runtime.releaseFirst.countDown();
+
+        assertEquals("session-2", newSessionId);
+        assertFalse(first.get(1, TimeUnit.SECONDS).success());
+        assertEquals(ChatResult.ErrorCode.CANCELLED, first.get(1, TimeUnit.SECONDS).errorCode());
+        assertEquals("session-2", service.getCurrentSessionId());
+    }
+
+    @Test
+    void stopDoesNotInvalidateAlreadyQueuedPrompt() throws Exception {
+        RecordingRuntimeExecutionService runtime = new RecordingRuntimeExecutionService();
+        TuiSessionService service = newService(runtime, new FakeSessionResolver("session-1"), "conn-4");
+        CountDownLatch secondPrepared = new CountDownLatch(1);
+
+        CompletableFuture<ChatResult> first = CompletableFuture.supplyAsync(() -> service.submitPrompt("first", emitter));
+        assertTrue(runtime.firstStarted.await(1, TimeUnit.SECONDS));
+        CompletableFuture<ChatResult> second = CompletableFuture.supplyAsync(() ->
+                service.submitPrompt("second", emitter, ignored -> secondPrepared.countDown()));
+        assertTrue(secondPrepared.await(1, TimeUnit.SECONDS));
+
+        service.interruptCurrentRun(null, "user_stop");
+        runtime.releaseFirst.countDown();
+
+        assertTrue(first.get(1, TimeUnit.SECONDS).success());
+        assertTrue(second.get(1, TimeUnit.SECONDS).success());
+        assertEquals(List.of("first", "second"), runtime.texts);
+    }
+
     private TuiSessionService newService(RecordingRuntimeExecutionService runtime,
                                          FakeSessionResolver sessionResolver,
                                          String connectionId) {
@@ -124,6 +189,7 @@ class TuiSessionServiceTest {
         private final CountDownLatch secondStarted = new CountDownLatch(1);
         private final CountDownLatch releaseFirst = new CountDownLatch(1);
         private final AtomicReference<Throwable> firstWaitFailure = new AtomicReference<>();
+        private ChatResult firstResult;
 
         RecordingRuntimeExecutionService() {
             super(null, null, null, null, null, null, null);
@@ -157,21 +223,25 @@ class TuiSessionServiceTest {
             if (failure != null) {
                 return RuntimeExecutionResult.executed(ChatResult.failure(failure.getMessage()), scope(sessionId));
             }
+            if ("first".equals(text) && firstResult != null) {
+                return RuntimeExecutionResult.executed(firstResult, scope(sessionId));
+            }
             return RuntimeExecutionResult.executed(ChatResult.success("ok:" + text, sessionId, false), scope(sessionId));
         }
     }
 
     private static class FakeSessionResolver extends SessionResolver {
-        private final String sessionId;
+        private final List<String> sessionIds;
         private int createCalls;
 
-        FakeSessionResolver(String sessionId) {
+        FakeSessionResolver(String... sessionIds) {
             super(null, null, null, null, null, null, null, null, null);
-            this.sessionId = sessionId;
+            this.sessionIds = List.of(sessionIds);
         }
 
         @Override
         public RuntimeScope createSession(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
+            String sessionId = sessionIds.get(Math.min(createCalls, sessionIds.size() - 1));
             createCalls++;
             return scope(sessionId);
         }

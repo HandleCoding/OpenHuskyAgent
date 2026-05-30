@@ -93,7 +93,9 @@ public class ParallelExecutorNode {
                                     () -> executeToolCall(call, stateData, sessionId, requestToolContext),
                                     toolExecutor,
                                     timeout,
-                                    ex -> exceptionResponse(call, ex, timeout));
+                                    ex -> exceptionResponse(call, ex, timeout),
+                                    requestToolContext.runHandle(),
+                                    requestToolContext.runCoordinator());
                     })
                     .toArray(CompletableFuture[]::new);
 
@@ -101,6 +103,14 @@ public class ParallelExecutorNode {
             final List<AssistantMessage.ToolCall> finalSafeTools     = safeTools;
 
             return CompletableFuture.allOf(futures).handle((v, ex) -> {
+                if (requestToolContext.runCoordinator() != null
+                        && requestToolContext.runCoordinator().isCancelled(requestToolContext.runHandle())) {
+                    Map<String, Object> update = new HashMap<>();
+                    update.put(ReActAgentState.TOOL_EXECUTION_REQUESTS, finalApprovalTools);
+                    update.put(ReActAgentState.LAST_TOOL_FAILED, true);
+                    update.put(ReActAgentState.TOOL_ERROR_HISTORY, "parallel_executor cancelled");
+                    return update;
+                }
                 if (ex != null) {
                     log.error("[parallel_executor] Concurrent execution failed", ex);
                     Map<String, Object> update = new HashMap<>();

@@ -308,6 +308,60 @@ class RuntimeExecutionServiceTest {
         assertEquals("/help", agentApp.input.getText());
     }
 
+    @Test
+    void cancelledRunSuppressesCompletionCallback() {
+        SessionRunCoordinator coordinator = new SessionRunCoordinator();
+        CancellingAgentApp agentApp = new CancellingAgentApp(coordinator);
+        RecordingCallbacks callbacks = new RecordingCallbacks();
+        RuntimeExecutionService service = new RuntimeExecutionService(
+                new FakeSessionResolver(completeScope()),
+                agentApp,
+                inbound -> Optional.empty(),
+                new FakeCommandService(null),
+                new FakeRouteRegistry(),
+                new FakeSceneRouter(),
+                new ScopedRuntimeContext(),
+                coordinator
+        );
+
+        RuntimeExecutionResult result = service.execute(RuntimeExecutionRequest.builder()
+                .inbound(inbound("hello"))
+                .callbacks(callbacks)
+                .build());
+
+        assertFalse(result.chatResult().success());
+        assertEquals(ChatResult.ErrorCode.CANCELLED, result.chatResult().errorCode());
+        assertEquals("session-1", callbacks.startedSessionId);
+        assertNull(callbacks.completedSessionId);
+        assertNull(callbacks.failedErrorMessage);
+    }
+
+    @Test
+    void guardedCallbacksReleaseApprovalAndClarifyWhenRunIsCancelled() {
+        SessionRunCoordinator coordinator = new SessionRunCoordinator();
+        CancellingCallbackAgentApp agentApp = new CancellingCallbackAgentApp(coordinator);
+        RuntimeExecutionService service = new RuntimeExecutionService(
+                new FakeSessionResolver(completeScope()),
+                agentApp,
+                inbound -> Optional.empty(),
+                new FakeCommandService(null),
+                new FakeRouteRegistry(),
+                new FakeSceneRouter(),
+                new ScopedRuntimeContext(),
+                coordinator
+        );
+
+        RuntimeExecutionResult result = service.execute(RuntimeExecutionRequest.builder()
+                .inbound(inbound("hello"))
+                .build());
+
+        assertFalse(result.chatResult().success());
+        assertEquals(ChatResult.ErrorCode.CANCELLED, result.chatResult().errorCode());
+        assertEquals(Boolean.FALSE, agentApp.approved);
+        assertEquals(Boolean.FALSE, agentApp.always);
+        assertEquals("", agentApp.clarifyAnswer);
+    }
+
     private static RuntimeScope completeScope() {
         SceneConfig scene = new SceneConfig();
         scene.setSceneId("assistant");
@@ -372,6 +426,56 @@ class RuntimeExecutionServiceTest {
             this.persistenceMode = persistenceMode;
             this.input = input;
             return ChatResult.success("ok", scope.getSessionId(), false);
+        }
+    }
+
+    private static class CancellingAgentApp implements AgentRuntimeExecutor {
+        private final SessionRunCoordinator coordinator;
+
+        CancellingAgentApp(SessionRunCoordinator coordinator) {
+            this.coordinator = coordinator;
+        }
+
+        @Override
+        public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks) {
+            return execute(scope, input, callbacks, RuntimeExecutionRequest.PersistenceMode.STATEFUL, null);
+        }
+
+        @Override
+        public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks,
+                                  RuntimeExecutionRequest.PersistenceMode persistenceMode, RunHandle runHandle) {
+            coordinator.interrupt(scope.getSessionId(), "test_stop");
+            return ChatResult.success("late", scope.getSessionId(), false);
+        }
+    }
+
+    private static class CancellingCallbackAgentApp implements AgentRuntimeExecutor {
+        private final SessionRunCoordinator coordinator;
+        Boolean approved;
+        Boolean always;
+        String clarifyAnswer;
+
+        CancellingCallbackAgentApp(SessionRunCoordinator coordinator) {
+            this.coordinator = coordinator;
+        }
+
+        @Override
+        public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks) {
+            return execute(scope, input, callbacks, RuntimeExecutionRequest.PersistenceMode.STATEFUL, null);
+        }
+
+        @Override
+        public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks,
+                                  RuntimeExecutionRequest.PersistenceMode persistenceMode, RunHandle runHandle) {
+            coordinator.interrupt(scope.getSessionId(), "test_stop");
+            callbacks.approval(scope, new io.github.huskyagent.application.agent.ApprovalContext(
+                    scope.getSessionId(), "tool", "{}", "", "", (approved, always) -> {
+                this.approved = approved;
+                this.always = always;
+            }));
+            callbacks.clarify(scope, new io.github.huskyagent.application.agent.ClarifyContext(
+                    scope.getSessionId(), "question", List.of(), "", answer -> this.clarifyAnswer = answer));
+            return ChatResult.success("late", scope.getSessionId(), false);
         }
     }
 
@@ -458,10 +562,22 @@ class RuntimeExecutionServiceTest {
 
     private static class RecordingCallbacks implements RuntimeCallbacks {
         String startedSessionId;
+        String completedSessionId;
+        String failedErrorMessage;
 
         @Override
         public void started(RuntimeScope scope) {
             startedSessionId = scope.getSessionId();
+        }
+
+        @Override
+        public void completed(RuntimeScope scope, ChatResult result) {
+            completedSessionId = scope.getSessionId();
+        }
+
+        @Override
+        public void failed(RuntimeScope scope, String errorMessage) {
+            failedErrorMessage = errorMessage;
         }
     }
 }

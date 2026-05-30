@@ -4,6 +4,8 @@ import io.github.huskyagent.application.agent.ApprovalContext;
 import io.github.huskyagent.application.agent.ClarifyContext;
 import io.github.huskyagent.application.agent.TextEvent;
 import io.github.huskyagent.application.runtime.AgentRuntimeExecutor;
+import io.github.huskyagent.application.runtime.RunCancelledException;
+import io.github.huskyagent.application.runtime.RunHandle;
 import io.github.huskyagent.application.runtime.RuntimeCallbacks;
 import io.github.huskyagent.application.runtime.RuntimeExecutionRequest;
 import io.github.huskyagent.application.session.GraphCacheKey;
@@ -73,6 +75,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
     private final MultimodalMessageBuilder multimodalMessageBuilder;
     private final DynamicPromptSnapshotCache dynamicPromptSnapshotCache;
     private final ToolCallbackFactory toolCallbackFactory;
+    private final io.github.huskyagent.application.runtime.SessionRunCoordinator runCoordinator;
 
     /**
      * Caches compiled graphs by runtime-policy fingerprint so scenes, principals,
@@ -103,6 +106,13 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
     @Override
     public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks,
                               RuntimeExecutionRequest.PersistenceMode persistenceMode) {
+        return execute(scope, input, callbacks, persistenceMode, null);
+    }
+
+    @Override
+    public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks,
+                              RuntimeExecutionRequest.PersistenceMode persistenceMode,
+                              RunHandle runHandle) {
         RuntimeCallbacks executionCallbacks = callbacks != null ? callbacks : RuntimeCallbacks.NOOP;
         RuntimeExecutionRequest.PersistenceMode mode = persistenceMode != null
                 ? persistenceMode
@@ -121,14 +131,21 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
                         currentCheckpointId(graph, sid));
             }
             String turnId = UUID.randomUUID().toString();
-            RunnableConfig config = buildConfig(sid, turnId, scope);
+            RunnableConfig config = buildConfig(sid, turnId, scope, runHandle);
             try {
                 return runWithInterruptLoop(scope, graph, config, buildInputs(input), sid,
-                        executionCallbacks, stateless);
+                        executionCallbacks, stateless, runHandle);
             } finally {
                 dynamicPromptSnapshotCache.clearTurn(sid, turnId);
             }
+        } catch (RunCancelledException e) {
+            log.info("Graph execution cancelled: sessionId={}", sid);
+            return ChatResult.cancelled(sid, e.getMessage());
         } catch (Exception e) {
+            if (isCancellation(e, runHandle)) {
+                log.info("Graph execution cancelled: sessionId={}", sid);
+                return ChatResult.cancelled(sid, "Run cancelled");
+            }
             log.error("Graph execution failed: sessionId={}", sid, e);
             return ChatResult.failure(e.getMessage());
         }
@@ -159,7 +176,8 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
             Map<String, Object> inputs,
             String sessionId,
             RuntimeCallbacks callbacks,
-            boolean stateless) throws Exception {
+            boolean stateless,
+            RunHandle runHandle) throws Exception {
 
         Map<String, Object> currentInputs = inputs;
         ReActAgentState finalState = null;
@@ -167,8 +185,10 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
         boolean hasModelOutput = false;
 
         while (true) {
+            throwIfCancelled(runHandle);
             var generator = graph.stream(currentInputs, config);
             for (NodeOutput<ReActAgentState> step : generator) {
+                throwIfCancelled(runHandle);
                 finalState = step.state();
                 if (AgentGraph.NODE_MODEL.equals(step.node())) {
                     hasModelOutput = true;
@@ -179,6 +199,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
             log.debug("[loop] graphResult type={}", graphResult.type());
 
             if (!graphResult.isInterruptionMetadata()) break;
+            throwIfCancelled(runHandle);
 
             if (resumeCount++ > 50) {
                 log.warn("Interrupt resume loop exceeded the limit; forcing exit");
@@ -196,14 +217,40 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
                 callbacks.approval(scope, buildApprovalContext(
                         graph, config, sessionId, metadata, finalState));
             }
+            throwIfCancelled(runHandle);
             currentInputs = null;
         }
 
+        throwIfCancelled(runHandle);
         if (!stateless) {
             recordProviderTokenUsage(sessionId, finalState);
             compactActiveCheckpointIfNeeded(scope, graph, config, finalState);
         }
         return handleFinalState(sessionId, finalState, hasModelOutput, stateless);
+    }
+    private void throwIfCancelled(RunHandle runHandle) {
+        if (runHandle != null && (Thread.currentThread().isInterrupted() || runCoordinator.isCancelled(runHandle))) {
+            throw new RunCancelledException(runHandle.sessionId());
+        }
+    }
+
+    private boolean isCancellation(Throwable error, RunHandle runHandle) {
+        return runHandle != null
+                && (runCoordinator.isCancelled(runHandle)
+                || Thread.currentThread().isInterrupted()
+                || hasCause(error, InterruptedException.class)
+                || hasCause(error, java.util.concurrent.CancellationException.class));
+    }
+
+    private boolean hasCause(Throwable error, Class<? extends Throwable> type) {
+        Throwable current = error;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
 
@@ -278,17 +325,21 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
         }
     }
 
-    private RunnableConfig buildConfig(String sessionId, String turnId, RuntimeScope scope) {
-        return RunnableConfig.builder()
+    private RunnableConfig buildConfig(String sessionId, String turnId, RuntimeScope scope, RunHandle runHandle) {
+        var builder = RunnableConfig.builder()
                 .threadId(sessionId)
                 .putMetadata(DYNAMIC_PROMPT_TURN_ID_METADATA, turnId)
-                .putMetadata(RequestToolContext.METADATA_KEY, buildRequestToolContext(sessionId, scope))
+                .putMetadata(RequestToolContext.METADATA_KEY, buildRequestToolContext(sessionId, scope, runHandle != null ? runHandle.toDomain() : null))
                 .putMetadata("channelIdentity", scope.getChannelIdentity())
-                .putMetadata("principal", scope.getPrincipal())
-                .build();
+                .putMetadata("principal", scope.getPrincipal());
+        if (runHandle != null) {
+            builder.putMetadata(RunHandle.METADATA_KEY, runHandle);
+        }
+        return builder.build();
     }
 
-    private RequestToolContext buildRequestToolContext(String sessionId, RuntimeScope scope) {
+    private RequestToolContext buildRequestToolContext(String sessionId, RuntimeScope scope,
+                                                       io.github.huskyagent.domain.runtime.RunHandle runHandle) {
         var runtimePolicy = scope.getRuntimePolicy();
         var capabilityView = runtimePolicy.getCapabilityView();
         var toolDefinitions = capabilityView.getVisibleTools();
@@ -300,7 +351,9 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
                 capabilityView.getVisibleSkillNames(),
                 capabilityView.getVisiblePromptSections());
         return RequestToolContext.of(toolDefinitions,
-                toolCallbackFactory.build(toolDefinitions, sessionId, executionContext));
+                toolCallbackFactory.build(toolDefinitions, sessionId, executionContext),
+                runHandle,
+                runCoordinator);
     }
 
     private Map<String, Object> buildInputs(AgentInput input) {

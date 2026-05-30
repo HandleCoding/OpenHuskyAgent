@@ -90,7 +90,7 @@ class ExecuteToolNodeTest {
         return RunnableConfig.builder()
                 .threadId("session-1")
                 .putMetadata(RequestToolContext.METADATA_KEY, new RequestToolContext(
-                        definitions, List.of(), toolService, definitionMap, Set.of()))
+                        definitions, List.of(), toolService, definitionMap, Set.of(), null, null))
                 .build();
     }
 

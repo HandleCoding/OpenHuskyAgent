@@ -17,4 +17,10 @@ public interface AgentRuntimeExecutor {
         }
         return execute(scope, input, callbacks);
     }
+
+    default ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks,
+                               RuntimeExecutionRequest.PersistenceMode persistenceMode,
+                               RunHandle runHandle) {
+        return execute(scope, input, callbacks, persistenceMode);
+    }
 }

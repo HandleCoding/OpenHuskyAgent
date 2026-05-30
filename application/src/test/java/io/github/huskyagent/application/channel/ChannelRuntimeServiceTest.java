@@ -6,6 +6,11 @@ import io.github.huskyagent.application.channel.binding.EffectiveChannelRoute;
 import io.github.huskyagent.application.runtime.RuntimeExecutionRequest;
 import io.github.huskyagent.application.runtime.RuntimeExecutionResult;
 import io.github.huskyagent.application.runtime.RuntimeExecutionService;
+import io.github.huskyagent.application.session.RuntimeScope;
+import io.github.huskyagent.application.session.SessionResolver;
+import io.github.huskyagent.domain.capability.CapabilityView;
+import io.github.huskyagent.domain.runtime.RuntimePolicy;
+import io.github.huskyagent.domain.scene.SceneConfig;
 import io.github.huskyagent.infra.channel.ApprovalDecision;
 import io.github.huskyagent.infra.channel.ApprovalPrompt;
 import io.github.huskyagent.infra.channel.ChannelAuthContext;
@@ -20,8 +25,11 @@ import io.github.huskyagent.infra.channel.OutboundMessage;
 import io.github.huskyagent.infra.channel.Principal;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -121,9 +129,125 @@ class ChannelRuntimeServiceTest {
         executor.shutdownNow();
     }
 
+    @Test
+    void stopBypassesBusyQueueAndInterruptsActiveSession() throws Exception {
+        BlockingRuntimeExecutionService runtimeExecutionService = new BlockingRuntimeExecutionService();
+        FakeSessionResolver sessionResolver = new FakeSessionResolver("active-session", "new-session");
+        ChannelRuntimeService service = service(runtimeExecutionService, sessionResolver, "same");
+        RecordingAdapter adapter = new RecordingAdapter();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        CompletableFuture<ChatResult> first = service.handleInboundAsync(inbound(), adapter, executor);
+        runtimeExecutionService.awaitStarted(1);
+
+        CompletableFuture<ChatResult> stop = service.handleInboundAsync(inbound("/stop"), adapter, executor);
+
+        ChatResult stopResult = stop.get(1, TimeUnit.SECONDS);
+        assertTrue(stopResult.success());
+        assertEquals("Stopped current run.", stopResult.content());
+        assertEquals(1, runtimeExecutionService.startedCount());
+        assertEquals("Stopped current run.", adapter.sent.get(0).getText());
+        runtimeExecutionService.releaseOne();
+        assertTrue(first.get(1, TimeUnit.SECONDS).success());
+        executor.shutdownNow();
+    }
+
+    @Test
+    void stopBypassesSaturatedExecutor() throws Exception {
+        BlockingRuntimeExecutionService runtimeExecutionService = new BlockingRuntimeExecutionService();
+        FakeSessionResolver sessionResolver = new FakeSessionResolver("active-session", "new-session");
+        ChannelRuntimeService service = service(runtimeExecutionService, sessionResolver, "same");
+        RecordingAdapter adapter = new RecordingAdapter();
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        CompletableFuture<ChatResult> first = service.handleInboundAsync(inbound(), adapter, executor);
+        runtimeExecutionService.awaitStarted(1);
+
+        CompletableFuture<ChatResult> stop = service.handleInboundAsync(inbound("/stop"), adapter, executor);
+
+        assertTrue(stop.isDone());
+        assertTrue(stop.get(1, TimeUnit.SECONDS).success());
+        assertEquals(1, runtimeExecutionService.startedCount());
+        runtimeExecutionService.releaseOne();
+        assertTrue(first.get(1, TimeUnit.SECONDS).success());
+        executor.shutdownNow();
+    }
+
+    @Test
+    void stopKeepsPendingPromptAndLetsItRunNext() throws Exception {
+        BlockingRuntimeExecutionService runtimeExecutionService = new BlockingRuntimeExecutionService();
+        FakeSessionResolver sessionResolver = new FakeSessionResolver("active-session", "new-session");
+        ChannelRuntimeService service = service(runtimeExecutionService, sessionResolver, "same");
+        RecordingAdapter adapter = new RecordingAdapter();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        CompletableFuture<ChatResult> first = service.handleInboundAsync(inbound("first"), adapter, executor);
+        runtimeExecutionService.awaitStarted(1);
+        CompletableFuture<ChatResult> pending = service.handleInboundAsync(inbound("pending"), adapter, executor);
+        Thread.sleep(100);
+
+        CompletableFuture<ChatResult> stop = service.handleInboundAsync(inbound("/stop"), adapter, executor);
+
+        assertTrue(stop.get(1, TimeUnit.SECONDS).success());
+        assertEquals(1, runtimeExecutionService.startedCount());
+        runtimeExecutionService.releaseOne();
+        assertTrue(first.get(1, TimeUnit.SECONDS).success());
+        runtimeExecutionService.awaitStarted(2);
+        runtimeExecutionService.releaseOne();
+        assertTrue(pending.get(1, TimeUnit.SECONDS).success());
+        assertEquals(2, runtimeExecutionService.startedCount());
+        executor.shutdownNow();
+    }
+
+    @Test
+    void newBypassesBusyQueueAndInvalidatesPendingPrompt() throws Exception {
+        BlockingRuntimeExecutionService runtimeExecutionService = new BlockingRuntimeExecutionService();
+        FakeSessionResolver sessionResolver = new FakeSessionResolver("active-session", "new-session");
+        ChannelRuntimeService service = service(runtimeExecutionService, sessionResolver, "same");
+        RecordingAdapter adapter = new RecordingAdapter();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        CompletableFuture<ChatResult> first = service.handleInboundAsync(inbound("first"), adapter, executor);
+        runtimeExecutionService.awaitStarted(1);
+        CompletableFuture<ChatResult> pending = service.handleInboundAsync(inbound("pending"), adapter, executor);
+        Thread.sleep(100);
+
+        CompletableFuture<ChatResult> create = service.handleInboundAsync(inbound("/new"), adapter, executor);
+
+        ChatResult createResult = create.get(1, TimeUnit.SECONDS);
+        assertTrue(createResult.success());
+        assertEquals("new-session", createResult.sessionId());
+        assertEquals("Created new session: new-session", adapter.sent.get(0).getText());
+        runtimeExecutionService.releaseOne();
+        assertTrue(first.get(1, TimeUnit.SECONDS).success());
+        ChatResult pendingResult = pending.get(1, TimeUnit.SECONDS);
+        assertFalse(pendingResult.success());
+        assertEquals(ChatResult.ErrorCode.CANCELLED, pendingResult.errorCode());
+        assertEquals(1, runtimeExecutionService.startedCount());
+        assertEquals(1, sessionResolver.createCalls);
+        executor.shutdownNow();
+    }
+
+    private ChannelRuntimeService service(RuntimeExecutionService runtimeExecutionService,
+                                          SessionResolver sessionResolver,
+                                          String queueKey) {
+        return new ChannelRuntimeService(
+                runtimeExecutionService,
+                new ChannelInboundQueue(),
+                new FakeQueueKeyFactory(queueKey),
+                new FakeSceneRouter(),
+                inbound -> Optional.of(new ChannelCommand(inbound.getText().substring(1), "", inbound.getText())),
+                new BypassCommandPolicy(),
+                sessionResolver);
+    }
+
     private static InboundMessage inbound() {
+        return inbound("hello");
+    }
+
+    private static InboundMessage inbound(String text) {
         return InboundMessage.builder()
-                .text("hello")
+                .text(text)
                 .principal(Principal.builder().id("user-1").channelType(ChannelType.FEISHU).build())
                 .channelIdentity(ChannelIdentity.builder()
                         .channelType(ChannelType.FEISHU)
@@ -193,6 +317,17 @@ class ChannelRuntimeServiceTest {
             return RuntimeExecutionResult.executed(ChatResult.success("ok", "s1", false), null);
         }
 
+        @Override
+        public io.github.huskyagent.application.runtime.StopResult interruptSession(String sessionId, String reason) {
+            return io.github.huskyagent.application.runtime.StopResult.stopped(
+                    new io.github.huskyagent.application.runtime.RunHandle(sessionId, "run-1", 1), reason);
+        }
+
+        @Override
+        public io.github.huskyagent.application.runtime.StopResult expireSessionRun(String sessionId, String reason) {
+            return interruptSession(sessionId, reason);
+        }
+
         int startedCount() {
             return started.get();
         }
@@ -223,6 +358,39 @@ class ChannelRuntimeServiceTest {
         public RuntimeExecutionResult execute(RuntimeExecutionRequest request) {
             this.request = request;
             return result;
+        }
+    }
+
+    private static class FakeSessionResolver extends SessionResolver {
+        private final String activeSessionId;
+        private final String newSessionId;
+        int createCalls;
+
+        FakeSessionResolver(String activeSessionId, String newSessionId) {
+            super(null, null, null, null, null, null, null, null, null);
+            this.activeSessionId = activeSessionId;
+            this.newSessionId = newSessionId;
+        }
+
+        @Override
+        public Optional<String> findActiveSessionId(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
+            return Optional.ofNullable(activeSessionId);
+        }
+
+        @Override
+        public RuntimeScope createSession(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
+            createCalls++;
+            return RuntimeScope.builder()
+                    .sessionId(newSessionId)
+                    .principal(principal)
+                    .channelIdentity(channelIdentity)
+                    .runtimePolicy(RuntimePolicy.builder()
+                            .sceneId("assistant")
+                            .capabilityView(CapabilityView.builder().build())
+                            .knowledgeSources(Set.of())
+                            .build())
+                    .workingDirectory(Path.of("/tmp/work"))
+                    .build();
         }
     }
 

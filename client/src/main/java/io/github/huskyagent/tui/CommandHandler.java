@@ -56,6 +56,7 @@ class CommandHandler {
             case "/help"                 -> printHelp();
             case "/exit", "/quit", "/q" -> { println(BLUE + "Goodbye! 👋" + RESET); exitRequested = true; }
             case "/new"                  -> createNewSession();
+            case "/stop"                 -> stopCurrentRun();
             case "/resume"               -> resumeSession(args);
             case "/rewind"               -> rewindSession();
             case "/session"              -> showSessionInfo();
@@ -78,7 +79,8 @@ class CommandHandler {
         println("");
         println(BOLD + "Commands:" + RESET);
         println("  " + YELLOW + "/help" + RESET + "      - Show help");
-        println("  " + YELLOW + "/new" + RESET + "       - Create a new session");
+        println("  " + YELLOW + "/new" + RESET + "       - Create a new session, stopping the current run if needed");
+        println("  " + YELLOW + "/stop" + RESET + "      - Stop the current response");
         println("  " + YELLOW + "/resume" + RESET + "    - Resume a previous session interactively");
         println("  " + YELLOW + "/rewind" + RESET + "    - Rewind to a previous message");
         println("  " + YELLOW + "/session" + RESET + "   - Show current session information");
@@ -101,6 +103,16 @@ class CommandHandler {
             }
         } catch (Exception e) {
             println(RED + "❌ Failed to create session: " + e.getMessage() + RESET);
+        }
+    }
+
+    private void stopCurrentRun() {
+        try {
+            JsonNode result = client.request("session.interrupt", Map.of()).get();
+            boolean interrupted = result != null && result.has("interrupted") && result.get("interrupted").asBoolean();
+            println((interrupted ? GREEN + "✓ Stopped current run" : GRAY + "No active run to stop") + RESET);
+        } catch (Exception e) {
+            println(RED + "❌ Failed to stop current run: " + e.getMessage() + RESET);
         }
     }
 

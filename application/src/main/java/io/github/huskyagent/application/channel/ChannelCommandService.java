@@ -19,6 +19,7 @@ public class ChannelCommandService {
         String name = command.name();
         return switch (name) {
             case "new", "newsession", "new-session" -> newSession(inbound, sceneId);
+            case "stop" -> reply(inbound, null, "Stop is handled by the runtime bypass path.");
             case "session", "session-info" -> currentSession(inbound, sceneId);
             case "help" -> help(inbound);
             default -> unknown(command, inbound);
@@ -27,7 +28,7 @@ public class ChannelCommandService {
 
     public boolean supports(ChannelCommand command) {
         return switch (command.name()) {
-            case "new", "newsession", "new-session", "session", "session-info", "help" -> true;
+            case "new", "newsession", "new-session", "stop", "session", "session-info", "help" -> true;
             default -> false;
         };
     }
@@ -54,7 +55,7 @@ public class ChannelCommandService {
     }
 
     private OutboundMessage help(InboundMessage inbound) {
-        return reply(inbound, null, "Available commands:\n/new Create a new session\n/session Show current session\n/help Show help");
+        return reply(inbound, null, "Available commands:\n/new Create a new session\n/stop Stop current run\n/session Show current session\n/help Show help");
     }
 
     private OutboundMessage unknown(ChannelCommand command, InboundMessage inbound) {

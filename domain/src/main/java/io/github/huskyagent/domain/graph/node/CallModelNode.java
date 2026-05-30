@@ -243,7 +243,11 @@ public class CallModelNode {
                             continue;
                         }
                         if (!llmRetryPolicy.isRetryable(e)) {
-                            log.error("[model] Non-retryable error: {}", e.getMessage());
+                            if (isCancellation(e)) {
+                                log.info("[model] LLM call interrupted: session={}", sessionId);
+                            } else {
+                                log.error("[model] Non-retryable error: {}", e.getMessage());
+                            }
                             break;
                         }
                         if (attempt < maxRetries) {
@@ -307,7 +311,9 @@ public class CallModelNode {
                 return completedFuture(result);
             } catch (Exception e) {
                 Throwable cause = e.getCause() != null ? e.getCause() : e;
-                if (cause instanceof org.springframework.web.reactive.function.client.WebClientResponseException wce) {
+                if (isCancellation(e)) {
+                    log.info("[model] LLM call cancelled: session={}", sessionId);
+                } else if (cause instanceof org.springframework.web.reactive.function.client.WebClientResponseException wce) {
                     log.error("[model] API {} error: body={}", wce.getStatusCode(), wce.getResponseBodyAsString());
                 } else {
                     log.error("[model] LLM call failed: {}", cause.getMessage());
@@ -319,6 +325,23 @@ public class CallModelNode {
 
     private static long elapsedMs(long startNanos) {
         return Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+    }
+
+    private static boolean isCancellation(Throwable error) {
+        return Thread.currentThread().isInterrupted()
+                || hasCause(error, InterruptedException.class)
+                || hasCause(error, java.util.concurrent.CancellationException.class);
+    }
+
+    private static boolean hasCause(Throwable error, Class<? extends Throwable> type) {
+        Throwable current = error;
+        while (current != null) {
+            if (type.isInstance(current)) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private int estimateMessages(List<Message> messages) {

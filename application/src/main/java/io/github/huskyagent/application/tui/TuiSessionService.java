@@ -72,9 +72,10 @@ public class TuiSessionService {
 
 
     public String createSession() {
+        runtimeExecutionService.runCoordinator().bumpQueueGeneration(queueKey);
+        interruptCurrentRun(null, "new_session");
         RuntimeScope scope = sessionResolver.createSession(principal, channelIdentity, null);
-        this.currentSessionId = scope.getSessionId();
-        return currentSessionId;
+        return setCurrentSessionId(scope.getSessionId());
     }
 
     public String getCurrentSessionId() {
@@ -102,8 +103,7 @@ public class TuiSessionService {
     public String switchSession(String sessionId) {
         try {
             RuntimeScope scope = sessionResolver.resolveOrCreateSession(principal, channelIdentity, null, sessionId);
-            this.currentSessionId = scope.getSessionId();
-            return currentSessionId;
+            return setCurrentSessionId(scope.getSessionId());
         } catch (SecurityException e) {
             throw new IllegalArgumentException("Session is not accessible: " + sessionId, e);
         }
@@ -139,7 +139,13 @@ public class TuiSessionService {
 
     public ChatResult submitPrompt(String message, JsonRpcEventEmitter emitter, Consumer<String> sessionReadyHandler) {
         PreparedPrompt prepared = preparePrompt(message, sessionReadyHandler);
-        return inboundQueue.enqueue(queueKey, () -> executePrompt(prepared, emitter), executor).join();
+        long generation = runtimeExecutionService.runCoordinator().currentQueueGeneration(queueKey);
+        return inboundQueue.enqueue(queueKey, () -> {
+            if (!runtimeExecutionService.runCoordinator().isQueueGenerationCurrent(queueKey, generation)) {
+                return ChatResult.cancelled(prepared.sessionId(), "Queued request superseded");
+            }
+            return executePrompt(prepared, emitter);
+        }, executor).join();
     }
 
     private synchronized PreparedPrompt preparePrompt(String message, Consumer<String> sessionReadyHandler) {
@@ -150,6 +156,11 @@ public class TuiSessionService {
             sessionReadyHandler.accept(currentSessionId);
         }
         return new PreparedPrompt(message, currentSessionId, workingDirectory);
+    }
+
+    private synchronized String setCurrentSessionId(String sessionId) {
+        this.currentSessionId = sessionId;
+        return currentSessionId;
     }
 
     private ChatResult executePrompt(PreparedPrompt prepared, JsonRpcEventEmitter emitter) {
@@ -163,15 +174,18 @@ public class TuiSessionService {
                     .workingDirectoryOverride(prepared.workingDirectory())
                     .callbacks(new TuiRuntimeCallbacks(this, emitter))
                     .build());
-            if (executionResult.scope() != null) {
-                this.currentSessionId = executionResult.scope().getSessionId();
-            }
             ChatResult result = executionResult.chatResult();
+            if (executionResult.scope() != null && result.errorCode() != ChatResult.ErrorCode.CANCELLED) {
+                updateCurrentSessionIfStillActive(prepared.sessionId(), executionResult.scope().getSessionId());
+            }
 
             long durationMs = System.currentTimeMillis() - startTime;
+            String status = result.success()
+                    ? "ok"
+                    : (result.errorCode() == ChatResult.ErrorCode.CANCELLED ? "cancelled" : "error");
             emitter.emitMessageComplete(
                     result.content(),
-                    result.success() ? "ok" : "error",
+                    status,
                     durationMs,
                     result.streamed()
             );
@@ -186,7 +200,29 @@ public class TuiSessionService {
             pendingClarifications.clear();
         }
     }
+    private void updateCurrentSessionIfStillActive(String preparedSessionId, String resultSessionId) {
+        if (resultSessionId == null) {
+            return;
+        }
+        synchronized (this) {
+            if (Objects.equals(currentSessionId, preparedSessionId)) {
+                currentSessionId = resultSessionId;
+            }
+        }
+    }
 
+
+    public InterruptResult interruptCurrentRun(JsonRpcEventEmitter emitter, String reason) {
+        io.github.huskyagent.application.runtime.StopResult result = currentSessionId != null
+                ? runtimeExecutionService.interruptSession(currentSessionId, reason != null ? reason : "user_stop")
+                : io.github.huskyagent.application.runtime.StopResult.none(null, reason);
+        cancelPendingApprovals();
+        if (emitter != null) {
+            String text = result.hadActiveRun() ? "Stopped current run." : "No active run to stop.";
+            emitter.emitStatusUpdate("cancelled", text);
+        }
+        return new InterruptResult(result.hadActiveRun(), currentSessionId, reason);
+    }
 
     public boolean respondApproval(String requestId, String choice, boolean always) {
         ApprovalWait wait = pendingApprovals.get(requestId);
@@ -288,6 +324,8 @@ public class TuiSessionService {
 
 
     private record PreparedPrompt(String message, String sessionId, Path workingDirectory) {}
+
+    public record InterruptResult(boolean interrupted, String sessionId, String reason) {}
 
     private static class ApprovalWait {
         private final CountDownLatch latch = new CountDownLatch(1);

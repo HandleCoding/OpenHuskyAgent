@@ -156,7 +156,12 @@ public class JsonRpcMethods {
     }
 
     private ObjectNode sessionInterrupt(String id, JsonNode params) {
-        return JsonRpcProtocol.response(id, Map.of("ok", false, "reason", "Not implemented yet"));
+        TuiSessionService.InterruptResult result = sessionService.interruptCurrentRun(emitter, "user_stop");
+        return JsonRpcProtocol.response(id, Map.of(
+                "ok", true,
+                "interrupted", result.interrupted(),
+                "sessionId", result.sessionId() != null ? result.sessionId() : ""
+        ));
     }
 
     private ObjectNode sessionCd(String id, JsonNode params) {

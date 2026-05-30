@@ -21,6 +21,7 @@ public class RuntimeExecutionRequest {
     PersistenceMode persistenceMode;
     AgentInput agentInput;
     Boolean commandParsingEnabled;
+    RunHandle runHandle;
 
     public RuntimeCallbacks callbacksOrNoop() {
         return callbacks != null ? callbacks : RuntimeCallbacks.NOOP;

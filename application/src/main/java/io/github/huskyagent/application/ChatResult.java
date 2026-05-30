@@ -23,6 +23,7 @@ public record ChatResult(
         AUTH_ERROR,
         SESSION_ERROR,
         LLM_ERROR,
+        CANCELLED,
         INTERNAL_ERROR
     }
 
@@ -40,5 +41,10 @@ public record ChatResult(
 
     public static ChatResult failure(String errorMessage, ErrorCode errorCode) {
         return new ChatResult(null, false, errorMessage, errorCode, null, false, null);
+    }
+
+    public static ChatResult cancelled(String sessionId, String message) {
+        return new ChatResult(null, false, message != null ? message : "Run cancelled",
+                ErrorCode.CANCELLED, sessionId, false, null);
     }
 }
