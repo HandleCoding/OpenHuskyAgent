@@ -210,7 +210,10 @@ bash install.sh --upgrade
 
 ## Minimal Configuration
 
-Most deployments only need `.env`:
+Husky uses two user-editable runtime files after `husky init`:
+
+- `.env` for secrets, model endpoints, feature flags, and channel credentials.
+- `${HUSKY_DATA_DIR}/config/application.yml` for agents, channel instances, and agent-channel-bindings.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -222,6 +225,7 @@ Most deployments only need `.env`:
 | `AUXILIARY_*` | blank/main fallback | Optional model for summaries, compression, web summaries, and vision |
 | `HUSKY_PORT` | `18088` | HTTP/WebSocket service port |
 | `HUSKY_DATA_DIR` | `~/.husky` | Runtime data directory for DBs, skills, MCP config, and logs |
+| `HUSKY_CONFIG_FILE` | `${HUSKY_DATA_DIR}/config/application.yml` | Runtime YAML for agents, channels, and bindings |
 | `AUTH_ENABLED` | `true` | Enables API key auth for `/api/chat` |
 | `HUSKY_API_KEYS` | generated/example | Comma-separated Chatbot API keys; replace before public deployment |
 | `TUI_WS_ALLOWED_ORIGINS` | `*` | WebSocket origins; wildcard is local/dev only |
@@ -354,7 +358,7 @@ This keeps Husky usable as a local personal assistant while allowing enterprise 
 
 ## Configuration Reference
 
-Most runtime defaults live in `service/src/main/resources/application.yml`.
+Packaged defaults live in `service/src/main/resources/application.yml`. Installed/runtime deployments should edit `${HUSKY_DATA_DIR}/config/application.yml`, which is loaded as an external Spring config override by `bin/husky`.
 
 | Area | Important keys |
 |------|----------------|

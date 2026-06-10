@@ -210,7 +210,10 @@ bash install.sh --upgrade
 
 ## 最小配置
 
-大多数部署只需要 `.env`：
+`husky init` 后会有两类用户可编辑 runtime 配置：
+
+- `.env` 放密钥、模型 endpoint、功能开关和渠道凭据。
+- `${HUSKY_DATA_DIR}/config/application.yml` 放 agents、channel instances 和 agent-channel-bindings。
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
@@ -222,6 +225,7 @@ bash install.sh --upgrade
 | `AUXILIARY_*` | blank/main fallback | 可选辅助模型，用于摘要、压缩、网页总结和 vision |
 | `HUSKY_PORT` | `18088` | HTTP/WebSocket 服务端口 |
 | `HUSKY_DATA_DIR` | `~/.husky` | Runtime data directory，存放 DB、skills、MCP config 和 logs |
+| `HUSKY_CONFIG_FILE` | `${HUSKY_DATA_DIR}/config/application.yml` | agents、channels 和 bindings 的 runtime YAML |
 | `AUTH_ENABLED` | `true` | 启用 `/api/chat` API key 鉴权 |
 | `HUSKY_API_KEYS` | generated/example | Chatbot API keys，多个用逗号分隔；公网部署前必须替换 |
 | `TUI_WS_ALLOWED_ORIGINS` | `*` | WebSocket origins；wildcard 仅适合本地开发 |
@@ -354,7 +358,7 @@ Transport -> Channel -> Channel Instance -> Agent -> Runtime Scope -> ReAct Grap
 
 ## 配置参考
 
-主要 runtime 默认值在 `service/src/main/resources/application.yml`。
+打包内置默认值在 `service/src/main/resources/application.yml`。安装/运行时部署应编辑 `${HUSKY_DATA_DIR}/config/application.yml`，`bin/husky` 启动服务时会把它作为外部 Spring config override 读取。
 
 | 领域 | 重要配置 |
 |------|----------|

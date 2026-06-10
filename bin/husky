@@ -104,6 +104,8 @@ HEALTH_PORT="${HUSKY_PORT:-18088}"
 HEALTH_URL="http://localhost:${HEALTH_PORT}/actuator/health"
 MEMORY_DIR="$DATA_DIR/memory"
 ENV_FILE="$(resolve_absolute_path "${HUSKY_ENV_FILE:-$DATA_DIR/.env}" "$ENV_BASE_DIR")"
+CONFIG_FILE="$(resolve_absolute_path "${HUSKY_CONFIG_FILE:-$DATA_DIR/config/application.yml}" "$ENV_BASE_DIR")"
+SPRING_CONFIG_ARG="--spring.config.additional-location=optional:file:${CONFIG_FILE}"
 
 ensure_runtime_dirs() {
     mkdir -p "$DATA_DIR/config" "$DATA_DIR/skills" "$DATA_DIR/db" "$DATA_DIR/logs" "$MEMORY_DIR"
@@ -153,6 +155,143 @@ EOF
     fi
 }
 
+initialize_config_file() {
+    if [ -f "$CONFIG_FILE" ]; then
+        return 0
+    fi
+
+    cat > "$CONFIG_FILE" <<'EOF'
+# Husky runtime configuration.
+# This file overrides the defaults packaged inside the application jar.
+
+agent-channel-bindings:
+  assistant:
+    - feishu:assistant-bot
+    - feishu:qa-bot
+    - telegram:assistant-bot
+    - slack:assistant-bot
+    - tui:local
+  chatbot:
+    - http:chatbot
+
+channels:
+  feishu:
+    instances:
+      assistant-bot:
+        enabled: ${FEISHU_ASSISTANT_ENABLED:false}
+        transport: ${FEISHU_ASSISTANT_TRANSPORT:websocket}
+        app-id: ${FEISHU_ASSISTANT_APP_ID:}
+        app-secret: ${FEISHU_ASSISTANT_APP_SECRET:}
+        verification-token: ${FEISHU_ASSISTANT_VERIFICATION_TOKEN:}
+        encrypt-key: ${FEISHU_ASSISTANT_ENCRYPT_KEY:}
+        bot-open-id: ${FEISHU_ASSISTANT_BOT_OPEN_ID:}
+        mention-required-in-group: ${FEISHU_ASSISTANT_MENTION_REQUIRED_IN_GROUP:true}
+        group-session-scope: ${FEISHU_ASSISTANT_GROUP_SESSION_SCOPE:THREAD}
+        show-tool-calls: ${FEISHU_ASSISTANT_SHOW_TOOL_CALLS:true}
+        approval-timeout-seconds: ${FEISHU_ASSISTANT_APPROVAL_TIMEOUT_SECONDS:300}
+
+      qa-bot:
+        enabled: ${FEISHU_QA_ENABLED:false}
+        transport: ${FEISHU_QA_TRANSPORT:websocket}
+        app-id: ${FEISHU_QA_APP_ID:}
+        app-secret: ${FEISHU_QA_APP_SECRET:}
+        verification-token: ${FEISHU_QA_VERIFICATION_TOKEN:}
+        encrypt-key: ${FEISHU_QA_ENCRYPT_KEY:}
+        bot-open-id: ${FEISHU_QA_BOT_OPEN_ID:}
+        mention-required-in-group: ${FEISHU_QA_MENTION_REQUIRED_IN_GROUP:true}
+        group-session-scope: ${FEISHU_QA_GROUP_SESSION_SCOPE:THREAD}
+        show-tool-calls: ${FEISHU_QA_SHOW_TOOL_CALLS:true}
+        approval-timeout-seconds: ${FEISHU_QA_APPROVAL_TIMEOUT_SECONDS:300}
+
+  telegram:
+    instances:
+      assistant-bot:
+        enabled: ${TELEGRAM_ASSISTANT_ENABLED:false}
+        token: ${TELEGRAM_ASSISTANT_BOT_TOKEN:}
+        bot-username: ${TELEGRAM_ASSISTANT_BOT_USERNAME:}
+        mention-required-in-group: ${TELEGRAM_ASSISTANT_MENTION_REQUIRED_IN_GROUP:true}
+        group-session-scope: ${TELEGRAM_ASSISTANT_GROUP_SESSION_SCOPE:THREAD}
+        show-tool-calls: ${TELEGRAM_ASSISTANT_SHOW_TOOL_CALLS:true}
+        approval-timeout-seconds: ${TELEGRAM_ASSISTANT_APPROVAL_TIMEOUT_SECONDS:300}
+        long-polling-timeout-seconds: ${TELEGRAM_ASSISTANT_LONG_POLLING_TIMEOUT_SECONDS:50}
+
+  slack:
+    instances:
+      assistant-bot:
+        enabled: ${SLACK_ASSISTANT_ENABLED:false}
+        bot-token: ${SLACK_ASSISTANT_BOT_TOKEN:}
+        app-token: ${SLACK_ASSISTANT_APP_TOKEN:}
+        bot-user-id: ${SLACK_ASSISTANT_BOT_USER_ID:}
+        bot-name: ${SLACK_ASSISTANT_BOT_NAME:}
+        team-id: ${SLACK_ASSISTANT_TEAM_ID:}
+        mention-required-in-channel: ${SLACK_ASSISTANT_MENTION_REQUIRED_IN_CHANNEL:true}
+        group-session-scope: ${SLACK_ASSISTANT_GROUP_SESSION_SCOPE:THREAD}
+        show-tool-calls: ${SLACK_ASSISTANT_SHOW_TOOL_CALLS:true}
+        approval-timeout-seconds: ${SLACK_ASSISTANT_APPROVAL_TIMEOUT_SECONDS:300}
+        send-typing-status: ${SLACK_ASSISTANT_SEND_TYPING_STATUS:false}
+        reply-broadcast: ${SLACK_ASSISTANT_REPLY_BROADCAST:false}
+
+agents:
+  assistant:
+    system-prompt: ""
+    toolsets: []
+    denied-tools: []
+    knowledge-sources: []
+    allowed-mcp-servers: []
+    denied-mcp-servers: []
+    approval: required
+    backend: local
+    working-dir: inherit
+    memory:
+      scope: session
+    prompt-files: []
+    prompt-file-policy: override
+    audit-enabled: true
+    audit-tags: []
+    rate-limit-enabled: false
+
+  chatbot:
+    system-prompt: |
+      You are Husky, an intelligent AI assistant.
+      You can use the following tools to help users: web_search for internet search and web_fetch for webpage retrieval.
+      Current time: {{currentDateTime}}
+    toolsets:
+      - CORE
+      - SKILLS
+      - SEARCH
+      - WEB
+      - KNOWLEDGE
+      - MCP
+    allowed-tools: []
+    knowledge-sources: []
+    denied-tools:
+      - read_file
+      - write_file
+      - edit_file
+      - delete_file
+      - move_file
+      - apply_patch
+      - search_files
+      - list_files
+      - terminal
+      - process
+      - skill_search
+      - skill_install
+      - skill_manage
+    approval: none
+    backend: local
+    working-dir: inherit
+    memory:
+      scope: session
+    prompt-files: []
+    prompt-file-policy: append
+    audit-enabled: true
+    audit-tags:
+      - chatbot
+    rate-limit-enabled: false
+EOF
+}
+
 print_version() {
     echo "husky $VERSION"
 }
@@ -160,17 +299,20 @@ print_version() {
 run_init() {
     ensure_runtime_dirs
     initialize_env_file
+    initialize_config_file
     echo "Initialized Husky runtime files"
     echo "  Data directory: $DATA_DIR"
-    echo "  Config file: $ENV_FILE"
+    echo "  Env file: $ENV_FILE"
+    echo "  Runtime config: $CONFIG_FILE"
     echo "  Memory files: $MEMORY_DIR/MEMORY.md, $MEMORY_DIR/USER.md"
     echo ""
     echo "Next steps:"
     echo "  1. Edit $ENV_FILE and set OPENAI_API_KEY at minimum"
-    echo "  2. Choose one startup mode: foreground with husky serve"
-    echo "  3. Or background with husky start"
-    echo "  4. If you use background mode, check status/logs with: husky status && husky logs"
-    echo "  5. Optional browser tools: set BROWSER_ENABLED=true, then run husky browser install"
+    echo "  2. Edit $CONFIG_FILE for agents, channels, and agent-channel-bindings"
+    echo "  3. Choose one startup mode: foreground with husky serve"
+    echo "  4. Or background with husky start"
+    echo "  5. If you use background mode, check status/logs with: husky status && husky logs"
+    echo "  6. Optional browser tools: set BROWSER_ENABLED=true, then run husky browser install"
 }
 
 service_installed() {
@@ -221,7 +363,8 @@ print_runtime_summary() {
     echo "Husky runtime paths:"
     echo "  Code directory : $PROJECT_DIR"
     echo "  Data directory : $DATA_DIR"
-    echo "  Config file    : $ENV_FILE"
+    echo "  Env file       : $ENV_FILE"
+    echo "  Runtime config : $CONFIG_FILE"
     echo "  Memory dir     : $MEMORY_DIR"
     if service_installed; then
         echo "  systemd        : /etc/systemd/system/husky-agent.service"
@@ -308,10 +451,12 @@ case "${1:-serve}" in
         run_init
         ;;
     serve)
+        ensure_runtime_dirs
+        initialize_config_file
         if [ -n "$JAR" ]; then
-            exec java -jar "$JAR" "${@:2}"
+            exec java -jar "$JAR" "$SPRING_CONFIG_ARG" "${@:2}"
         elif [ -n "$MVNW" ]; then
-            exec "$MVNW" spring-boot:run -pl service
+            exec "$MVNW" spring-boot:run -pl service -Dspring-boot.run.arguments="$SPRING_CONFIG_ARG"
         else
             echo "Error: Cannot find Husky JAR or mvnw"
             exit 1
@@ -371,10 +516,12 @@ case "${1:-serve}" in
         done
 
         echo "Starting Husky service..."
+        ensure_runtime_dirs
+        initialize_config_file
         if [ -n "$JAR" ]; then
-            java -jar "$JAR" --server.port="$SERVER_PORT" &
+            java -jar "$JAR" "$SPRING_CONFIG_ARG" --server.port="$SERVER_PORT" &
         elif [ -n "$MVNW" ]; then
-            "$MVNW" spring-boot:run -pl service -Dspring-boot.run.arguments="--server.port=$SERVER_PORT" &
+            "$MVNW" spring-boot:run -pl service -Dspring-boot.run.arguments="$SPRING_CONFIG_ARG --server.port=$SERVER_PORT" &
         else
             echo "Error: Cannot find Husky JAR or mvnw"
             exit 1
