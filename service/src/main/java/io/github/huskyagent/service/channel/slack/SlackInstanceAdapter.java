@@ -365,7 +365,6 @@ public class SlackInstanceAdapter extends AbstractChannelAdapter {
                         .channelType(ChannelType.SLACK)
                         .build())
                 .channelIdentity(channelIdentity)
-                .sceneId(properties.getDefaultScene())
                 .replyTarget(replyTarget)
                 .rawPayload(rawEvent)
                 .metadata(Map.of("slackEventType", eventType))

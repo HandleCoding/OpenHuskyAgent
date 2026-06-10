@@ -18,7 +18,6 @@ public class TelegramProperties {
         private boolean enabled = false;
         private String token = "";
         private String botUsername = "";
-        private String defaultScene = "assistant";
         private boolean mentionRequiredInGroup = true;
         private GroupSessionScope groupSessionScope = GroupSessionScope.THREAD;
         private boolean showToolCalls = true;

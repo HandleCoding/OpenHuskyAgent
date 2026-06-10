@@ -54,7 +54,7 @@ public class SseChatController {
 
     @PostMapping(produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chat(@RequestBody ChatRequest request,
-                           @RequestHeader(value = "X-Scene", required = false) String sceneId) {
+                           @RequestHeader(value = "X-Agent", required = false) String agentId) {
         if (!chatbotConfig.isEnabled()) {
             SseEmitter emitter = new SseEmitter(0L);
             try {
@@ -67,7 +67,7 @@ public class SseChatController {
         String sessionId = normalizeSessionId(request.sessionId());
         SseEmitter emitter = new SseEmitter(300_000L);
         SseRuntimeCallbacks callbacks = new SseRuntimeCallbacks(emitter, sseChannelAdapter);
-        InboundMessage inbound = buildInbound(request, sessionId, sceneId);
+        InboundMessage inbound = buildInbound(request, sessionId, agentId);
         EffectiveChannelRoute route = sceneRouter.resolve(inbound);
         emitter.onTimeout(() -> log.warn("SSE emitter timeout: requestedSessionId={}", sessionId));
 
@@ -111,7 +111,7 @@ public class SseChatController {
         }
     }
 
-    private InboundMessage buildInbound(ChatRequest request, String sessionId, String sceneId) {
+    private InboundMessage buildInbound(ChatRequest request, String sessionId, String agentId) {
         Principal principal = PrincipalContext.get();
         String userId = principal.getId();
         ChannelIdentity channelIdentity = ChannelIdentity.builder()
@@ -125,7 +125,7 @@ public class SseChatController {
                 .requestedSessionId(sessionId)
                 .principal(principal)
                 .channelIdentity(channelIdentity)
-                .sceneId(sceneId)
+                .sceneId(agentId)
                 .build();
     }
 

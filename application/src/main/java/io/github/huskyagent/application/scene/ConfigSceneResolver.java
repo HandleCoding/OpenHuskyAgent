@@ -5,7 +5,12 @@ import io.github.huskyagent.domain.scene.SceneResolver;
 import io.github.huskyagent.infra.tool.Toolset;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.context.EnvironmentAware;
+import org.springframework.core.ResolvableType;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -14,29 +19,60 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @Data
 @Component
-@ConfigurationProperties(prefix = "scenes")
-public class ConfigSceneResolver implements SceneResolver {
+public class ConfigSceneResolver implements SceneResolver, EnvironmentAware, InitializingBean {
 
-    private String defaultScene = "assistant";
-
-    private Map<String, SceneProperties> configs = new LinkedHashMap<>();
+    private Map<String, SceneProperties> agents = new LinkedHashMap<>();
 
     private final ConcurrentHashMap<String, SceneConfig> resolved = new ConcurrentHashMap<>();
+    private Environment environment;
+
+    @Override
+    public void setEnvironment(Environment environment) {
+        this.environment = environment;
+    }
+
+    @Override
+    public void afterPropertiesSet() {
+        if (environment == null) {
+            return;
+        }
+        Map<String, SceneProperties> bound = bindAgents(environment);
+        if (!bound.isEmpty()) {
+            setAgents(bound);
+        }
+    }
 
     public SceneConfig resolve(String sceneId) {
-        String effectiveSceneId = sceneId != null && !sceneId.isBlank() ? sceneId : defaultScene;
-        if (effectiveSceneId == null || effectiveSceneId.isBlank() || !configs.containsKey(effectiveSceneId)) {
-            throw new IllegalArgumentException("Unknown scene: " + effectiveSceneId);
+        String effectiveSceneId = sceneId != null && !sceneId.isBlank() ? sceneId : null;
+        if (effectiveSceneId == null || effectiveSceneId.isBlank() || !agents.containsKey(effectiveSceneId)) {
+            throw new IllegalArgumentException("Unknown agent: " + effectiveSceneId);
         }
         return resolved.computeIfAbsent(effectiveSceneId, this::buildSceneConfig);
     }
 
     public SceneConfig resolveDefault() {
-        return resolve(defaultScene);
+        return resolve("assistant");
+    }
+
+    public Set<String> agentIds() {
+        return agents != null ? Set.copyOf(agents.keySet()) : Set.of();
+    }
+
+    public void setAgents(Map<String, SceneProperties> agents) {
+        this.agents = agents != null ? new LinkedHashMap<>(agents) : new LinkedHashMap<>();
+        this.resolved.clear();
+    }
+
+    public Map<String, SceneProperties> getConfigs() {
+        return getAgents();
+    }
+
+    public void setConfigs(Map<String, SceneProperties> configs) {
+        setAgents(configs);
     }
 
     private SceneConfig buildSceneConfig(String sceneId) {
-        SceneProperties props = configs.get(sceneId);
+        SceneProperties props = agents.get(sceneId);
         SceneConfig config = new SceneConfig();
         config.setSceneId(sceneId);
 
@@ -67,24 +103,20 @@ public class ConfigSceneResolver implements SceneResolver {
             config.setBackendSpec(toBackendSpec(props));
             config.setStoragePolicy(toStoragePolicy(props.getStorage()));
             config.setStorageSpec(toStorageSpec(props));
-        } else if ("assistant".equals(sceneId)) {
-            config.setSystemPrompt(null);
-            config.setAllowedToolsets(Set.of(Toolset.values()));
-            config.setAllowedTools(Set.of());
-            config.setDeniedTools(Set.of());
-            config.setAllowedMcpServers(Set.of());
-            config.setDeniedMcpServers(Set.of());
-            config.setKnowledgeSources(Set.of());
-            config.setApprovalPolicy(SceneConfig.ApprovalPolicy.REQUIRED);
-            config.setBackendPolicy(SceneConfig.BackendPolicy.LOCAL);
-            config.setWorkingDirectoryPolicy(SceneConfig.WorkingDirectoryPolicy.INHERIT);
-            config.setMemoryPolicy(SceneConfig.LegacyMemoryPolicy.SESSION);
         }
 
-        log.info("Resolved scene configuration: sceneId={}, toolsets={}, allowedTools={}, denied={}, approval={}, backend={}, workDir={}",
+        log.info("Resolved agent configuration: agentId={}, toolsets={}, allowedTools={}, denied={}, approval={}, backend={}, workDir={}",
                 sceneId, config.getAllowedToolsets(), config.getAllowedTools(), config.getDeniedTools(),
                 config.getApprovalPolicy(), config.getBackendPolicy(), config.getWorkingDirectoryPolicy());
         return config;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, SceneProperties> bindAgents(Environment environment) {
+        ResolvableType type = ResolvableType.forClassWithGenerics(Map.class, String.class, SceneProperties.class);
+        return (Map<String, SceneProperties>) Binder.get(environment)
+                .bind("agents", Bindable.of(type))
+                .orElseGet(LinkedHashMap::new);
     }
 
     private Set<Toolset> toToolsets(List<String> names) {

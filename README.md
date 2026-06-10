@@ -293,23 +293,23 @@ Headers:
 |--------|----------|---------|
 | `X-Api-Key` | yes when auth is enabled | Chatbot API authentication |
 | `X-User-Id` | yes | Stable end-user identity for session ownership |
-| `X-Scene` | no | Scene override when channel bindings allow it |
+| `X-Agent` | no | Explicit agent id for HTTP chatbot requests |
 
 SSE events include `token`, `reasoning`, `message`, `tool_started`, `tool_completed`, `tool_failed`, `done`, and `error`.
 
 ### Feishu Channel
 
-Husky supports Feishu WebSocket/webhook adapters with multiple app instances under `channels.feishu.instances.*`. Each instance can be bound to a scene through `channel-bindings.*`, allowing different bots/accounts to expose different prompts, tools, memory, and approval policies.
+Husky supports Feishu WebSocket/webhook adapters with multiple app instances under `channels.feishu.instances.*`. Bind instances to agents through `agent-channel-bindings.*`, allowing different bots/accounts to expose different prompts, tools, memory, and approval policies.
 
 ### Telegram Channel
 
-Husky supports a disabled-by-default Telegram long-polling adapter with multiple bot instances under `channels.telegram.instances.*`. Configure `TELEGRAM_ASSISTANT_ENABLED=true`, `TELEGRAM_ASSISTANT_BOT_TOKEN`, and preferably `TELEGRAM_ASSISTANT_BOT_USERNAME` so `channel-bindings.*` can route the bot to the intended scene.
+Husky supports a disabled-by-default Telegram long-polling adapter with multiple bot instances under `channels.telegram.instances.*`. Configure `TELEGRAM_ASSISTANT_ENABLED=true`, `TELEGRAM_ASSISTANT_BOT_TOKEN`, and preferably `TELEGRAM_ASSISTANT_BOT_USERNAME` so `agent-channel-bindings.*` can route the bot to the intended agent.
 
 Telegram v1 supports text messages, group mention gating, forum topic threads, typing indicators, inline approval buttons, and clarification buttons/replies. Long polling is single-consumer per bot token, so run only one Husky process per enabled Telegram token.
 
 ### Slack Channel
 
-Husky supports a disabled-by-default Slack Socket Mode adapter with multiple bot instances under `channels.slack.instances.*`. Configure `SLACK_ASSISTANT_ENABLED=true`, `SLACK_ASSISTANT_BOT_TOKEN`, `SLACK_ASSISTANT_APP_TOKEN`, and `SLACK_ASSISTANT_BOT_USER_ID` so `channel-bindings.*` can route the bot to the intended scene. When Slack is enabled, the bot user id is required because Socket Mode routing should not silently fall back to the global default scene.
+Husky supports a disabled-by-default Slack Socket Mode adapter with multiple bot instances under `channels.slack.instances.*`. Configure `SLACK_ASSISTANT_ENABLED=true`, `SLACK_ASSISTANT_BOT_TOKEN`, `SLACK_ASSISTANT_APP_TOKEN`, and `SLACK_ASSISTANT_BOT_USER_ID` so `agent-channel-bindings.*` can route the bot to the intended agent. When Slack is enabled, the bot user id is required because Socket Mode routing fails closed instead of silently falling back to a global default.
 
 Slack v1 supports text messages, DM and channel/thread routing, channel mention gating, threaded replies, Block Kit approval buttons, and clarification buttons/replies. Create a Slack app with Socket Mode enabled, an app-level token with `connections:write`, bot scopes such as `app_mentions:read`, `chat:write`, `im:history`, and the channel/group history scopes you enable, event subscriptions for `app_mention`, `message.im`, and optional channel/group message events, plus Interactivity enabled for Block Kit callbacks. To DM the bot, enable App Home -> Messages Tab and allow users to send messages from that tab. Invite the bot to private channels before testing there; `SLACK_ASSISTANT_SEND_TYPING_STATUS=false` by default because Slack normal messages do not have a true typing indicator API.
 
@@ -317,13 +317,13 @@ Slack v1 supports text messages, DM and channel/thread routing, channel mention 
 
 - **ReAct graph runtime** — LangGraph4j drives model -> tool -> observation loops with interrupt/resume approvals.
 - **Streaming by channel** — TUI WebSocket, HTTP SSE, and Feishu adapters render the same runtime events differently.
-- **Scene runtime policy** — scenes control prompts, toolsets, exact allow/deny lists, MCP servers, knowledge sources, skills, approval, backend, working directory, memory, audit, and rate limits.
+- **Agent runtime policy** — agents control prompts, toolsets, exact allow/deny lists, MCP servers, knowledge sources, skills, approval, backend, working directory, memory, audit, and rate limits.
 - **Built-in tools** — file read/write/edit/delete/move, apply patch, file search/listing, terminal/process, todo, web search/fetch, browser, memory, knowledge, skills, delegate, MCP, and vision tools.
 - **Parallel tool execution** — safe tools from the same model turn can run concurrently; approval-required tools are routed through a serial confirmation queue.
 - **Memory and checkpoints** — SQLite-backed sessions, graph checkpoints, memory tools, context compression, and model-context-length policies.
-- **Knowledge layer** — scene-scoped `knowledge_search` and `knowledge_fetch` over configured local knowledge sources.
+- **Knowledge layer** — agent-scoped `knowledge_search` and `knowledge_fetch` over configured local knowledge sources.
 - **Skill system** — built-in skills, user-installed skills, SkillHub search/install, and progressive `skill_list` / `skill_view` loading.
-- **MCP integration** — stdio, SSE, and Streamable-HTTP MCP servers with scene-level visibility controls.
+- **MCP integration** — stdio, SSE, and Streamable-HTTP MCP servers with agent-level visibility controls.
 - **Browser and vision** — Playwright browser automation and local/remote image analysis when enabled.
 - **Sub-agent delegation** — `delegate_task` can run child agents for isolated or parallel work.
 - **Observability** — audit logs, metrics, session stats, redaction, and `/actuator/husky`.
@@ -335,7 +335,7 @@ Husky uses a layered Java architecture:
 | Module | Responsibility |
 |--------|----------------|
 | `service/` | Spring Boot entry point, HTTP SSE, TUI WebSocket, Feishu adapters, auth, Actuator |
-| `application/` | Agent orchestration, channel adapters, scene/session resolution, runtime queues, JSON-RPC methods, sub-agent runner |
+| `application/` | Agent orchestration, channel adapters, agent/session resolution, runtime queues, JSON-RPC methods, sub-agent runner |
 | `domain/` | ReAct graph, graph state, approvals, prompt builder, context manager, sessions, hooks, channel events |
 | `infra/` | Tools, memory, knowledge, MCP, browser, workspace, checkpoint store, AI clients, execution backends, config, observability |
 | `client/` | Independent terminal TUI client with no Spring dependency |
@@ -345,10 +345,10 @@ Dependency direction is intentionally one-way: `service -> application -> domain
 Runtime behavior follows this model:
 
 ```text
-Transport -> Channel -> Channel Instance -> Scene -> Runtime Scope -> ReAct Graph
+Transport -> Channel -> Channel Instance -> Agent -> Runtime Scope -> ReAct Graph
 ```
 
-A request resolves its principal, channel identity, concrete account/bot binding, scene config, and session id. The resulting runtime scope controls prompt sections, visible tools, skills, memory, knowledge sources, MCP servers, approval mode, execution backend, workspace/checkpoint storage, audit tags, and graph cache keys.
+A request resolves its principal, channel identity, concrete account/bot binding, agent config, and session id. The resulting runtime scope controls prompt sections, visible tools, skills, memory, knowledge sources, MCP servers, approval mode, execution backend, workspace/checkpoint storage, audit tags, and graph cache keys.
 
 This keeps Husky usable as a local personal assistant while allowing enterprise deployments to replace memory, knowledge, file/workspace, MCP, and checkpoint providers with remote implementations.
 
@@ -361,12 +361,12 @@ Most runtime defaults live in `service/src/main/resources/application.yml`.
 | LLM | `spring.ai.openai.*`, `agent.auxiliary.*` |
 | Agent loop | `agent.graph.max-react-loops`, `agent.llm.*`, `agent.tool.*`, `agent.checkpoint.enabled` |
 | Context | `context.threshold-percent`, `context.context-length`, `context.model-context-lengths`, `context.tail-token-budget` |
-| Channels | `channel-bindings.*`, `channels.feishu.instances.*`, `channels.telegram.instances.*`, `channels.slack.instances.*`, `tui.ws.*`, `chatbot.enabled` |
-| Scenes | `scenes.default-scene`, `scenes.configs.*.toolsets`, `allowed-tools`, `denied-tools`, `approval`, `backend`, `working-dir`, `memory`, `storage` |
+| Channels | `channels.feishu.instances.*`, `channels.telegram.instances.*`, `channels.slack.instances.*`, `tui.ws.*`, `chatbot.enabled` |
+| Agents and bindings | `agents.*`, `agent-channel-bindings.*`, `toolsets`, `allowed-tools`, `denied-tools`, `approval`, `backend`, `working-dir`, `memory`, `storage` |
 | Execution | `execution.backend.docker.*`, `execution.backend.idle-ttl-seconds` |
 | Web | `web.backend`, `web.proxy.*`, `BRAVE_SEARCH_API_KEY`, `TAVILY_API_KEY` |
 | Browser | `browser.enabled`, `browser.headless`, `browser.timeout-seconds`, `browser.allow-private-network` |
-| MCP | `mcp.enabled`, `mcp.config-path`, scene `allowed-mcp-servers` / `denied-mcp-servers` |
+| MCP | `mcp.enabled`, `mcp.config-path`, agent `allowed-mcp-servers` / `denied-mcp-servers` |
 | Knowledge | `knowledge.enabled`, `knowledge.local-sources`, limits for snippets/documents/depth |
 | Skills | `skill.builtin-dir`, `skill.dir`, `skill.managed-dirs`, `skillhub.*` |
 | Auth | `auth.enabled`, `auth.api-keys` |
@@ -381,8 +381,8 @@ Before exposing Husky beyond local development:
 - Replace `HUSKY_API_KEYS` with strong random values.
 - Keep `AUTH_ENABLED=true` for public `/api/chat` endpoints.
 - Set `TUI_WS_ALLOWED_ORIGINS` to trusted origins; do not expose the TUI WebSocket with wildcard `*`.
-- Treat `approval: none` as no-approval mode; do not combine it with dangerous toolsets in online scenes.
-- Restrict terminal, process, file mutation/search, browser automation, `skill_install`, `skill_manage`, and dangerous MCP tools in internet-facing scenes.
+- Treat `approval: none` as no-approval mode; do not combine it with dangerous toolsets in online agents.
+- Restrict terminal, process, file mutation/search, browser automation, `skill_install`, `skill_manage`, and dangerous MCP tools in internet-facing agents.
 - Use `allowed-mcp-servers`, `denied-mcp-servers`, `allowed-tools`, and `denied-tools` to scope MCP and tool visibility.
 - Keep Actuator endpoints on a trusted network or behind authenticated reverse proxy access.
 - Do not commit `.env`, local databases, private MCP configs, API keys, logs, or generated runtime data.

@@ -53,7 +53,7 @@ class FeishuInstanceAdapterTest {
         assertEquals("cli_test", inbound.getChannelIdentity().getPlatformAccountId());
         assertEquals("oc_chat", inbound.getChannelIdentity().getChatId());
         assertEquals("om_1", inbound.getReplyTarget().getMessageId());
-        assertEquals("feishu-qa", inbound.getSceneId());
+        assertNull(inbound.getSceneId());
     }
 
     @Test
@@ -404,7 +404,6 @@ class FeishuInstanceAdapterTest {
         FeishuProperties.InstanceProperties properties = new FeishuProperties.InstanceProperties();
         properties.setAppId("cli_test");
         properties.setBotOpenId("ou_bot");
-        properties.setDefaultScene("feishu-qa");
         properties.setMentionRequiredInGroup(mentionRequired);
         properties.setGroupSessionScope(groupSessionScope);
         properties.setEnabled(true);
@@ -425,7 +424,6 @@ class FeishuInstanceAdapterTest {
         FeishuProperties.InstanceProperties properties = new FeishuProperties.InstanceProperties();
         properties.setAppId("cli_test");
         properties.setBotOpenId("ou_bot");
-        properties.setDefaultScene("feishu-qa");
         properties.setMentionRequiredInGroup(mentionRequired);
         properties.setShowToolCalls(showToolCalls);
         properties.setEnabled(true);

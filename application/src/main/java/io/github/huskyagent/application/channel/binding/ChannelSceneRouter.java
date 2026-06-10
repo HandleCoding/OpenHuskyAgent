@@ -2,6 +2,7 @@ package io.github.huskyagent.application.channel.binding;
 
 import io.github.huskyagent.domain.scene.SceneConfig;
 import io.github.huskyagent.domain.scene.SceneResolver;
+import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.ChannelType;
 import io.github.huskyagent.infra.channel.InboundMessage;
 import lombok.RequiredArgsConstructor;
@@ -14,13 +15,11 @@ import java.util.Optional;
 @Component
 @RequiredArgsConstructor
 public class ChannelSceneRouter {
-    private static final String HTTP_LEGACY_SCENE = "chatbot";
-
     private final ChannelBindingResolver bindingResolver;
     private final SceneResolver sceneResolver;
 
     public EffectiveChannelRoute resolve(InboundMessage inbound) {
-        if (inbound != null && !isBlank(inbound.getSceneId()) && bindingResolver.allowsExplicitSceneOverride(inbound.getChannelIdentity())) {
+        if (inbound != null && !isBlank(inbound.getSceneId()) && allowsExplicitAgent(inbound.getChannelIdentity())) {
             requireScene(inbound.getSceneId(), "explicit scene override");
             return new EffectiveChannelRoute(inbound.getSceneId(), null, EffectiveChannelRoute.Source.EXPLICIT);
         }
@@ -35,19 +34,7 @@ public class ChannelSceneRouter {
             return new EffectiveChannelRoute(value.sceneId(), value.bindingId(), EffectiveChannelRoute.Source.BINDING);
         }
 
-        String legacyScene = legacyDefaultScene(inbound, configuredBinding.isEmpty());
-        if (!isBlank(legacyScene)) {
-            requireScene(legacyScene, "legacy channel default");
-            return new EffectiveChannelRoute(legacyScene, null, EffectiveChannelRoute.Source.CHANNEL_LEGACY_DEFAULT);
-        }
-
-        Optional<String> globalDefault = bindingResolver.defaultScene();
-        if (globalDefault.isPresent()) {
-            requireScene(globalDefault.get(), "channel binding global default");
-            return new EffectiveChannelRoute(globalDefault.get(), null, EffectiveChannelRoute.Source.GLOBAL_DEFAULT);
-        }
-
-        return new EffectiveChannelRoute(sceneResolver.resolveDefault().getSceneId(), null, EffectiveChannelRoute.Source.SCENE_DEFAULT);
+        throw new IllegalArgumentException("No agent binding for channel identity: " + describe(inbound));
     }
 
     private void requireScene(String sceneId, String source) {
@@ -64,22 +51,17 @@ public class ChannelSceneRouter {
         }
     }
 
-    private String legacyDefaultScene(InboundMessage inbound, boolean noConfiguredBinding) {
+    private boolean allowsExplicitAgent(ChannelIdentity identity) {
+        return identity != null && identity.getChannelType() == ChannelType.HTTP;
+    }
+
+    private String describe(InboundMessage inbound) {
         if (inbound == null || inbound.getChannelIdentity() == null) {
-            return null;
+            return "missing";
         }
-        ChannelType channelType = inbound.getChannelIdentity().getChannelType();
-        if (channelType == ChannelType.FEISHU) {
-            log.warn("Legacy scene resolution for Feishu: sceneId='{}'. Consider configuring channel-bindings instead of instance defaultScene.",
-                    inbound.getSceneId());
-            return inbound.getSceneId();
-        }
-        if (channelType == ChannelType.HTTP && noConfiguredBinding) {
-            log.warn("Legacy scene resolution for HTTP: sceneId='{}'. Consider configuring channel-bindings.default-scene or bindings instead.",
-                    HTTP_LEGACY_SCENE);
-            return HTTP_LEGACY_SCENE;
-        }
-        return null;
+        ChannelIdentity identity = inbound.getChannelIdentity();
+        return "channelType=" + identity.getChannelType()
+                + ", platformAccountId=" + identity.getPlatformAccountId();
     }
 
     private boolean isBlank(String value) {

@@ -4,98 +4,143 @@ import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.ChannelType;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConfigChannelBindingResolverTest {
 
     @Test
-    void resolvesMatchingBindingByChannelTypeAndPlatformAccountId() {
-        ChannelBindingProperties properties = new ChannelBindingProperties();
-        properties.setBindings(Map.of(
-                "feishu-assistant", binding("feishu", "cli_assistant", "assistant", true),
-                "feishu-qa", binding("feishu", "cli_qa", "feishu-qa", true)
-        ));
-        ConfigChannelBindingResolver resolver = new ConfigChannelBindingResolver(properties);
+    void resolvesAgentBindingByChannelInstancePlatformAccountId() {
+        ConfigChannelBindingResolver resolver = resolver(
+                Map.of("assistant", List.of("feishu:assistant-bot")),
+                Map.of("feishu:assistant-bot", ref(ChannelType.FEISHU, "assistant-bot", true, "cli_assistant"))
+        );
 
-        ChannelInstanceBinding resolved = resolver.resolve(identity(ChannelType.FEISHU, "cli_qa")).orElseThrow();
+        ChannelInstanceBinding resolved = resolver.resolve(identity(ChannelType.FEISHU, "cli_assistant")).orElseThrow();
 
-        assertEquals("feishu-qa", resolved.bindingId());
-        assertEquals("feishu-qa", resolved.sceneId());
+        assertEquals("assistant", resolved.sceneId());
+        assertEquals("assistant@feishu:assistant-bot", resolved.bindingId());
+    }
+
+    @Test
+    void oneAgentCanBindMultipleChannelInstances() {
+        ConfigChannelBindingResolver resolver = resolver(
+                Map.of("assistant", List.of("feishu:assistant-bot", "slack:assistant-bot")),
+                Map.of(
+                        "feishu:assistant-bot", ref(ChannelType.FEISHU, "assistant-bot", true, "cli_assistant"),
+                        "slack:assistant-bot", ref(ChannelType.SLACK, "assistant-bot", true, "U123BOT")
+                )
+        );
+
+        assertEquals("assistant", resolver.resolve(identity(ChannelType.FEISHU, "cli_assistant")).orElseThrow().sceneId());
+        assertEquals("assistant", resolver.resolve(identity(ChannelType.SLACK, "U123BOT")).orElseThrow().sceneId());
+    }
+
+    @Test
+    void oneAgentCanBindMultipleInstancesOfSameChannelType() {
+        ConfigChannelBindingResolver resolver = resolver(
+                Map.of("support", List.of("feishu:support-cn", "feishu:support-global")),
+                Map.of(
+                        "feishu:support-cn", ref(ChannelType.FEISHU, "support-cn", true, "cli_cn"),
+                        "feishu:support-global", ref(ChannelType.FEISHU, "support-global", true, "cli_global")
+                )
+        );
+
+        assertEquals("support", resolver.resolve(identity(ChannelType.FEISHU, "cli_cn")).orElseThrow().sceneId());
+        assertEquals("support", resolver.resolve(identity(ChannelType.FEISHU, "cli_global")).orElseThrow().sceneId());
+    }
+
+    @Test
+    void ignoresDisabledReferencedInstance() {
+        ConfigChannelBindingResolver resolver = resolver(
+                Map.of("assistant", List.of("feishu:assistant-bot")),
+                Map.of("feishu:assistant-bot", ref(ChannelType.FEISHU, "assistant-bot", false, ""))
+        );
+
+        assertTrue(resolver.resolve(identity(ChannelType.FEISHU, "cli_assistant")).isEmpty());
     }
 
     @Test
     void resolvesTelegramBindingWithLeadingAtUsername() {
-        ChannelBindingProperties properties = new ChannelBindingProperties();
-        properties.setBindings(Map.of("telegram-assistant", binding("telegram", "@assistant_bot", "assistant", true)));
-        ConfigChannelBindingResolver resolver = new ConfigChannelBindingResolver(properties);
+        ConfigChannelBindingResolver resolver = resolver(
+                Map.of("assistant", List.of("telegram:assistant-bot")),
+                Map.of("telegram:assistant-bot", ref(ChannelType.TELEGRAM, "assistant-bot", true, "@assistant_bot"))
+        );
 
         ChannelInstanceBinding resolved = resolver.resolve(identity(ChannelType.TELEGRAM, "assistant_bot")).orElseThrow();
 
-        assertEquals("telegram-assistant", resolved.bindingId());
         assertEquals("assistant", resolved.sceneId());
     }
 
     @Test
-    void resolvesSlackBindingByBotUserId() {
-        ChannelBindingProperties properties = new ChannelBindingProperties();
-        properties.setBindings(Map.of("slack-assistant", binding("slack", "U123BOT", "assistant", true)));
-        ConfigChannelBindingResolver resolver = new ConfigChannelBindingResolver(properties);
+    void duplicateChannelRefAcrossAgentsFails() {
+        ConfigChannelBindingResolver resolver = resolver(
+                Map.of(
+                        "assistant", List.of("feishu:assistant-bot"),
+                        "support", List.of("feishu:assistant-bot")
+                ),
+                Map.of("feishu:assistant-bot", ref(ChannelType.FEISHU, "assistant-bot", true, "cli_assistant"))
+        );
 
-        ChannelInstanceBinding resolved = resolver.resolve(identity(ChannelType.SLACK, "U123BOT")).orElseThrow();
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, resolver::validate);
 
-        assertEquals("slack-assistant", resolved.bindingId());
-        assertEquals("assistant", resolved.sceneId());
-    }
-    @Test
-    void ignoresDisabledBinding() {
-        ChannelBindingProperties properties = new ChannelBindingProperties();
-        properties.setBindings(Map.of("feishu-qa", binding("feishu", "cli_qa", "feishu-qa", false)));
-        ConfigChannelBindingResolver resolver = new ConfigChannelBindingResolver(properties);
-
-        assertTrue(resolver.resolve(identity(ChannelType.FEISHU, "cli_qa")).isEmpty());
+        assertTrue(error.getMessage().contains("multiple agents"));
     }
 
     @Test
-    void exposesConfiguredDisabledBindingSeparatelyFromActiveResolution() {
-        ChannelBindingProperties properties = new ChannelBindingProperties();
-        properties.setBindings(Map.of("http-chatbot", binding("http", "chatbot", "chatbot", false)));
-        ConfigChannelBindingResolver resolver = new ConfigChannelBindingResolver(properties);
+    void invalidChannelRefFails() {
+        ConfigChannelBindingResolver resolver = resolver(
+                Map.of("assistant", List.of("feishu")),
+                Map.of()
+        );
 
-        assertTrue(resolver.resolve(identity(ChannelType.HTTP, "chatbot")).isEmpty());
-        ChannelInstanceBinding configured = resolver.resolveConfigured(identity(ChannelType.HTTP, "chatbot")).orElseThrow();
-        assertFalse(configured.enabled());
-        assertEquals("chatbot", configured.sceneId());
+        assertThrows(IllegalArgumentException.class, resolver::validate);
     }
 
     @Test
-    void returnsEmptyWhenPlatformAccountIdMissing() {
-        ChannelBindingProperties properties = new ChannelBindingProperties();
-        properties.setBindings(Map.of("feishu-qa", binding("feishu", "cli_qa", "feishu-qa", true)));
-        ConfigChannelBindingResolver resolver = new ConfigChannelBindingResolver(properties);
+    void unknownChannelTypeFails() {
+        ConfigChannelBindingResolver resolver = resolver(
+                Map.of("assistant", List.of("discord:bot")),
+                Map.of()
+        );
 
-        assertTrue(resolver.resolve(identity(ChannelType.FEISHU, null)).isEmpty());
+        assertThrows(IllegalArgumentException.class, resolver::validate);
     }
 
     @Test
-    void exposesGlobalDefaultScene() {
-        ChannelBindingProperties properties = new ChannelBindingProperties();
-        properties.setDefaultScene("assistant");
-        ConfigChannelBindingResolver resolver = new ConfigChannelBindingResolver(properties);
+    void unknownInstanceFails() {
+        ConfigChannelBindingResolver resolver = resolver(
+                Map.of("assistant", List.of("feishu:missing")),
+                Map.of()
+        );
 
-        assertEquals("assistant", resolver.defaultScene().orElseThrow());
+        assertThrows(IllegalArgumentException.class, resolver::validate);
     }
 
     @Test
-    void explicitSceneOverrideIsControlledByConfiguredChannelTypes() {
-        ChannelBindingProperties properties = new ChannelBindingProperties();
-        properties.setAllowExplicitSceneOverrideFor(Set.of("http"));
-        ConfigChannelBindingResolver resolver = new ConfigChannelBindingResolver(properties);
+    void blankPlatformAccountForEnabledInstanceFails() {
+        ConfigChannelBindingResolver resolver = resolver(
+                Map.of("assistant", List.of("feishu:assistant-bot")),
+                Map.of("feishu:assistant-bot", ref(ChannelType.FEISHU, "assistant-bot", true, ""))
+        );
 
-        assertTrue(resolver.allowsExplicitSceneOverride(identity(ChannelType.HTTP, "chatbot")));
-        assertFalse(resolver.allowsExplicitSceneOverride(identity(ChannelType.FEISHU, "cli_qa")));
+        assertThrows(IllegalArgumentException.class, resolver::validate);
+    }
+
+    private ConfigChannelBindingResolver resolver(Map<String, List<String>> bindings,
+                                                  Map<String, ChannelInstanceReference> references) {
+        AgentChannelBindingProperties properties = new AgentChannelBindingProperties();
+        properties.setBindings(bindings);
+        return new ConfigChannelBindingResolver(properties, (channelType, instanceId) ->
+                Optional.ofNullable(references.get(channelType.getName() + ":" + instanceId)));
+    }
+
+    private ChannelInstanceReference ref(ChannelType channelType, String instanceId,
+                                         boolean enabled, String platformAccountId) {
+        return new ChannelInstanceReference(channelType, instanceId, enabled, platformAccountId);
     }
 
     private ChannelIdentity identity(ChannelType channelType, String platformAccountId) {
@@ -103,15 +148,5 @@ class ConfigChannelBindingResolverTest {
                 .channelType(channelType)
                 .platformAccountId(platformAccountId)
                 .build();
-    }
-
-    private ChannelBindingProperties.BindingProperties binding(String channelType, String accountId,
-                                                               String sceneId, boolean enabled) {
-        ChannelBindingProperties.BindingProperties binding = new ChannelBindingProperties.BindingProperties();
-        binding.setChannelType(channelType);
-        binding.setPlatformAccountId(accountId);
-        binding.setSceneId(sceneId);
-        binding.setEnabled(enabled);
-        return binding;
     }
 }

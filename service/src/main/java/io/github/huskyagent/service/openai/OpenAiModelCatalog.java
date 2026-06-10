@@ -20,28 +20,25 @@ class OpenAiModelCatalog {
         if (model == null || model.isBlank()) {
             throw new OpenAiProtocolException("model is required", "model", "missing_model");
         }
-        String sceneId = stripPrefix(model.trim());
-        if (!availableSceneIds().contains(sceneId)) {
+        String agentId = stripPrefix(model.trim());
+        if (!availableAgentIds().contains(agentId)) {
             throw new OpenAiProtocolException("Model not found: " + model, "model", "model_not_found");
         }
-        return sceneId;
+        return agentId;
     }
 
     OpenAiWireResponses.ModelsResponse models() {
         long created = Instant.now().getEpochSecond();
-        List<OpenAiWireResponses.ModelObject> data = availableSceneIds().stream()
+        List<OpenAiWireResponses.ModelObject> data = availableAgentIds().stream()
                 .map(id -> new OpenAiWireResponses.ModelObject(toModelId(id), "model", created, "openhusky"))
                 .toList();
         return new OpenAiWireResponses.ModelsResponse("list", data);
     }
 
-    private Set<String> availableSceneIds() {
+    private Set<String> availableAgentIds() {
         Set<String> ids = new LinkedHashSet<>();
-        if (sceneResolver.getConfigs() != null) {
-            ids.addAll(sceneResolver.getConfigs().keySet());
-        }
-        if (sceneResolver.getDefaultScene() != null && !sceneResolver.getDefaultScene().isBlank()) {
-            ids.add(sceneResolver.getDefaultScene());
+        if (sceneResolver.getAgents() != null) {
+            ids.addAll(sceneResolver.getAgents().keySet());
         }
         return ids;
     }
@@ -54,11 +51,11 @@ class OpenAiModelCatalog {
         return model;
     }
 
-    private String toModelId(String sceneId) {
+    private String toModelId(String agentId) {
         String prefix = properties.getModelPrefix();
         if (prefix == null || prefix.isBlank()) {
-            return sceneId;
+            return agentId;
         }
-        return prefix + sceneId;
+        return prefix + agentId;
     }
 }

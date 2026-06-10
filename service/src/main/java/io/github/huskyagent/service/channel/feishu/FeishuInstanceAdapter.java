@@ -440,8 +440,6 @@ public class FeishuInstanceAdapter extends AbstractChannelAdapter implements Mul
                 .contentParts(context.parts() != null ? context.parts() : List.of())
                 .principal(principal)
                 .channelIdentity(channelIdentity)
-                // Legacy: sceneId from instance defaultScene — prefer channel-bindings configuration
-                .sceneId(properties.getDefaultScene())
                 .replyTarget(replyTarget)
                 .rawPayload(context.rawEvent())
                 .metadata(Map.of("feishuChatType", context.chatType() != null ? context.chatType() : ""))

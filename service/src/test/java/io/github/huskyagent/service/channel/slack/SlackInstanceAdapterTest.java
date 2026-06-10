@@ -35,7 +35,7 @@ class SlackInstanceAdapterTest {
         assertEquals("U999", inbound.getChannelIdentity().getPlatformAccountId());
         assertEquals("C1", inbound.getChannelIdentity().getChatId());
         assertEquals("1710000000.000100", inbound.getReplyTarget().getMessageId());
-        assertEquals("assistant", inbound.getSceneId());
+        assertNull(inbound.getSceneId());
     }
 
     @Test
@@ -193,7 +193,6 @@ class SlackInstanceAdapterTest {
     private SlackProperties.InstanceProperties properties() {
         SlackProperties.InstanceProperties properties = new SlackProperties.InstanceProperties();
         properties.setBotUserId("U999");
-        properties.setDefaultScene("assistant");
         properties.setApprovalTimeoutSeconds(5);
         return properties;
     }

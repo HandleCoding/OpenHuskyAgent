@@ -40,7 +40,7 @@ class TelegramInstanceAdapterTest {
         assertEquals("test_bot", inbound.getChannelIdentity().getPlatformAccountId());
         assertEquals("1001", inbound.getChannelIdentity().getChatId());
         assertEquals("11", inbound.getReplyTarget().getMessageId());
-        assertEquals("assistant", inbound.getSceneId());
+        assertNull(inbound.getSceneId());
     }
 
     @Test
@@ -177,7 +177,6 @@ class TelegramInstanceAdapterTest {
     private TelegramProperties.InstanceProperties properties() {
         TelegramProperties.InstanceProperties properties = new TelegramProperties.InstanceProperties();
         properties.setBotUsername("test_bot");
-        properties.setDefaultScene("assistant");
         properties.setApprovalTimeoutSeconds(5);
         return properties;
     }

@@ -348,7 +348,6 @@ public class TelegramInstanceAdapter extends AbstractChannelAdapter {
                         .channelType(ChannelType.TELEGRAM)
                         .build())
                 .channelIdentity(channelIdentity)
-                .sceneId(properties.getDefaultScene())
                 .replyTarget(replyTarget)
                 .rawPayload(update)
                 .metadata(Map.of("telegramChatType", chat.type().name()))

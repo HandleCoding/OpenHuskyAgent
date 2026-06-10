@@ -22,7 +22,6 @@ public class FeishuProperties {
         private String verificationToken = "";
         private String encryptKey = "";
         private String botOpenId = "";
-        private String defaultScene = "feishu-qa";
         private boolean mentionRequiredInGroup = true;
         private GroupSessionScope groupSessionScope = GroupSessionScope.THREAD;
         private boolean showToolCalls = true;

@@ -21,7 +21,6 @@ public class SlackProperties {
         private String botUserId = "";
         private String botName = "";
         private String teamId = "";
-        private String defaultScene = "assistant";
         private boolean mentionRequiredInChannel = true;
         private GroupSessionScope groupSessionScope = GroupSessionScope.THREAD;
         private boolean showToolCalls = true;

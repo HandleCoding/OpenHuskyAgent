@@ -182,7 +182,7 @@ class OpenAiCompatibleRuntimeService {
             metadata.putAll(request.metadata());
         }
         metadata.put("openai.model", request.model());
-        metadata.put("openai.sceneId", sceneId);
+        metadata.put("openai.agentId", sceneId);
         metadata.put("openai.stream", request.streamEnabled());
         return metadata;
     }

@@ -178,39 +178,15 @@ mcp:
   enabled: ${MCP_ENABLED:false}
   config-path: ${MCP_CONFIG_PATH:${husky.data.dir}/config/mcp-servers.json}
 
-channel-bindings:
-  default-scene: assistant
-  allow-explicit-scene-override-for:
-    - http
-  bindings:
-    feishu-assistant-bot:
-      channel-type: feishu
-      platform-account-id: ${FEISHU_ASSISTANT_APP_ID:}
-      scene-id: assistant
-      enabled: ${FEISHU_ASSISTANT_ENABLED:false}
-
-    feishu-qa-bot:
-      channel-type: feishu
-      platform-account-id: ${FEISHU_QA_APP_ID:}
-      scene-id: assistant
-      enabled: ${FEISHU_QA_ENABLED:false}
-
-    telegram-assistant-bot:
-      channel-type: telegram
-      platform-account-id: ${TELEGRAM_ASSISTANT_BOT_USERNAME:}
-      scene-id: assistant
-      enabled: ${TELEGRAM_ASSISTANT_ENABLED:false}
-
-    slack-assistant-bot:
-      channel-type: slack
-      platform-account-id: ${SLACK_ASSISTANT_BOT_USER_ID:}
-      scene-id: assistant
-      enabled: ${SLACK_ASSISTANT_ENABLED:false}
-
-    http-chatbot:
-      channel-type: http
-      platform-account-id: chatbot
-      scene-id: chatbot
+agent-channel-bindings:
+  assistant:
+    - feishu:assistant-bot
+    - feishu:qa-bot
+    - telegram:assistant-bot
+    - slack:assistant-bot
+    - tui:local
+  chatbot:
+    - http:chatbot
 
 # Feishu channel config
 channels:
@@ -224,7 +200,6 @@ channels:
         verification-token: ${FEISHU_ASSISTANT_VERIFICATION_TOKEN:}
         encrypt-key: ${FEISHU_ASSISTANT_ENCRYPT_KEY:}
         bot-open-id: ${FEISHU_ASSISTANT_BOT_OPEN_ID:}
-        default-scene: assistant
         mention-required-in-group: ${FEISHU_ASSISTANT_MENTION_REQUIRED_IN_GROUP:true}
         group-session-scope: ${FEISHU_ASSISTANT_GROUP_SESSION_SCOPE:THREAD}
         show-tool-calls: ${FEISHU_ASSISTANT_SHOW_TOOL_CALLS:true}
@@ -238,7 +213,6 @@ channels:
         verification-token: ${FEISHU_QA_VERIFICATION_TOKEN:}
         encrypt-key: ${FEISHU_QA_ENCRYPT_KEY:}
         bot-open-id: ${FEISHU_QA_BOT_OPEN_ID:}
-        default-scene: assistant
         mention-required-in-group: ${FEISHU_QA_MENTION_REQUIRED_IN_GROUP:true}
         group-session-scope: ${FEISHU_QA_GROUP_SESSION_SCOPE:THREAD}
         show-tool-calls: ${FEISHU_QA_SHOW_TOOL_CALLS:true}
@@ -250,7 +224,6 @@ channels:
         enabled: ${TELEGRAM_ASSISTANT_ENABLED:false}
         token: ${TELEGRAM_ASSISTANT_BOT_TOKEN:}
         bot-username: ${TELEGRAM_ASSISTANT_BOT_USERNAME:}
-        default-scene: assistant
         mention-required-in-group: ${TELEGRAM_ASSISTANT_MENTION_REQUIRED_IN_GROUP:true}
         group-session-scope: ${TELEGRAM_ASSISTANT_GROUP_SESSION_SCOPE:THREAD}
         show-tool-calls: ${TELEGRAM_ASSISTANT_SHOW_TOOL_CALLS:true}
@@ -266,7 +239,6 @@ channels:
         bot-user-id: ${SLACK_ASSISTANT_BOT_USER_ID:}
         bot-name: ${SLACK_ASSISTANT_BOT_NAME:}
         team-id: ${SLACK_ASSISTANT_TEAM_ID:}
-        default-scene: assistant
         mention-required-in-channel: ${SLACK_ASSISTANT_MENTION_REQUIRED_IN_CHANNEL:true}
         group-session-scope: ${SLACK_ASSISTANT_GROUP_SESSION_SCOPE:THREAD}
         show-tool-calls: ${SLACK_ASSISTANT_SHOW_TOOL_CALLS:true}
@@ -274,118 +246,78 @@ channels:
         send-typing-status: ${SLACK_ASSISTANT_SEND_TYPING_STATUS:false}
         reply-broadcast: ${SLACK_ASSISTANT_REPLY_BROADCAST:false}
 
-# OpenAI-compatible Agent-as-a-Model API; runtime behavior is configured by scenes.
+# OpenAI-compatible Agent-as-a-Model API; runtime behavior is configured by agents.
 openai-compatible:
   enabled: ${OPENAI_COMPATIBLE_ENABLED:false}
-  platform-account-id: openai-compatible
-  default-user-id: openai-client
-  stream-timeout-ms: 300000
+  platform-account-id: ${OPENAI_COMPATIBLE_PLATFORM_ACCOUNT_ID:openai-compatible}
+  default-user-id: ${OPENAI_COMPATIBLE_DEFAULT_USER_ID:openai-client}
+  stream-timeout-ms: ${OPENAI_COMPATIBLE_STREAM_TIMEOUT_MS:300000}
+  model-prefix: ${OPENAI_COMPATIBLE_MODEL_PREFIX:}
 
-# Chatbot endpoint switch; runtime behavior is configured by scenes.configs.chatbot.
+# Chatbot endpoint switch; runtime behavior is configured by agents.chatbot.
 chatbot:
   enabled: true
 
-# Scene configuration
-# Scene rate-limit fields are parsed into RuntimePolicy but are not enforced yet.
-scenes:
-  default-scene: assistant
-  configs:
-    assistant:
-      system-prompt: ""
-      toolsets: []
-      denied-tools: []
-      knowledge-sources: [] # empty = all configured knowledge sources
-      allowed-mcp-servers: []
-      denied-mcp-servers: []
-      approval: required
-      backend: local
-      working-dir: inherit
-      memory:
-        scope: session
-      prompt-files: []
-      prompt-file-policy: override
-      audit-enabled: true
-      audit-tags: []
-      rate-limit-enabled: false
-    # Chatbot runtime behavior: prompt, tools, approvals, backend, and memory.
-    chatbot:
-      system-prompt: |
-        You are Husky, an intelligent AI assistant.
-        You can use the following tools to help users: web_search for internet search and web_fetch for webpage retrieval.
-        Current time: {{currentDateTime}}
-      toolsets:
-        - CORE
-        - SKILLS
-        - SEARCH
-        - WEB
-        - KNOWLEDGE
-        - MCP
-      allowed-tools: []
-      knowledge-sources: [] # empty = all configured knowledge sources
-      denied-tools:
-        - read_file
-        - write_file
-        - edit_file
-        - delete_file
-        - move_file
-        - apply_patch
-        - search_files
-        - list_files
-        - terminal
-        - process
-        - skill_search
-        - skill_install
-        - skill_manage
-      approval: none
-      backend: local
-      working-dir: inherit
-      memory:
-        scope: session
-      prompt-files: []
-      prompt-file-policy: append
-      audit-enabled: true
-      audit-tags:
-        - chatbot
-      rate-limit-enabled: false
-    feishu-qa:
-      system-prompt: |
-        You are Husky, a capable personal assistant.
-        Current time: {{currentDateTime}}
-      toolsets:
-        - SEARCH
-        - SKILLS
-        - WEB
-        - KNOWLEDGE
-        - MCP
-        - MEMORY
-        - TERMINAL
-        - VISION
-      allowed-tools: []
-      knowledge-sources: [] # empty = all configured knowledge sources
-      denied-tools:
-        - read_file
-        - write_file
-        - edit_file
-        - delete_file
-        - move_file
-        - apply_patch
-        - search_files
-        - list_files
-#        - terminal
-        - skill_search
-        - skill_install
-        - skill_manage
-      approval: required
-      backend: local
-      working-dir: inherit
-      memory:
-        scope: session
-      prompt-files: []
-      prompt-file-policy: append
-      audit-enabled: true
-      audit-tags:
-        - feishu
-      rate-limit-enabled: false
+# Agent configuration
+# Agent rate-limit fields are parsed into RuntimePolicy but are not enforced yet.
+agents:
+  assistant:
+    system-prompt: ""
+    toolsets: []
+    denied-tools: []
+    knowledge-sources: [] # empty = all configured knowledge sources
+    allowed-mcp-servers: []
+    denied-mcp-servers: []
+    approval: required
+    backend: local
+    working-dir: inherit
+    memory:
+      scope: session
+    prompt-files: []
+    prompt-file-policy: override
+    audit-enabled: true
+    audit-tags: []
+    rate-limit-enabled: false
+  # Chatbot runtime behavior: prompt, tools, approvals, backend, and memory.
+  chatbot:
+    system-prompt: |
+      You are Husky, an intelligent AI assistant.
+      You can use the following tools to help users: web_search for internet search and web_fetch for webpage retrieval.
+      Current time: {{currentDateTime}}
+    toolsets:
+      - CORE
+      - SKILLS
+      - SEARCH
+      - WEB
+      - KNOWLEDGE
+      - MCP
+    allowed-tools: []
+    knowledge-sources: [] # empty = all configured knowledge sources
+    denied-tools:
+      - read_file
+      - write_file
+      - edit_file
+      - delete_file
+      - move_file
+      - apply_patch
+      - search_files
+      - list_files
+      - terminal
+      - process
+      - skill_search
+      - skill_install
+      - skill_manage
+    approval: none
+    backend: local
+    working-dir: inherit
+    memory:
+      scope: session
+    prompt-files: []
+    prompt-file-policy: append
+    audit-enabled: true
+    audit-tags:
+      - chatbot
+    rate-limit-enabled: false
 
 # Auth configuration
 auth:

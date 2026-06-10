@@ -10,24 +10,36 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class ConfigSceneResolverTest {
 
     @Test
-    void unknownSceneFailsClosed() {
+    void unknownAgentFailsClosed() {
         ConfigSceneResolver resolver = new ConfigSceneResolver();
-        LinkedHashMap<String, ConfigSceneResolver.SceneProperties> configs = new LinkedHashMap<>();
-        configs.put("assistant", new ConfigSceneResolver.SceneProperties());
-        resolver.setConfigs(configs);
+        LinkedHashMap<String, ConfigSceneResolver.SceneProperties> agents = new LinkedHashMap<>();
+        agents.put("assistant", new ConfigSceneResolver.SceneProperties());
+        resolver.setAgents(agents);
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> resolver.resolve("missing"));
 
-        assertEquals("Unknown scene: missing", error.getMessage());
+        assertEquals("Unknown agent: missing", error.getMessage());
     }
 
     @Test
-    void blankSceneUsesDefaultScene() {
+    void blankAgentFailsClosed() {
         ConfigSceneResolver resolver = new ConfigSceneResolver();
-        LinkedHashMap<String, ConfigSceneResolver.SceneProperties> configs = new LinkedHashMap<>();
-        configs.put("assistant", new ConfigSceneResolver.SceneProperties());
-        resolver.setConfigs(configs);
+        LinkedHashMap<String, ConfigSceneResolver.SceneProperties> agents = new LinkedHashMap<>();
+        agents.put("assistant", new ConfigSceneResolver.SceneProperties());
+        resolver.setAgents(agents);
 
-        assertEquals("assistant", resolver.resolve(" ").getSceneId());
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> resolver.resolve(" "));
+
+        assertEquals("Unknown agent: null", error.getMessage());
+    }
+
+    @Test
+    void explicitAgentResolves() {
+        ConfigSceneResolver resolver = new ConfigSceneResolver();
+        LinkedHashMap<String, ConfigSceneResolver.SceneProperties> agents = new LinkedHashMap<>();
+        agents.put("assistant", new ConfigSceneResolver.SceneProperties());
+        resolver.setAgents(agents);
+
+        assertEquals("assistant", resolver.resolve("assistant").getSceneId());
     }
 }
