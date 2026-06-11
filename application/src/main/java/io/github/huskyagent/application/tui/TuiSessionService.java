@@ -71,7 +71,7 @@ public class TuiSessionService {
     }
 
 
-    public String createSession() {
+    public synchronized String createSession() {
         runtimeExecutionService.runCoordinator().bumpQueueGeneration(queueKey);
         interruptCurrentRun(null, "new_session");
         RuntimeScope scope = sessionResolver.createSession(principal, channelIdentity, null);
@@ -139,9 +139,8 @@ public class TuiSessionService {
 
     public ChatResult submitPrompt(String message, JsonRpcEventEmitter emitter, Consumer<String> sessionReadyHandler) {
         PreparedPrompt prepared = preparePrompt(message, sessionReadyHandler);
-        long generation = runtimeExecutionService.runCoordinator().currentQueueGeneration(queueKey);
         return inboundQueue.enqueue(queueKey, () -> {
-            if (!runtimeExecutionService.runCoordinator().isQueueGenerationCurrent(queueKey, generation)) {
+            if (!runtimeExecutionService.runCoordinator().isQueueGenerationCurrent(queueKey, prepared.queueGeneration())) {
                 return ChatResult.cancelled(prepared.sessionId(), "Queued request superseded");
             }
             return executePrompt(prepared, emitter);
@@ -155,7 +154,8 @@ public class TuiSessionService {
         if (sessionReadyHandler != null) {
             sessionReadyHandler.accept(currentSessionId);
         }
-        return new PreparedPrompt(message, currentSessionId, workingDirectory);
+        long queueGeneration = runtimeExecutionService.runCoordinator().currentQueueGeneration(queueKey);
+        return new PreparedPrompt(message, currentSessionId, workingDirectory, queueGeneration);
     }
 
     private synchronized String setCurrentSessionId(String sessionId) {
@@ -323,7 +323,7 @@ public class TuiSessionService {
     }
 
 
-    private record PreparedPrompt(String message, String sessionId, Path workingDirectory) {}
+    private record PreparedPrompt(String message, String sessionId, Path workingDirectory, long queueGeneration) {}
 
     public record InterruptResult(boolean interrupted, String sessionId, String reason) {}
 

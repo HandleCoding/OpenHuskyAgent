@@ -117,6 +117,45 @@ class TuiSessionServiceTest {
     }
 
     @Test
+    void createSessionCannotRaceBetweenPromptPrepareAndGenerationCapture() throws Exception {
+        RecordingRuntimeExecutionService runtime = new RecordingRuntimeExecutionService();
+        FakeSessionResolver sessionResolver = new FakeSessionResolver("session-1", "session-2");
+        TuiSessionService service = newService(runtime, sessionResolver, "conn-race");
+        CountDownLatch secondPreparing = new CountDownLatch(1);
+        CountDownLatch allowSecondPrepareToFinish = new CountDownLatch(1);
+
+        CompletableFuture<ChatResult> first = CompletableFuture.supplyAsync(() -> service.submitPrompt("first", emitter));
+        assertTrue(runtime.firstStarted.await(1, TimeUnit.SECONDS));
+
+        CompletableFuture<ChatResult> second = CompletableFuture.supplyAsync(() ->
+                service.submitPrompt("second", emitter, ignored -> {
+                    secondPreparing.countDown();
+                    try {
+                        assertTrue(allowSecondPrepareToFinish.await(1, TimeUnit.SECONDS));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new AssertionError(e);
+                    }
+                }));
+        assertTrue(secondPreparing.await(1, TimeUnit.SECONDS));
+
+        CompletableFuture<String> newSession = CompletableFuture.supplyAsync(service::createSession);
+        assertFalse(newSession.isDone());
+
+        allowSecondPrepareToFinish.countDown();
+        assertEquals("session-2", newSession.get(1, TimeUnit.SECONDS));
+        runtime.releaseFirst.countDown();
+
+        assertTrue(first.get(1, TimeUnit.SECONDS).success());
+        ChatResult secondResult = second.get(1, TimeUnit.SECONDS);
+        assertFalse(secondResult.success());
+        assertEquals(ChatResult.ErrorCode.CANCELLED, secondResult.errorCode());
+        assertEquals(List.of("first"), runtime.texts);
+        assertEquals(2, sessionResolver.createCalls);
+        assertEquals("session-2", service.getCurrentSessionId());
+    }
+
+    @Test
     void cancelledOldPromptDoesNotOverwriteNewCurrentSession() throws Exception {
         RecordingRuntimeExecutionService runtime = new RecordingRuntimeExecutionService();
         runtime.firstResult = ChatResult.cancelled("session-1", "Run cancelled");
