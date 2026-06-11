@@ -43,10 +43,10 @@ public class DeleteFileTool implements ToolProvider {
         }
 
         try {
-            Path filePath = workspace.resolve(path);
-
-            if (FileUtils.isSensitivePath(filePath)) {
-                return ToolResult.failure("Delete denied: '" + path + "' is a protected system path. Use terminal tool with sudo if needed.");
+            Path filePath = FileSafety.resolve(workspace, path);
+            String denied = FileSafety.checkMutationAllowed(workspace, path, filePath);
+            if (denied != null) {
+                return ToolResult.failure(denied.replace("Mutation denied", "Delete denied"));
             }
 
             if (!workspace.exists(filePath)) {

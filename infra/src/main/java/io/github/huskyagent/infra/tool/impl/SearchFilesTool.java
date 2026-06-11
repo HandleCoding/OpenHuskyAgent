@@ -116,6 +116,7 @@ public class SearchFilesTool implements ToolProvider {
                 .stream()
                 .filter(fileFilter)
                 .filter(p -> !FileUtils.isBinaryFile(p))
+                .filter(p -> FileSafety.canReadContent(workspace, p))
                 .forEach(file -> searchFile(file, regex, outputMode, contextLines, allMatches, fileCounts));
 
             if ("files_only".equals(outputMode)) {

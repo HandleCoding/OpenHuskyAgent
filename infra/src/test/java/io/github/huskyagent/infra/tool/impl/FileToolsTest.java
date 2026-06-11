@@ -27,6 +27,7 @@ class FileToolsTest {
     private ReadFileTool readFileTool;
     private WriteFileTool writeFileTool;
     private EditFileTool editFileTool;
+    private MoveFileTool moveFileTool;
     private SearchFilesTool searchFilesTool;
     private ListFilesTool listFilesTool;
     private ToolStateStore toolStateStore;
@@ -42,6 +43,7 @@ class FileToolsTest {
         readFileTool = new ReadFileTool(toolStateStore, limitsConfig, workspace);
         writeFileTool = new WriteFileTool(toolStateStore, workspace);
         editFileTool = new EditFileTool(toolStateStore, workspace);
+        moveFileTool = new MoveFileTool(workspace);
         searchFilesTool = new SearchFilesTool(workspace);
         listFilesTool = new ListFilesTool(workspace);
     }
@@ -89,6 +91,28 @@ class FileToolsTest {
     }
 
     @Test
+    void readFileReadsWindowFromLargeFile() throws IOException {
+        Path file = tempDir.resolve("large.txt");
+        StringBuilder content = new StringBuilder();
+        for (int i = 1; i <= 5000; i++) {
+            content.append("Line ").append(i).append(" with enough padding to exceed the old full-file limit\n");
+        }
+        Files.writeString(file, content.toString());
+
+        ToolResult result = readFileTool.handle(Map.of(
+                "path", file.toString(),
+                "offset", 4000,
+                "limit", 2
+        ));
+
+        assertTrue(result.success(), result.error());
+        String output = extractContent(result);
+        assertTrue(output.contains("Line 4000"));
+        assertTrue(output.contains("Line 4001"));
+        assertFalse(output.contains("Line 1"));
+    }
+
+    @Test
     void testReadNonExistentFile() {
         Map<String, Object> args = Map.of(
             "path", tempDir.resolve("nonexistent.txt").toString()
@@ -109,6 +133,62 @@ class FileToolsTest {
         ToolResult result = writeFileTool.handle(args);
         assertTrue(result.success());
         assertTrue(Files.exists(tempDir.resolve("subdir/deep/test.txt")));
+    }
+
+    @Test
+    void readEnvFileIsDeniedButExampleIsAllowed() throws IOException {
+        Path env = tempDir.resolve(".env");
+        Path envExample = tempDir.resolve(".env.example");
+        Files.writeString(env, "OPENAI_API_KEY=secret");
+        Files.writeString(envExample, "OPENAI_API_KEY=");
+
+        ToolResult denied = readFileTool.handle(Map.of("path", env.toString()));
+        assertFalse(denied.success());
+        assertTrue(denied.error().contains("environment secrets"));
+
+        ToolResult allowed = readFileTool.handle(Map.of("path", envExample.toString()));
+        assertTrue(allowed.success(), allowed.error());
+        assertTrue(extractContent(allowed).contains("OPENAI_API_KEY="));
+    }
+
+    @Test
+    void writeSensitivePathIsDenied() {
+        ToolResult result = writeFileTool.handle(Map.of(
+                "path", Path.of(System.getProperty("user.home"), ".ssh", "id_rsa").toString(),
+                "content", "secret"
+        ));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("protected") || result.error().contains("credential"));
+    }
+
+    @Test
+    void readSymlinkToSensitivePathIsDenied() throws IOException {
+        Path link = tempDir.resolve("passwd-link");
+        Files.createSymbolicLink(link, Path.of("/etc/passwd"));
+
+        ToolResult result = readFileTool.handle(Map.of("path", link.toString()));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("protected"));
+    }
+
+    @Test
+    void moveFileFailsWhenDestinationExists() throws IOException {
+        Path source = tempDir.resolve("source.txt");
+        Path destination = tempDir.resolve("destination.txt");
+        Files.writeString(source, "source");
+        Files.writeString(destination, "destination");
+
+        ToolResult result = moveFileTool.handle(Map.of(
+                "source", source.toString(),
+                "destination", destination.toString()
+        ));
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("already exists"));
+        assertEquals("source", Files.readString(source));
+        assertEquals("destination", Files.readString(destination));
     }
 
     @Test
@@ -186,6 +266,81 @@ class FileToolsTest {
 
         String content = Files.readString(file);
         assertEquals("replace replace replace", content);
+    }
+
+    @Test
+    void readTildePathThenEditAbsolutePathUsesSameFileState() throws IOException {
+        String oldHome = System.getProperty("user.home");
+        Path fakeHome = tempDir.resolve("home");
+        Files.createDirectories(fakeHome);
+        Path file = fakeHome.resolve("home-edit.txt");
+        Files.writeString(file, "hello from home");
+        try {
+            System.setProperty("user.home", fakeHome.toString());
+            ToolResult read = readFileTool.handle(new java.util.HashMap<>(Map.of(
+                    "path", "~/home-edit.txt",
+                    ToolCallbackFactory.SESSION_ID_KEY, SESSION_ID
+            )));
+            assertTrue(read.success(), read.error());
+
+            ToolResult edit = editFileTool.handle(new java.util.HashMap<>(Map.of(
+                    "path", file.toString(),
+                    "old_string", "hello",
+                    "new_string", "hi",
+                    ToolCallbackFactory.SESSION_ID_KEY, SESSION_ID
+            )));
+            assertTrue(edit.success(), edit.error());
+            assertEquals("hi from home", Files.readString(file));
+        } finally {
+            System.setProperty("user.home", oldHome);
+        }
+    }
+
+    @Test
+    void staleFileWriteReturnsWarning() throws Exception {
+        Path file = tempDir.resolve("stale.txt");
+        Files.writeString(file, "original");
+        ToolResult read = readFileTool.handle(new java.util.HashMap<>(Map.of(
+                "path", file.toString(),
+                ToolCallbackFactory.SESSION_ID_KEY, SESSION_ID
+        )));
+        assertTrue(read.success(), read.error());
+
+        Thread.sleep(20);
+        Files.writeString(file, "external");
+
+        ToolResult write = writeFileTool.handle(new java.util.HashMap<>(Map.of(
+                "path", file.toString(),
+                "content", "replacement",
+                ToolCallbackFactory.SESSION_ID_KEY, SESSION_ID
+        )));
+
+        assertTrue(write.success(), write.error());
+        Map<String, Object> response = parseContent(write);
+        assertTrue(response.get("warning").toString().contains("modified since"));
+    }
+
+    @Test
+    void partialReadThenFullOverwriteReturnsWarning() throws IOException {
+        Path file = tempDir.resolve("partial.txt");
+        Files.writeString(file, "Line 1\nLine 2\nLine 3\n");
+        ToolResult read = readFileTool.handle(new java.util.HashMap<>(Map.of(
+                "path", file.toString(),
+                "offset", 2,
+                "limit", 1,
+                ToolCallbackFactory.SESSION_ID_KEY, SESSION_ID
+        )));
+        assertTrue(read.success(), read.error());
+
+        ToolResult write = writeFileTool.handle(new java.util.HashMap<>(Map.of(
+                "path", file.toString(),
+                "content", "replacement",
+                ToolCallbackFactory.SESSION_ID_KEY, SESSION_ID
+        )));
+
+        assertTrue(write.success(), write.error());
+        Map<String, Object> response = parseContent(write);
+        assertTrue(response.get("warning").toString().contains("partially read"));
     }
 
     @Test

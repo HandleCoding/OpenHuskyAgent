@@ -50,13 +50,17 @@ public class WriteFileTool implements ToolProvider {
         }
 
         try {
-            Path filePath = workspace.resolve(path);
+            Path filePath = FileSafety.resolve(workspace, path);
+            String denied = FileSafety.checkWriteAllowed(workspace, path, filePath);
+            if (denied != null) {
+                return ToolResult.failure(denied);
+            }
 
             String warning = null;
             String sessionId = (String) args.get(ToolCallbackFactory.SESSION_ID_KEY);
-            // Mirror Claude Code's safeguard: warn before blind overwrites of files the session never inspected.
-            if (workspace.exists(filePath) && sessionId != null && !toolStateStore.hasBeenRead(sessionId, path)) {
-                warning = "File '" + path + "' has not been read in this session. Overwriting may discard external changes. Consider read_file first.";
+            Path canonicalPath = FileSafety.canonicalForAccess(workspace, filePath);
+            warning = toolStateStore.checkBeforeWrite(sessionId, canonicalPath, workspace, true);
+            if (warning != null) {
                 log.warn(warning);
             }
 
@@ -68,7 +72,8 @@ public class WriteFileTool implements ToolProvider {
             workspace.writeString(filePath, content != null ? content : "");
 
             if (sessionId != null) {
-                toolStateStore.markRead(sessionId, path);
+                Path writtenPath = FileSafety.canonicalForAccess(workspace, filePath);
+                toolStateStore.markWritten(sessionId, writtenPath, workspace);
             }
 
             Map<String, Object> output = new LinkedHashMap<>();

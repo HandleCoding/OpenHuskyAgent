@@ -56,17 +56,26 @@ public class EditFileTool implements ToolProvider {
             return ToolResult.failure("path and old_string required");
         }
 
-        String sessionId = (String) args.get(ToolCallbackFactory.SESSION_ID_KEY);
-        if (!toolStateStore.hasBeenRead(sessionId, path)) {
-            return ToolResult.failure(
-                    "Must call read_file on '" + path + "' before editing it.");
-        }
-
         try {
-            Path filePath = workspace.resolve(path);
+            Path filePath = FileSafety.resolve(workspace, path);
+            String denied = FileSafety.checkWriteAllowed(workspace, path, filePath);
+            if (denied != null) {
+                return ToolResult.failure(denied);
+            }
 
             if (!workspace.exists(filePath)) {
                 return ToolResult.failure("File not found: " + path);
+            }
+
+            String sessionId = (String) args.get(ToolCallbackFactory.SESSION_ID_KEY);
+            Path canonicalPath = FileSafety.canonicalForAccess(workspace, filePath);
+            if (!toolStateStore.hasBeenRead(sessionId, canonicalPath)) {
+                return ToolResult.failure(
+                        "Must call read_file on '" + path + "' before editing it.");
+            }
+            String warning = toolStateStore.checkBeforeWrite(sessionId, canonicalPath, workspace, false);
+            if (warning != null) {
+                log.warn(warning);
             }
 
             String content = workspace.readString(filePath);
@@ -83,6 +92,7 @@ public class EditFileTool implements ToolProvider {
 
             String newContent = result.newContent();
             workspace.writeString(filePath, newContent);
+            toolStateStore.markWritten(sessionId, FileSafety.canonicalForAccess(workspace, filePath), workspace);
 
             String diff = FileUtils.generateDiff(content, newContent, path);
 
@@ -91,6 +101,9 @@ public class EditFileTool implements ToolProvider {
             output.put("replacements", result.matchCount());
             output.put("strategy", result.strategy());
             output.put("diff", diff);
+            if (warning != null) {
+                output.put("warning", warning);
+            }
 
             return ToolResult.success(output);
 

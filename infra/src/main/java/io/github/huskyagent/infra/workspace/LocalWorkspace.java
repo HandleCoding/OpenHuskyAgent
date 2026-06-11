@@ -7,7 +7,6 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
 
 public class LocalWorkspace implements Workspace {
@@ -92,7 +91,7 @@ public class LocalWorkspace implements Workspace {
 
     @Override
     public void move(Path source, Path target) throws IOException {
-        Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        Files.move(source, target);
     }
 
     @Override

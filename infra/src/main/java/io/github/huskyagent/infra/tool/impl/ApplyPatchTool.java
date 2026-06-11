@@ -2,14 +2,16 @@ package io.github.huskyagent.infra.tool.impl;
 
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import io.github.huskyagent.infra.tool.Toolset;
+import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
 import io.github.huskyagent.infra.tool.match.FuzzyMatcher;
 import io.github.huskyagent.infra.tool.match.V4aPatchParser;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import io.github.huskyagent.infra.tool.registry.ToolProvider;
 import io.github.huskyagent.infra.tool.registry.ToolResult;
+import io.github.huskyagent.infra.tool.state.ToolStateStore;
 import io.github.huskyagent.infra.workspace.Workspace;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
@@ -23,10 +25,20 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ApplyPatchTool implements ToolProvider {
 
     private final Workspace workspace;
+    private final ToolStateStore toolStateStore;
+
+    @Autowired
+    public ApplyPatchTool(Workspace workspace, ToolStateStore toolStateStore) {
+        this.workspace = workspace;
+        this.toolStateStore = toolStateStore;
+    }
+
+    ApplyPatchTool(Workspace workspace) {
+        this(workspace, new ToolStateStore());
+    }
 
     record Args(
         @JsonPropertyDescription("""
@@ -81,7 +93,8 @@ public class ApplyPatchTool implements ToolProvider {
 
         try {
             List<PreparedChange> changes = prepareChanges(operations);
-            return commitChanges(changes);
+            String sessionId = (String) args.get(ToolCallbackFactory.SESSION_ID_KEY);
+            return commitChanges(changes, sessionId);
         } catch (Exception e) {
             return ToolResult.failure("Patch validation failed (no files modified): " + e.getMessage());
         }
@@ -183,13 +196,11 @@ public class ApplyPatchTool implements ToolProvider {
         deletedPaths.add(sourcePath);
     }
 
-    private Path resolveWritablePath(String path) {
-        Path filePath = workspace.resolve(path);
-        if (FileUtils.isSensitivePath(filePath)) {
-            throw new IllegalArgumentException("Write denied: '" + path + "' is a protected system path");
-        }
-        if (FileUtils.isBinaryFile(filePath)) {
-            throw new IllegalArgumentException("Write denied: '" + path + "' appears to be a binary file");
+    private Path resolveWritablePath(String path) throws Exception {
+        Path filePath = FileSafety.resolve(workspace, path);
+        String denied = FileSafety.checkWriteAllowed(workspace, path, filePath);
+        if (denied != null) {
+            throw new IllegalArgumentException(denied);
         }
         return filePath;
     }
@@ -281,9 +292,10 @@ public class ApplyPatchTool implements ToolProvider {
         return content.substring(0, eol + 1) + insertText + "\n" + content.substring(eol + 1);
     }
 
-    private ToolResult commitChanges(List<PreparedChange> changes) throws Exception {
+    private ToolResult commitChanges(List<PreparedChange> changes, String sessionId) throws Exception {
         Map<Path, String> rollbackContent = new LinkedHashMap<>();
         List<Path> createdDuringCommit = new ArrayList<>();
+        List<String> warnings = collectWarnings(changes, sessionId);
         try {
             for (PreparedChange change : changes) {
                 if (workspace.exists(change.path())) {
@@ -298,6 +310,11 @@ public class ApplyPatchTool implements ToolProvider {
                     Path parent = change.path().getParent();
                     if (parent != null && !workspace.exists(parent)) workspace.createDirectories(parent);
                     workspace.writeString(change.path(), change.afterContent());
+                }
+            }
+            for (PreparedChange change : changes) {
+                if (change.kind() != ChangeKind.DELETE) {
+                    toolStateStore.markWritten(sessionId, FileSafety.canonicalForAccess(workspace, change.path()), workspace);
                 }
             }
         } catch (Exception e) {
@@ -326,7 +343,29 @@ public class ApplyPatchTool implements ToolProvider {
                         c.displayPath()))
                 .filter(diff -> !diff.isBlank())
                 .collect(Collectors.joining("\n")));
+        if (!warnings.isEmpty()) {
+            output.put("warning", String.join("\n", warnings));
+        }
         return ToolResult.success(output);
+    }
+
+    private List<String> collectWarnings(List<PreparedChange> changes, String sessionId) throws Exception {
+        if (sessionId == null) {
+            return List.of();
+        }
+        List<String> warnings = new ArrayList<>();
+        for (PreparedChange change : changes) {
+            if (change.beforeContent() == null || !workspace.exists(change.path())) {
+                continue;
+            }
+            Path canonicalPath = FileSafety.canonicalForAccess(workspace, change.path());
+            String warning = toolStateStore.checkBeforeWrite(sessionId, canonicalPath, workspace, true);
+            if (warning != null && !warnings.contains(warning)) {
+                warnings.add(warning);
+                log.warn(warning);
+            }
+        }
+        return warnings;
     }
 
     private void rollback(Map<Path, String> rollbackContent, List<Path> createdDuringCommit) {

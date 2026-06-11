@@ -40,6 +40,8 @@ public class ReadFileTool implements ToolProvider {
         Integer limit
     ) {}
 
+    private record ReadWindow(String content, int totalLines, boolean partialRead) {}
+
     @Override
     public List<ToolDefinition> getTools() {
         return List.of(ToolDefinition.of("read_file",
@@ -58,13 +60,19 @@ public class ReadFileTool implements ToolProvider {
         if (path == null || path.isEmpty()) {
             return ToolResult.failure("Path is required");
         }
-
-        if (FileUtils.BLOCKED_DEVICE_PATHS.contains(path)) {
-            return ToolResult.failure("Cannot read device file");
+        if (offset < 1) {
+            return ToolResult.failure("offset must be >= 1");
+        }
+        if (limit < 1) {
+            return ToolResult.failure("limit must be >= 1");
         }
 
         try {
-            Path filePath = workspace.resolve(path);
+            Path filePath = FileSafety.resolve(workspace, path);
+            String denied = FileSafety.checkReadAllowed(workspace, path, filePath);
+            if (denied != null) {
+                return ToolResult.failure(denied);
+            }
 
             if (!workspace.exists(filePath)) {
                 String suggestions = FileUtils.suggestSimilarFiles(filePath);
@@ -79,43 +87,15 @@ public class ReadFileTool implements ToolProvider {
                 return ToolResult.failure("Cannot read binary file: " + path);
             }
 
-            long fileSize = workspace.size(filePath);
-            if (fileSize > limitsConfig.getReadFileMaxChars()) {
-                int totalLines = countLines(filePath);
-                // Large files must be paged so tool output stays bounded and clickable in the UI.
-                return ToolResult.failure(
-                    "File too large (" + fileSize + " bytes, ~" + totalLines + " lines). " +
-                    "Use offset and limit to read specific sections. " +
-                    "Example: read_file(path=\"" + path + "\", offset=1, limit=100)");
-            }
-
-            List<String> lines = workspace.readAllLines(filePath);
-            int totalLines = lines.size();
-
-            int startLine = Math.max(0, offset - 1);
-            int endLine = Math.min(startLine + limit, totalLines);
-
-            StringBuilder result = new StringBuilder();
-            int maxLineLen = 2000;
-            for (int i = startLine; i < endLine; i++) {
-                String line = lines.get(i);
-                if (line.length() > maxLineLen) {
-                    line = line.substring(0, maxLineLen) + "... [truncated]";
-                }
-                result.append(i + 1).append("\t").append(line).append("\n");
-            }
-
-            if (result.length() > limitsConfig.getReadFileMaxChars()) {
-                result.setLength(limitsConfig.getReadFileMaxChars());
-                result.append("\n[TRUNCATED]");
-            }
+            ReadWindow window = readWindow(filePath, offset, limit);
 
             String sessionId = (String) args.get(ToolCallbackFactory.SESSION_ID_KEY);
-            toolStateStore.markRead(sessionId, path);
+            Path canonicalPath = FileSafety.canonicalForAccess(workspace, filePath);
+            toolStateStore.markRead(sessionId, canonicalPath, workspace.getLastModifiedTime(filePath), window.partialRead());
 
             Map<String, Object> output = new LinkedHashMap<>();
-            output.put("content", result.toString());
-            output.put("totalLines", totalLines);
+            output.put("content", window.content());
+            output.put("totalLines", window.totalLines());
 
             return ToolResult.success(output);
 
@@ -124,11 +104,39 @@ public class ReadFileTool implements ToolProvider {
         }
     }
 
-    private int countLines(Path file) throws IOException {
+    private ReadWindow readWindow(Path file, int offset, int limit) throws IOException {
+        StringBuilder result = new StringBuilder();
+        int maxLineLen = 2000;
+        int startLine = offset;
+        int endLine = offset + limit - 1;
+        int lineNumber = 0;
+        boolean outputTruncated = false;
+
         try (var reader = new BufferedReader(new InputStreamReader(workspace.newInputStream(file), StandardCharsets.UTF_8))) {
-            int count = 0;
-            while (reader.readLine() != null) count++;
-            return count;
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                if (lineNumber < startLine || lineNumber > endLine) {
+                    continue;
+                }
+                if (outputTruncated) {
+                    continue;
+                }
+
+                if (line.length() > maxLineLen) {
+                    line = line.substring(0, maxLineLen) + "... [truncated]";
+                }
+                result.append(lineNumber).append("\t").append(line).append("\n");
+
+                if (result.length() > limitsConfig.getReadFileMaxChars()) {
+                    result.setLength(limitsConfig.getReadFileMaxChars());
+                    result.append("\n[TRUNCATED]");
+                    outputTruncated = true;
+                }
+            }
         }
+
+        boolean partial = startLine > 1 || lineNumber > endLine || outputTruncated;
+        return new ReadWindow(result.toString(), lineNumber, partial);
     }
 }

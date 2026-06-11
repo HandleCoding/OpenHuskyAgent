@@ -46,15 +46,20 @@ public class MoveFileTool implements ToolProvider {
         }
 
         try {
-            Path srcPath = workspace.resolve(source);
-            Path dstPath = workspace.resolve(destination);
-
-            if (FileUtils.isSensitivePath(srcPath) || FileUtils.isSensitivePath(dstPath)) {
-                return ToolResult.failure("Move denied: protected system path involved. Use terminal tool if needed.");
+            Path srcPath = FileSafety.resolve(workspace, source);
+            Path dstPath = FileSafety.resolve(workspace, destination);
+            String srcDenied = FileSafety.checkMutationAllowed(workspace, source, srcPath);
+            String dstDenied = FileSafety.checkMutationAllowed(workspace, destination, dstPath);
+            if (srcDenied != null || dstDenied != null) {
+                String reason = srcDenied != null ? srcDenied : dstDenied;
+                return ToolResult.failure(reason.replace("Mutation denied", "Move denied"));
             }
 
             if (!workspace.exists(srcPath)) {
                 return ToolResult.failure("Source file not found: " + source);
+            }
+            if (workspace.exists(dstPath)) {
+                return ToolResult.failure("Destination already exists: " + destination);
             }
 
             Path dstParent = dstPath.getParent();
