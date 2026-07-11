@@ -2,6 +2,7 @@ package io.github.huskyagent.application.agent;
 
 import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.domain.agent.AgentResolver;
+import io.github.huskyagent.infra.llm.ModelSelection;
 import io.github.huskyagent.infra.tool.Toolset;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -103,10 +104,14 @@ public class ConfigAgentResolver implements AgentResolver, EnvironmentAware, Ini
             config.setBackendSpec(toBackendSpec(props));
             config.setStoragePolicy(toStoragePolicy(props.getStorage()));
             config.setStorageSpec(toStorageSpec(props));
+            config.setModelSelection(toModelSelection(props.getModel()));
         }
 
-        log.info("Resolved agent configuration: agentId={}, toolsets={}, allowedTools={}, denied={}, approval={}, backend={}, workDir={}",
-                agentId, config.getAllowedToolsets(), config.getAllowedTools(), config.getDeniedTools(),
+        ModelSelection model = config.getModelSelection();
+        log.info("Resolved agent configuration: agentId={}, model={}, toolsets={}, allowedTools={}, denied={}, approval={}, backend={}, workDir={}",
+                agentId,
+                model != null ? model.fingerprint() : "default",
+                config.getAllowedToolsets(), config.getAllowedTools(), config.getDeniedTools(),
                 config.getApprovalPolicy(), config.getBackendPolicy(), config.getWorkingDirectoryPolicy());
         return config;
     }
@@ -282,6 +287,90 @@ public class ConfigAgentResolver implements AgentResolver, EnvironmentAware, Ini
         return spec;
     }
 
+    /**
+     * Accepts either a bare model name string or a map:
+     * <pre>
+     * model: gpt-5.4
+     * model:
+     *   provider: deepseek
+     *   name: deepseek-chat
+     *   temperature: 0.3
+     *   max-tokens: 8192
+     * </pre>
+     */
+    @SuppressWarnings("unchecked")
+    ModelSelection toModelSelection(Object model) {
+        if (model == null) {
+            return null;
+        }
+        if (model instanceof String name) {
+            if (name.isBlank()) {
+                return null;
+            }
+            return ModelSelection.builder().modelName(name.trim()).build();
+        }
+        if (model instanceof Map<?, ?> map) {
+            String provider = stringValue(map.get("provider"));
+            String name = firstNonBlank(stringValue(map.get("name")), stringValue(map.get("model")));
+            Double temperature = doubleValue(map.get("temperature"));
+            Integer maxTokens = intValue(firstNonNull(map.get("max-tokens"), map.get("maxTokens")));
+            if (isBlank(provider) && isBlank(name) && temperature == null && maxTokens == null) {
+                return null;
+            }
+            return ModelSelection.builder()
+                    .providerId(isBlank(provider) ? null : provider)
+                    .modelName(isBlank(name) ? null : name)
+                    .temperature(temperature)
+                    .maxTokens(maxTokens)
+                    .build();
+        }
+        log.warn("Ignoring unsupported agents.*.model type: {}", model.getClass().getName());
+        return null;
+    }
+
+    private String stringValue(Object value) {
+        return value != null ? value.toString().trim() : null;
+    }
+
+    private Double doubleValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            return Double.parseDouble(value.toString().trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Integer intValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(value.toString().trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        return fallback;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
     private AgentDefinition.StorageSpec toStorageSpec(AgentProperties props) {
         if (props.getStorageSpec() == null) {
             return null;
@@ -308,6 +397,10 @@ public class ConfigAgentResolver implements AgentResolver, EnvironmentAware, Ini
     @Data
     public static class AgentProperties {
         private String systemPrompt;
+        /**
+         * Either a model name string or a map with provider/name/temperature/max-tokens.
+         */
+        private Object model;
         private List<String> toolsets;
         private Set<String> allowedTools;
         private Set<String> deniedTools;

@@ -62,9 +62,22 @@ public class RuntimeSection extends AbstractPromptSection {
             sb.append("- **Arch**: ").append(System.getProperty("os.arch")).append("\n");
         }
 
-        sb.append("- **Model**: ").append(modelName != null ? modelName : "unknown").append("\n");
-        if (providerName != null && !providerName.isBlank()) {
-            sb.append("- **Provider**: ").append(providerName).append("\n");
+        String effectiveModel = modelName;
+        String effectiveProvider = providerName;
+        var selection = context.findRuntimePolicy()
+                .map(policy -> policy.getModelSelection())
+                .orElse(null);
+        if (selection != null) {
+            if (selection.getModelName() != null && !selection.getModelName().isBlank()) {
+                effectiveModel = selection.getModelName();
+            }
+            if (selection.getProviderId() != null && !selection.getProviderId().isBlank()) {
+                effectiveProvider = selection.getProviderId();
+            }
+        }
+        sb.append("- **Model**: ").append(effectiveModel != null ? effectiveModel : "unknown").append("\n");
+        if (effectiveProvider != null && !effectiveProvider.isBlank()) {
+            sb.append("- **Provider**: ").append(effectiveProvider).append("\n");
         }
         sb.append("- **Session**: ").append(context.getSessionId()).append("\n");
 

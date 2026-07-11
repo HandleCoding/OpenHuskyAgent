@@ -87,6 +87,23 @@ class RuntimePolicyResolverTest {
     }
 
     @Test
+    void agentModelSelectionDrivesContextLengthMapping() {
+        ContextConfig contextConfig = new ContextConfig();
+        contextConfig.setContextLength(128000);
+        contextConfig.setModelContextLengths(Map.of("large-model", 200000));
+        RuntimePolicyResolver resolver = resolverWithContextConfig(contextConfig, "fallback-model");
+        AgentDefinition agent = baseAgent();
+        agent.setModelSelection(io.github.huskyagent.infra.llm.ModelSelection.builder()
+                .modelName("large-model")
+                .build());
+
+        var policy = resolve(resolver, agent);
+
+        assertEquals(200000, policy.getContextPolicy().getContextLength());
+        assertEquals("large-model", policy.getModelSelection().getModelName());
+    }
+
+    @Test
     void unknownModelUsesGlobalContextLengthFallback() {
         ContextConfig contextConfig = new ContextConfig();
         contextConfig.setContextLength(128000);
@@ -366,7 +383,7 @@ class RuntimePolicyResolverTest {
 
     private void setModelName(RuntimePolicyResolver resolver, String modelName) {
         try {
-            Field field = RuntimePolicyResolver.class.getDeclaredField("modelName");
+            Field field = RuntimePolicyResolver.class.getDeclaredField("fallbackModelName");
             field.setAccessible(true);
             field.set(resolver, modelName);
         } catch (ReflectiveOperationException e) {

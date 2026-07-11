@@ -4,6 +4,7 @@ import io.github.huskyagent.domain.capability.CapabilityView;
 import io.github.huskyagent.domain.context.policy.ContextPolicy;
 import io.github.huskyagent.domain.memory.policy.MemoryPolicyConfig;
 import io.github.huskyagent.domain.agent.AgentDefinition;
+import io.github.huskyagent.infra.llm.ModelSelection;
 import lombok.Builder;
 import lombok.Value;
 
@@ -32,6 +33,10 @@ public class RuntimePolicy {
     AgentDefinition.StoragePolicy storagePolicy;
     AgentDefinition.StorageSpec storageSpec;
     String fixedWorkingDirectory;
+    /**
+     * Effective LLM selection for this run (provider + model + sampling). Always resolved at policy assemble time.
+     */
+    ModelSelection modelSelection;
 
     public String fingerprint() {
         String base = String.join("|",
@@ -45,6 +50,7 @@ public class RuntimePolicy {
                 String.valueOf(promptFilePolicy),
                 backendSpecFingerprint(backendSpec),
                 fixedWorkingDirectory != null ? fixedWorkingDirectory : "",
+                modelSelection != null ? modelSelection.fingerprint() : "",
                 String.valueOf(approvalPolicy), String.valueOf(backendPolicy), String.valueOf(workingDirectoryPolicy));
         if (!isRemoteStorage()) {
             return base;

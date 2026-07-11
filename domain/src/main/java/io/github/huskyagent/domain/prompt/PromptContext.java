@@ -69,6 +69,11 @@ public class PromptContext {
         return Objects.requireNonNull(runtimePolicy, "runtimePolicy is required for prompt building");
     }
 
+    /** Present when prompt is built for a real agent run; may be empty in unit tests. */
+    public Optional<RuntimePolicy> findRuntimePolicy() {
+        return Optional.ofNullable(runtimePolicy);
+    }
+
     public Optional<SessionScope> getSessionScope() {
         return Optional.ofNullable(sessionScope);
     }

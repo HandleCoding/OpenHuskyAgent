@@ -38,6 +38,12 @@ tui:
     path: ${TUI_WS_PATH:/api/tui}
     allowed-origins: ${TUI_WS_ALLOWED_ORIGINS:*}
 
+# Platform LLM providers (agents reference these via agents.*.model.provider)
+# When empty, provider "main" is seeded from spring.ai.openai.*
+llm:
+  default-provider: main
+  providers: {}
+
 # Agent configuration
 agent:
   auxiliary:
@@ -263,6 +269,7 @@ chatbot:
 agents:
   assistant:
     system-prompt: ""
+    # model: ${OPENAI_MODEL:gpt-5.4}   # string form, or object: { provider: main, name: gpt-5.4, temperature: 0.7 }
     toolsets: []
     denied-tools: []
     knowledge-sources: [] # empty = all configured knowledge sources
@@ -284,6 +291,7 @@ agents:
       You are Husky, an intelligent AI assistant.
       You can use the following tools to help users: web_search for internet search and web_fetch for webpage retrieval.
       Current time: {{currentDateTime}}
+    # model: ${OPENAI_MODEL:gpt-5.4}
     toolsets:
       - CORE
       - SKILLS

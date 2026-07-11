@@ -14,6 +14,7 @@ import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.Principal;
 import io.github.huskyagent.infra.config.AgentConfig;
 import io.github.huskyagent.infra.context.TokenCounter;
+import io.github.huskyagent.infra.llm.LlmClientRegistry;
 import io.github.huskyagent.infra.session.CheckpointStore;
 import io.github.huskyagent.infra.session.CheckpointStoreFactory;
 import io.github.huskyagent.infra.session.SessionScope;
@@ -24,6 +25,7 @@ import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.bsc.langgraph4j.spring.ai.serializer.jackson.SpringAIJacksonStateSerializer;
 import org.bsc.langgraph4j.utils.EdgeMappings;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -50,7 +52,8 @@ public class AgentGraph {
     private static final String LABEL_APPROVED = "APPROVED";
     private static final String LABEL_REJECTED = "REJECTED";
 
-    private final org.springframework.ai.chat.model.ChatModel chatModel;
+    private final ChatModel chatModel;
+    private final LlmClientRegistry llmClientRegistry;
     private final PromptBuilder promptBuilder;
     private final LlmRetryPolicy llmRetryPolicy;
     private final LlmUsageDetailsExtractor usageDetailsExtractor;
@@ -97,7 +100,12 @@ public class AgentGraph {
                                                              ChannelIdentity channelIdentity, Principal principal,
                                                              boolean forceMemoryCheckpoint) throws GraphStateException {
 
-        log.debug("Building graph: sessionId={}", sessionId);
+        log.debug("Building graph: sessionId={}, agentId={}, model={}",
+                sessionId,
+                runtimePolicy != null ? runtimePolicy.getAgentId() : null,
+                runtimePolicy != null && runtimePolicy.getModelSelection() != null
+                        ? runtimePolicy.getModelSelection().fingerprint()
+                        : "default");
 
         PromptContext promptContext = PromptContext.of(sessionId, workingDirectory)
                 .runtimePolicy(runtimePolicy)
@@ -108,7 +116,8 @@ public class AgentGraph {
                 .agentId(runtimePolicy.getAgentId());
         String systemPrompt = promptBuilder.buildSessionStable(promptContext);
 
-        ChatClient chatClient = ChatClient.builder(chatModel)
+        ChatModel effectiveModel = resolveChatModel(runtimePolicy);
+        ChatClient chatClient = ChatClient.builder(effectiveModel)
                 .defaultOptions(ToolCallingChatOptions.builder()
                         .internalToolExecutionEnabled(false)
                         .build())
@@ -127,6 +136,16 @@ public class AgentGraph {
                 .checkpointSaver(saver)
                 .recursionLimit(10000)
                 .build());
+    }
+
+    private ChatModel resolveChatModel(RuntimePolicy runtimePolicy) {
+        if (llmClientRegistry != null && runtimePolicy != null) {
+            return llmClientRegistry.getChatModel(runtimePolicy.getModelSelection());
+        }
+        if (llmClientRegistry != null) {
+            return llmClientRegistry.getChatModel(null);
+        }
+        return chatModel;
     }
 
     private StateGraph<ReActAgentState> buildStateGraph(GraphBuildContext context) throws GraphStateException {

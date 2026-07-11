@@ -1,5 +1,6 @@
 package io.github.huskyagent.domain.agent;
 
+import io.github.huskyagent.infra.llm.ModelSelection;
 import io.github.huskyagent.infra.tool.Toolset;
 import lombok.Data;
 
@@ -15,6 +16,11 @@ public class AgentDefinition {
 
     private String agentId;
     private String systemPrompt;
+
+    /**
+     * Optional LLM selection for this agent. Null means platform default provider + model.
+     */
+    private ModelSelection modelSelection;
 
     private Set<Toolset> allowedToolsets = Set.of(Toolset.values());
     private Set<String> allowedTools = Set.of();

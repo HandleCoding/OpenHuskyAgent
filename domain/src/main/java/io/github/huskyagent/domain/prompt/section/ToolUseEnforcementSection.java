@@ -31,19 +31,20 @@ public class ToolUseEnforcementSection extends AbstractPromptSection {
 
     @Override
     public boolean isDynamic() {
-        return false;
+        return true;
     }
 
     @Override
     public String build(PromptContext context) {
-        if (!shouldInject()) {
+        String effectiveModel = effectiveModelName(context);
+        if (!shouldInject(effectiveModel)) {
             return "";
         }
 
         StringBuilder sb = new StringBuilder();
         sb.append(TOOL_USE_ENFORCEMENT_GUIDANCE);
 
-        String modelLower = modelName.toLowerCase();
+        String modelLower = effectiveModel.toLowerCase();
 
         if (modelLower.contains("gemini") || modelLower.contains("gemma")) {
             sb.append(GOOGLE_MODEL_OPERATIONAL_GUIDANCE);
@@ -56,7 +57,19 @@ public class ToolUseEnforcementSection extends AbstractPromptSection {
         return buildWithTitle("Tool-use Enforcement", sb.toString());
     }
 
-    private boolean shouldInject() {
+    private String effectiveModelName(PromptContext context) {
+        if (context != null) {
+            var selection = context.findRuntimePolicy()
+                    .map(policy -> policy.getModelSelection())
+                    .orElse(null);
+            if (selection != null && selection.getModelName() != null && !selection.getModelName().isBlank()) {
+                return selection.getModelName();
+            }
+        }
+        return modelName != null ? modelName : "";
+    }
+
+    private boolean shouldInject(String effectiveModel) {
         if (enforcementConfig == null) {
             return false;
         }
@@ -74,11 +87,11 @@ public class ToolUseEnforcementSection extends AbstractPromptSection {
                 return false;
             }
             // "auto" or unrecognized — use default model matching
-            return matchDefaultModels();
+            return matchDefaultModels(effectiveModel);
         }
 
         if (enforcementConfig instanceof List<?> list) {
-            String modelLower = modelName.toLowerCase();
+            String modelLower = effectiveModel != null ? effectiveModel.toLowerCase() : "";
             return list.stream()
                     .filter(item -> item instanceof String)
                     .map(item -> ((String) item).toLowerCase())
@@ -88,8 +101,8 @@ public class ToolUseEnforcementSection extends AbstractPromptSection {
         return false;
     }
 
-    private boolean matchDefaultModels() {
-        String modelLower = modelName.toLowerCase();
+    private boolean matchDefaultModels(String effectiveModel) {
+        String modelLower = effectiveModel != null ? effectiveModel.toLowerCase() : "";
         return DEFAULT_ENFORCEMENT_MODELS.stream().anyMatch(modelLower::contains);
     }
 
