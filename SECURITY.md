@@ -23,10 +23,12 @@ Husky can expose powerful tools, including terminal, file, browser, MCP, memory,
 
 - Replace `HUSKY_API_KEYS` with strong random values.
 - Set `TUI_WS_ALLOWED_ORIGINS` to trusted origins instead of wildcard `*`.
-- Keep dangerous tools out of public scenes unless approval and sandboxing are intentionally configured.
+- Keep dangerous tools out of public-facing agents unless approval and sandboxing are intentionally configured.
+- Prefer a narrow agent for OpenAI-compatible `/v1/*` and Chatbot `/api/chat` traffic.
 - Disable or tightly scope browser tools and MCP servers for untrusted users.
 - Put Actuator endpoints behind a trusted network or authenticated reverse proxy.
 - Keep `.env`, MCP configs, local databases, logs, and data directories out of source control.
+- See [docs/integrators.md](docs/integrators.md) for the production checklist.
 
 ## Secrets And Logs
 

@@ -22,16 +22,16 @@
 
 Husky is a Java agent runtime built with Spring Boot, Spring AI, and LangGraph4j. It runs a ReAct loop with streaming output, tool calls, approvals, memory, knowledge retrieval, skills, MCP, browser automation, and multi-channel delivery.
 
-The core idea is metadata-driven agent compute: the service starts once, then each request resolves its behavior from the request source, principal, channel, scene, session, visible tools, skills, memory policy, knowledge sources, MCP visibility, workspace/checkpoint storage policy, approval policy, and execution backend.
+The core idea is metadata-driven agent compute: the service starts once, then each request resolves its behavior from the request source, principal, channel, **agent**, session, visible tools, skills, memory policy, knowledge sources, MCP visibility, workspace/checkpoint storage policy, approval policy, and execution backend.
 
 Husky can be used as:
 
 | Use case | What you get |
 |----------|--------------|
 | Personal AI assistant | TUI, local files, terminal/process tools, browser tools, memory, approvals |
-| Online chatbot backend | HTTP SSE `/api/chat`, API key auth, per-user sessions, scene-filtered tools |
-| Enterprise assistant | Feishu, Telegram, and Slack multi-instance bots, channel bindings, knowledge sources, audit tags |
-| Agent platform | Layered Java modules, tool providers, scenes, hooks, runtime policies, MCP |
+| Online chatbot / app backend | HTTP SSE `/api/chat`, OpenAI-compatible `/v1/*`, API key auth, per-user sessions, agent-scoped tools |
+| Enterprise assistant | Feishu, Telegram, and Slack multi-instance bots, agent–channel bindings, knowledge sources, audit tags |
+| Agent platform | Layered Java modules, tool providers, agents, hooks, runtime policies, MCP |
 
 ## Quick Start
 
@@ -301,6 +301,35 @@ Headers:
 
 SSE events include `token`, `reasoning`, `message`, `tool_started`, `tool_completed`, `tool_failed`, `done`, and `error`.
 
+Rate-limited agents return a structured error with a rate-limit signal instead of silently dropping the turn.
+
+### OpenAI-Compatible API (build apps on Husky)
+
+Expose each configured agent as an OpenAI-style model so clients can call Husky with standard SDKs.
+
+1. Enable in config (`openai-compatible.enabled=true` or `OPENAI_COMPATIBLE_ENABLED=true`).
+2. List models (agent ids):
+
+```bash
+curl -H 'X-Api-Key: <your-api-key>' \
+  http://localhost:18088/v1/models
+```
+
+3. Chat completions (non-stream or stream). The `model` field is the **agent id** (optionally prefixed via `openai-compatible.model-prefix`):
+
+```bash
+curl -H 'X-Api-Key: <your-api-key>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "assistant",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": false
+  }' \
+  http://localhost:18088/v1/chat/completions
+```
+
+Auth uses the same Chatbot API keys when `AUTH_ENABLED=true`. This is the recommended integration surface for external AI products. See [docs/integrators.md](docs/integrators.md) for agent config, allowlists, and production notes.
+
 ### Feishu Channel
 
 Husky supports Feishu WebSocket/webhook adapters with multiple app instances under `channels.feishu.instances.*`. Bind instances to agents through `agent-channel-bindings.*`, allowing different bots/accounts to expose different prompts, tools, memory, and approval policies.
@@ -321,7 +350,8 @@ Slack v1 supports text messages, DM and channel/thread routing, channel mention 
 
 - **ReAct graph runtime** — LangGraph4j drives model -> tool -> observation loops with interrupt/resume approvals.
 - **Streaming by channel** — TUI WebSocket, HTTP SSE, and Feishu adapters render the same runtime events differently.
-- **Agent runtime policy** — agents control prompts, toolsets, exact allow/deny lists, MCP servers, knowledge sources, skills, approval, backend, working directory, memory, audit, and rate limits.
+- **Agent runtime policy** — agents control prompts, toolsets, allow/deny lists, MCP servers, knowledge sources, skills, approval, backend, working directory, memory, audit, rate limits, and optional LLM model/provider.
+- **Fail-closed allowlists** — empty capability lists mean none; `["*"]` means all. Invalid concrete ids fail process startup.
 - **Built-in tools** — file read/write/edit/delete/move, apply patch, file search/listing, terminal/process, todo, web search/fetch, browser, memory, knowledge, skills, delegate, MCP, and vision tools.
 - **Parallel tool execution** — safe tools from the same model turn can run concurrently; approval-required tools are routed through a serial confirmation queue.
 - **Memory and checkpoints** — SQLite-backed sessions, graph checkpoints, memory tools, context compression, and model-context-length policies.
@@ -329,7 +359,8 @@ Slack v1 supports text messages, DM and channel/thread routing, channel mention 
 - **Skill system** — built-in skills, user-installed skills, SkillHub search/install, and progressive `skill_list` / `skill_view` loading.
 - **MCP integration** — stdio, SSE, and Streamable-HTTP MCP servers with agent-level visibility controls.
 - **Browser and vision** — Playwright browser automation and local/remote image analysis when enabled.
-- **Sub-agent delegation** — `delegate_task` can run child agents for isolated or parallel work.
+- **Sub-agent delegation** — anonymous `delegate_task` children with three-layer policy (`agent.delegation` + `agents.*.delegation` + tool params).
+- **OpenAI-compatible surface** — `/v1/models` and `/v1/chat/completions` map models to agent ids for third-party clients.
 - **Observability** — audit logs, metrics, session stats, redaction, and `/actuator/husky`.
 
 ## Architecture
@@ -362,11 +393,12 @@ Packaged defaults live in `service/src/main/resources/application.yml`. Installe
 
 | Area | Important keys |
 |------|----------------|
-| LLM | `spring.ai.openai.*`, `agent.auxiliary.*` |
-| Agent loop | `agent.graph.max-react-loops`, `agent.llm.*`, `agent.tool.*`, `agent.checkpoint.enabled` |
+| LLM | `spring.ai.openai.*`, `llm.providers.*`, `agent.auxiliary.*` |
+| Agent loop | `agent.graph.max-react-loops`, `agent.llm.*`, `agent.tool.*`, `agent.checkpoint.enabled`, `agent.delegation.*` |
 | Context | `context.threshold-percent`, `context.context-length`, `context.model-context-lengths`, `context.tail-token-budget` |
 | Channels | `channels.feishu.instances.*`, `channels.telegram.instances.*`, `channels.slack.instances.*`, `tui.ws.*`, `chatbot.enabled` |
-| Agents and bindings | `agents.*`, `agent-channel-bindings.*`, `toolsets`, `allowed-tools`, `denied-tools`, `approval`, `backend`, `working-dir`, `memory`, `storage` |
+| OpenAI-compatible API | `openai-compatible.enabled`, `openai-compatible.model-prefix`, `openai-compatible.stream-timeout-ms` |
+| Agents and bindings | `agents.*`, `agent-channel-bindings.*` — see [docs/integrators.md](docs/integrators.md) for allowlists, `model`, `rate-limit-*`, `delegation` |
 | Execution | `execution.backend.docker.*`, `execution.backend.idle-ttl-seconds` |
 | Web | `web.backend`, `web.proxy.*`, `BRAVE_SEARCH_API_KEY`, `TAVILY_API_KEY` |
 | Browser | `browser.enabled`, `browser.headless`, `browser.timeout-seconds`, `browser.allow-private-network` |
@@ -385,11 +417,13 @@ Tool runtime follows the selected agent backend. Terminal/process tools execute 
 Before exposing Husky beyond local development:
 
 - Replace `HUSKY_API_KEYS` with strong random values.
-- Keep `AUTH_ENABLED=true` for public `/api/chat` endpoints.
+- Keep `AUTH_ENABLED=true` for public `/api/chat` and `/v1/*` endpoints.
 - Set `TUI_WS_ALLOWED_ORIGINS` to trusted origins; do not expose the TUI WebSocket with wildcard `*`.
 - Treat `approval: none` as no-approval mode; do not combine it with dangerous toolsets in online agents.
+- Prefer a dedicated internet-facing agent (for example `chatbot`) with narrow toolsets rather than full `assistant` capabilities.
 - Restrict terminal, process, file mutation/search, browser automation, `skill_install`, `skill_manage`, and dangerous MCP tools in internet-facing agents.
-- Use `allowed-mcp-servers`, `denied-mcp-servers`, `allowed-tools`, and `denied-tools` to scope MCP and tool visibility.
+- Use empty / `["*"]` / concrete allowlists deliberately; invalid concrete skill, MCP, knowledge, or toolset ids fail startup (fail-closed).
+- Enable per-agent `rate-limit-*` for multi-tenant HTTP usage.
 - Keep Actuator endpoints on a trusted network or behind authenticated reverse proxy access.
 - Do not commit `.env`, local databases, private MCP configs, API keys, logs, or generated runtime data.
 
@@ -423,6 +457,15 @@ OPENAI_API_KEY=... ./mvnw -B -ntp test -P live-api-tests
 ```
 
 The installer uses `-DskipTests` for speed. Contributors should run the default test command before opening PRs.
+
+## Documentation
+
+| Doc | Audience |
+|-----|----------|
+| [docs/integrators.md](docs/integrators.md) | Deploy Husky as a backend; agents, allowlists, OpenAI-compatible API, production checklist |
+| [docs/agent_channel_binding_plan.md](docs/agent_channel_binding_plan.md) | `agents.*` / channels / bindings configuration model |
+| [docs/agent-platform-roadmap.md](docs/agent-platform-roadmap.md) | Platform evolution roadmap |
+| [docs/roadmap.md](docs/roadmap.md) | Historical roadmap index |
 
 ## Contributing
 

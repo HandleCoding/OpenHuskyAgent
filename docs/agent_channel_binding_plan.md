@@ -16,7 +16,7 @@ This is a breaking external configuration model. `scenes`, `channel-bindings`, a
 agents:
   assistant:
     system-prompt: ""
-    toolsets: []
+    toolsets: ["*"]   # empty [] = no toolsets (fail-closed); ["*"] = all
     approval: required
 
 channels:

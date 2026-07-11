@@ -40,11 +40,14 @@ Before opening a PR:
 - Run `./mvnw -B -ntp test` unless the change is documentation-only.
 - Update `.env.example`, README, and docs when behavior or configuration changes.
 - Do not commit `.env`, credentials, local databases, IDE state, or generated build output.
-- For tool, MCP, browser, terminal, file, memory, or storage changes, describe the security and scene-policy impact.
+- For tool, MCP, browser, terminal, file, memory, or storage changes, describe the security and agent-policy impact.
+- Keep public docs current: root README (EN/ZH), `docs/integrators.md` (+ ZH), and `.env.example` when runtime config or APIs change.
 
 ## Runtime And Configuration Changes
 
-Husky is metadata-driven: channel, scene, principal, toolsets, memory, knowledge, MCP visibility, workspace, and checkpoint policy should flow through runtime metadata instead of global mutable state. Preserve local personal-assistant defaults unless a change explicitly targets a different deployment mode.
+Husky is metadata-driven: channel, agent, principal, toolsets, memory, knowledge, MCP visibility, workspace, and checkpoint policy should flow through runtime metadata instead of global mutable state. Preserve local personal-assistant defaults unless a change explicitly targets a different deployment mode.
+
+Capability allowlists are fail-closed (`[]` = none, `["*"]` = all). Invalid concrete resource ids must fail at agent config validation / startup, not silently at first request.
 
 Unknown non-local storage/provider types should fail fast. Do not silently fall back to local storage for enterprise or remote-storage configuration errors.
 
