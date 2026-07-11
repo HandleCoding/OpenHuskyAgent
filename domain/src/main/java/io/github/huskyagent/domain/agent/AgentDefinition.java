@@ -22,12 +22,19 @@ public class AgentDefinition {
      */
     private ModelSelection modelSelection;
 
-    private Set<Toolset> allowedToolsets = Set.of(Toolset.values());
+    /**
+     * Empty = no toolsets. Config binding uses {@code toolsets: ["*"]} for all.
+     * Default empty so code-constructed agents are fail-closed unless they opt in.
+     */
+    private Set<Toolset> allowedToolsets = Set.of();
     private Set<String> allowedTools = Set.of();
     private Set<String> deniedTools = Set.of();
+    /** Empty = no MCP servers; {@code *} = all configured servers. */
     private Set<String> allowedMcpServers = Set.of();
     private Set<String> deniedMcpServers = Set.of();
+    /** Empty = no knowledge sources; {@code *} = all registered sources. */
     private Set<String> knowledgeSources = Set.of();
+    /** Empty = no skills; {@code *} = all active skills (for toolsets). */
     private Set<String> skillIds = Set.of();
     private Set<String> promptSections = Set.of();
 

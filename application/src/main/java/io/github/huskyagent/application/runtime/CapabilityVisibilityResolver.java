@@ -75,12 +75,7 @@ public class CapabilityVisibilityResolver {
         }
 
         Set<Toolset> visibleToolsets = tools.stream().map(ToolDefinition::toolset).collect(Collectors.toUnmodifiableSet());
-        List<Skill> skills = skillManager.getActiveSkills(visibleToolsets);
-        if (agentDefinition.getSkillIds() != null && !agentDefinition.getSkillIds().isEmpty()) {
-            skills = skills.stream()
-                    .filter(skill -> agentDefinition.getSkillIds().contains(skill.name()))
-                    .toList();
-        }
+        List<Skill> skills = filterSkills(agentDefinition.getSkillIds(), skillManager.getActiveSkills(visibleToolsets));
 
         return buildView(
                 agentDefinition,
@@ -108,11 +103,7 @@ public class CapabilityVisibilityResolver {
         skills = skills.stream()
                 .filter(skill -> parentSkillNames.contains(skill.name()))
                 .toList();
-        if (agentDefinition.getSkillIds() != null && !agentDefinition.getSkillIds().isEmpty()) {
-            skills = skills.stream()
-                    .filter(skill -> agentDefinition.getSkillIds().contains(skill.name()))
-                    .toList();
-        }
+        skills = filterSkills(agentDefinition.getSkillIds(), skills);
 
         Set<String> promptSections = parentView != null && parentView.getVisiblePromptSections() != null
                 ? Set.copyOf(parentView.getVisiblePromptSections())
@@ -124,15 +115,25 @@ public class CapabilityVisibilityResolver {
     private List<ToolDefinition> filterTools(AgentDefinition agentDefinition, List<ToolDefinition> initialTools) {
         Set<Toolset> allowedToolsets = agentDefinition.getAllowedToolsets();
         List<ToolDefinition> tools = initialTools;
-        if (allowedToolsets != null && !allowedToolsets.isEmpty()) {
+        // Empty toolsets = no tools (fail-closed). Null treated as empty.
+        if (allowedToolsets == null || allowedToolsets.isEmpty()) {
+            tools = List.of();
+        } else {
             tools = tools.stream()
                     .filter(tool -> allowedToolsets.contains(tool.toolset()))
                     .toList();
         }
+        // allowed-tools: empty = no extra filter (toolsets + deny still apply); non-empty = whitelist.
+        // Use ["*"] is not needed — omit or leave empty to keep all tools from selected toolsets.
         if (agentDefinition.getAllowedTools() != null && !agentDefinition.getAllowedTools().isEmpty()) {
-            tools = tools.stream()
-                    .filter(tool -> agentDefinition.getAllowedTools().contains(tool.name()))
-                    .toList();
+            Set<String> allowedTools = agentDefinition.getAllowedTools();
+            if (AllowlistSemantics.isUnrestricted(allowedTools)) {
+                // keep tools from toolsets
+            } else {
+                tools = tools.stream()
+                        .filter(tool -> allowedTools.contains(tool.name()))
+                        .toList();
+            }
         }
         tools = tools.stream()
                 .filter(tool -> isAllowedMcpTool(tool, agentDefinition.getAllowedMcpServers(), agentDefinition.getDeniedMcpServers()))
@@ -144,6 +145,18 @@ public class CapabilityVisibilityResolver {
                     .toList();
         }
         return filterByMemoryPolicy(tools, agentDefinition.getMemoryPolicyConfig());
+    }
+
+    private List<Skill> filterSkills(Set<String> skillIds, List<Skill> candidates) {
+        if (AllowlistSemantics.isNone(skillIds)) {
+            return List.of();
+        }
+        if (AllowlistSemantics.isUnrestricted(skillIds)) {
+            return candidates != null ? candidates : List.of();
+        }
+        return candidates.stream()
+                .filter(skill -> skillIds.contains(skill.name()))
+                .toList();
     }
 
     private CapabilityView buildView(AgentDefinition agentDefinition, List<ToolDefinition> tools, Set<Toolset> visibleToolsets,
@@ -199,7 +212,8 @@ public class CapabilityVisibilityResolver {
         if (deniedServers != null && deniedServers.contains(server)) {
             return false;
         }
-        return allowedServers == null || allowedServers.isEmpty() || allowedServers.contains(server);
+        // Empty allowed-mcp-servers = no MCP tools; ["*"] = all servers.
+        return AllowlistSemantics.allows(server, allowedServers);
     }
 
     private boolean isAllowedInBackend(ToolDefinition tool, AgentDefinition agentDefinition) {

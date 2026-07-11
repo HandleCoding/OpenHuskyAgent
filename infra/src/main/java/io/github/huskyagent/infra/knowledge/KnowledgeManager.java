@@ -42,8 +42,14 @@ public class KnowledgeManager {
         if (sourceIds == null || sourceIds.isEmpty()) {
             return;
         }
+        if (containsAllToken(sourceIds)) {
+            return;
+        }
         Set<String> registered = allSourceIds();
         for (String sourceId : sourceIds) {
+            if (isAllToken(sourceId)) {
+                continue;
+            }
             if (!registered.contains(sourceId)) {
                 throw new IllegalArgumentException("Unknown knowledge source: " + sourceId);
             }
@@ -55,8 +61,10 @@ public class KnowledgeManager {
             return List.of();
         }
         int topK = clampTopK(query.topK());
-        Set<String> effectiveAllowed = allowedSourceIds == null || allowedSourceIds.isEmpty()
-                ? allSourceIds() : allowedSourceIds;
+        Set<String> effectiveAllowed = resolveAllowedSources(allowedSourceIds);
+        if (effectiveAllowed.isEmpty()) {
+            return List.of();
+        }
 
         return providers.stream()
                 .filter(KnowledgeProvider::isAvailable)
@@ -74,8 +82,10 @@ public class KnowledgeManager {
         if (!config.isEnabled()) {
             return Optional.empty();
         }
-        Set<String> effectiveAllowed = allowedSourceIds == null || allowedSourceIds.isEmpty()
-                ? allSourceIds() : allowedSourceIds;
+        Set<String> effectiveAllowed = resolveAllowedSources(allowedSourceIds);
+        if (effectiveAllowed.isEmpty()) {
+            return Optional.empty();
+        }
         String providerName = parseProviderName(id);
 
         return providers.stream()
@@ -92,8 +102,10 @@ public class KnowledgeManager {
         if (!config.isEnabled()) {
             return "";
         }
-        Set<String> effectiveAllowed = allowedSourceIds == null || allowedSourceIds.isEmpty()
-                ? allSourceIds() : allowedSourceIds;
+        Set<String> effectiveAllowed = resolveAllowedSources(allowedSourceIds);
+        if (effectiveAllowed.isEmpty()) {
+            return "";
+        }
 
         List<KnowledgeProvider> active = providers.stream()
                 .filter(KnowledgeProvider::isAvailable)
@@ -111,6 +123,31 @@ public class KnowledgeManager {
 
     private boolean providerSupportsAnyAllowed(KnowledgeProvider provider, Set<String> allowed) {
         return allowed.contains(provider.getName()) || allowed.stream().anyMatch(provider::supportsSource);
+    }
+
+    /**
+     * Empty allowlist = no sources. {@code *} / {@code all} = every registered source.
+     */
+    private Set<String> resolveAllowedSources(Set<String> allowedSourceIds) {
+        if (allowedSourceIds == null || allowedSourceIds.isEmpty()) {
+            return Set.of();
+        }
+        if (containsAllToken(allowedSourceIds)) {
+            return allSourceIds();
+        }
+        return allowedSourceIds;
+    }
+
+    private static boolean containsAllToken(Set<String> sourceIds) {
+        return sourceIds.stream().anyMatch(KnowledgeManager::isAllToken);
+    }
+
+    private static boolean isAllToken(String value) {
+        if (value == null) {
+            return false;
+        }
+        String t = value.trim();
+        return "*".equals(t) || "all".equalsIgnoreCase(t);
     }
 
     private int clampTopK(int topK) {

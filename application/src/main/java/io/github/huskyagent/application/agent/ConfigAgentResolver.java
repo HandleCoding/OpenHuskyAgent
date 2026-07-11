@@ -125,7 +125,15 @@ public class ConfigAgentResolver implements AgentResolver, EnvironmentAware, Ini
     }
 
     private Set<Toolset> toToolsets(List<String> names) {
-        if (names == null) return Set.of(Toolset.values());
+        // Empty / missing = no toolsets (fail-closed). Use ["*"] for all.
+        if (names == null || names.isEmpty()) {
+            return Set.of();
+        }
+        for (String name : names) {
+            if (name != null && ("*".equals(name.trim()) || "all".equalsIgnoreCase(name.trim()))) {
+                return Set.of(Toolset.values());
+            }
+        }
         Set<Toolset> result = new HashSet<>();
         for (String name : names) {
             try {
@@ -134,11 +142,30 @@ public class ConfigAgentResolver implements AgentResolver, EnvironmentAware, Ini
                 log.warn("Unknown Toolset name: {}", name);
             }
         }
-        return result.isEmpty() ? Set.of(Toolset.values()) : result;
+        return result;
     }
 
     private Set<String> toSet(Collection<String> values) {
-        return values != null ? Set.copyOf(values) : Set.of();
+        if (values == null || values.isEmpty()) {
+            return Set.of();
+        }
+        // Normalize "*" / "all" tokens for allowlists
+        Set<String> result = new HashSet<>();
+        for (String value : values) {
+            if (value == null) {
+                continue;
+            }
+            String trimmed = value.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            if ("*".equals(trimmed) || "all".equalsIgnoreCase(trimmed)) {
+                result.add("*");
+            } else {
+                result.add(trimmed);
+            }
+        }
+        return Set.copyOf(result);
     }
 
     private <T> T firstNonNull(T primary, T fallback) {

@@ -4,7 +4,9 @@ import io.github.huskyagent.infra.llm.ModelSelection;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -150,5 +152,42 @@ class ConfigAgentResolverTest {
         assertTrue(agent.getRateLimitSpec().isEnabled());
         assertEquals(30, agent.getRateLimitSpec().getRequestsPerMinute());
         assertEquals(10, agent.getRateLimitSpec().getBurst());
+    }
+
+    @Test
+    void emptyToolsetsMeansNoneNotAll() {
+        ConfigAgentResolver resolver = new ConfigAgentResolver();
+        ConfigAgentResolver.AgentProperties props = new ConfigAgentResolver.AgentProperties();
+        props.setToolsets(List.of());
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();
+        agents.put("assistant", props);
+        resolver.setAgents(agents);
+
+        assertTrue(resolver.resolve("assistant").getAllowedToolsets().isEmpty());
+    }
+
+    @Test
+    void starToolsetsMeansAll() {
+        ConfigAgentResolver resolver = new ConfigAgentResolver();
+        ConfigAgentResolver.AgentProperties props = new ConfigAgentResolver.AgentProperties();
+        props.setToolsets(List.of("*"));
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();
+        agents.put("assistant", props);
+        resolver.setAgents(agents);
+
+        assertEquals(Set.of(io.github.huskyagent.infra.tool.Toolset.values()),
+                resolver.resolve("assistant").getAllowedToolsets());
+    }
+
+    @Test
+    void starKnowledgeSourceIsNormalized() {
+        ConfigAgentResolver resolver = new ConfigAgentResolver();
+        ConfigAgentResolver.AgentProperties props = new ConfigAgentResolver.AgentProperties();
+        props.setKnowledgeSources(Set.of("all"));
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();
+        agents.put("assistant", props);
+        resolver.setAgents(agents);
+
+        assertEquals(Set.of("*"), resolver.resolve("assistant").getKnowledgeSources());
     }
 }

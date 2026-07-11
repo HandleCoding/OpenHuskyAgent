@@ -267,15 +267,20 @@ chatbot:
 # Agent configuration
 # Per-agent rate limits are enforced on each inbound user turn when enabled
 # (token bucket: rate-limit-requests-per-minute + optional rate-limit-burst).
+# Capability allowlists (toolsets / allowed-mcp-servers / knowledge-sources / skills):
+#   empty []  = none (fail-closed)
+#   ["*"]     = all registered / all toolsets
+# denied-* empty = no extra denials
 agents:
   assistant:
     system-prompt: ""
     # model: ${OPENAI_MODEL:gpt-5.4}   # string form, or object: { provider: main, name: gpt-5.4, temperature: 0.7 }
-    toolsets: []
+    toolsets: ["*"]
     denied-tools: []
-    knowledge-sources: [] # empty = all configured knowledge sources
-    allowed-mcp-servers: []
+    knowledge-sources: ["*"]
+    allowed-mcp-servers: ["*"]
     denied-mcp-servers: []
+    skills: ["*"]
     approval: required
     backend: local
     working-dir: inherit
@@ -302,8 +307,11 @@ agents:
       - WEB
       - KNOWLEDGE
       - MCP
+    # allowed-tools empty = no extra whitelist (all tools from toolsets, minus denied-tools)
     allowed-tools: []
-    knowledge-sources: [] # empty = all configured knowledge sources
+    knowledge-sources: []   # none unless you list sources or use ["*"]
+    allowed-mcp-servers: [] # none unless you list servers or use ["*"]
+    skills: []              # none unless you list skills or use ["*"]
     denied-tools:
       - read_file
       - write_file

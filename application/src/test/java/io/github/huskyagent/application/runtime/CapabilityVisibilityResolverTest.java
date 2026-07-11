@@ -78,6 +78,11 @@ class CapabilityVisibilityResolverTest {
     private AgentDefinition agent() {
         AgentDefinition s = new AgentDefinition();
         s.setAgentId("test");
+        // Fail-closed defaults are empty; tests opt into full toolsets unless they set their own.
+        s.setAllowedToolsets(Set.of(Toolset.values()));
+        s.setAllowedMcpServers(Set.of("*"));
+        s.setSkillIds(Set.of("*"));
+        s.setKnowledgeSources(Set.of("*"));
         return s;
     }
 
@@ -96,14 +101,14 @@ class CapabilityVisibilityResolverTest {
     }
 
     @Test
-    void emptyAllowedToolsetsReturnsAll() {
+    void emptyAllowedToolsetsReturnsNone() {
         CapabilityVisibilityResolver r = resolver(tool("a", Toolset.CORE), tool("b", Toolset.TERMINAL));
         AgentDefinition s = agent();
-        s.setAllowedToolsets(null);
+        s.setAllowedToolsets(Set.of());
 
         CapabilityView view = resolve(r, s);
 
-        assertTrue(view.getVisibleToolNames().containsAll(Set.of("a", "b")));
+        assertTrue(view.getVisibleToolNames().isEmpty());
     }
 
     @Test
@@ -427,18 +432,47 @@ class CapabilityVisibilityResolverTest {
     }
 
     @Test
-    void emptySkillIdsReturnsAllActiveSkills() {
+    void emptySkillIdsReturnsNoSkills() {
         SkillManager sm = new SkillManager();
         sm.setSkills(List.of(
                 Skill.ofSimple("skill_a", "desc", Set.of(), Set.of(), "content"),
                 Skill.ofSimple("skill_b", "desc", Set.of(), Set.of(), "content")));
         CapabilityVisibilityResolver r = resolver(sm);
         AgentDefinition s = agent();
-        // skillIds null or empty → all active skills
+        s.setSkillIds(Set.of());
+
+        CapabilityView view = resolve(r, s);
+
+        assertTrue(view.getVisibleSkillNames().isEmpty());
+    }
+
+    @Test
+    void starSkillIdsReturnsAllActiveSkills() {
+        SkillManager sm = new SkillManager();
+        sm.setSkills(List.of(
+                Skill.ofSimple("skill_a", "desc", Set.of(), Set.of(), "content"),
+                Skill.ofSimple("skill_b", "desc", Set.of(), Set.of(), "content")));
+        CapabilityVisibilityResolver r = resolver(sm);
+        AgentDefinition s = agent();
+        s.setSkillIds(Set.of("*"));
 
         CapabilityView view = resolve(r, s);
 
         assertTrue(view.getVisibleSkillNames().containsAll(Set.of("skill_a", "skill_b")));
+    }
+
+    @Test
+    void emptyMcpAllowlistHidesAllMcpTools() {
+        CapabilityVisibilityResolver r = resolver(
+                mcpTool("server1", "do_thing"), tool("core1", Toolset.CORE));
+        AgentDefinition s = agent();
+        s.setAllowedToolsets(Set.of(Toolset.CORE, Toolset.MCP));
+        s.setAllowedMcpServers(Set.of());
+
+        CapabilityView view = resolve(r, s);
+
+        assertTrue(view.getVisibleToolNames().contains("core1"));
+        assertFalse(view.getVisibleToolNames().contains(McpToolProvider.prefixName("server1", "do_thing")));
     }
 
     @Test

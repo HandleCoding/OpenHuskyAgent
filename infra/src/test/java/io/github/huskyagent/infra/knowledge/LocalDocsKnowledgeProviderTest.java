@@ -158,7 +158,7 @@ class LocalDocsKnowledgeProviderTest {
     }
 
     @Test
-    void emptyAllowedSourcesMeansAllSources() throws Exception {
+    void emptyAllowedSourcesMeansNoSourcesAtManagerLayer() throws Exception {
         Path docs = tempDir.resolve("docs");
         Files.createDirectories(docs);
         Files.writeString(docs.resolve("guide.md"), "Deployment guide content.");
@@ -168,11 +168,16 @@ class LocalDocsKnowledgeProviderTest {
         source.setId("docs");
         source.setRoot(docs.toString());
         config.setLocalSources(List.of(source));
+        config.setEnabled(true);
 
         LocalDocsKnowledgeProvider provider = new LocalDocsKnowledgeProvider(config);
+        KnowledgeManager manager = new KnowledgeManager(List.of(provider), config);
 
-        // Empty allowed = all sources visible
-        List<KnowledgeResult> results = provider.search(KnowledgeQuery.of("deployment", 5, null), Set.of());
-        assertEquals(1, results.size());
+        // Empty allowed at KnowledgeManager = no sources (fail-closed)
+        List<KnowledgeResult> none = manager.search(KnowledgeQuery.of("deployment", 5, null), Set.of());
+        assertTrue(none.isEmpty());
+
+        List<KnowledgeResult> all = manager.search(KnowledgeQuery.of("deployment", 5, null), Set.of("*"));
+        assertEquals(1, all.size());
     }
 }
