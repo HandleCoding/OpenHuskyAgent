@@ -131,7 +131,7 @@ class OpenAiCompatibleRuntimeService {
             return;
         }
         if (!chatResult.success()) {
-            callbacks.failed(result.scope(), chatResult.errorMessage());
+            callbacks.failed(result.scope(), chatResult.errorMessage(), chatResult.errorCode());
             return;
         }
         if (result.scope() == null) {

@@ -73,13 +73,25 @@ class OpenAiStreamingRuntimeCallbacks implements RuntimeCallbacks {
     }
 
     @Override
-    public void failed(RuntimeScope scope, String errorMessage) {
+    public void failed(RuntimeScope scope, String errorMessage, ChatResult.ErrorCode errorCode) {
         if (!finished.compareAndSet(false, true)) {
             return;
         }
         try {
+            String type = "server_error";
+            String code = "runtime_error";
+            if (errorCode == ChatResult.ErrorCode.RATE_LIMITED) {
+                type = "rate_limit_error";
+                code = "rate_limited";
+            } else if (errorCode == ChatResult.ErrorCode.PARAM_ERROR) {
+                type = "invalid_request_error";
+                code = "param_error";
+            } else if (errorCode == ChatResult.ErrorCode.AUTH_ERROR) {
+                type = "invalid_request_error";
+                code = "auth_error";
+            }
             sendData(new OpenAiWireResponses.ErrorResponse(
-                    new OpenAiWireResponses.ErrorBody(errorMessage, "server_error", null, "runtime_error")));
+                    new OpenAiWireResponses.ErrorBody(errorMessage, type, null, code)));
             emitter.complete();
         } catch (RuntimeException e) {
             emitter.completeWithError(e);

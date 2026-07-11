@@ -183,11 +183,15 @@ public class TuiSessionService {
             String status = result.success()
                     ? "ok"
                     : (result.errorCode() == ChatResult.ErrorCode.CANCELLED ? "cancelled" : "error");
+            String errorText = result.success() || result.errorCode() == ChatResult.ErrorCode.CANCELLED
+                    ? null
+                    : result.errorMessage();
             emitter.emitMessageComplete(
                     result.content(),
                     status,
                     durationMs,
-                    result.streamed()
+                    result.streamed(),
+                    errorText
             );
 
             return result;

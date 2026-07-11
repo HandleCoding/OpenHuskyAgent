@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigAgentResolverTest {
 
@@ -118,5 +119,36 @@ class ConfigAgentResolverTest {
         ModelSelection model = resolver.toModelSelection(Map.of("provider", "main", "model", "qwen"));
         assertEquals("main", model.getProviderId());
         assertEquals("qwen", model.getModelName());
+    }
+
+    @Test
+    void rateLimitEnabledRequiresPositiveRpm() {
+        ConfigAgentResolver resolver = new ConfigAgentResolver();
+        ConfigAgentResolver.AgentProperties props = new ConfigAgentResolver.AgentProperties();
+        props.setRateLimitEnabled(true);
+        // missing rpm
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();
+        agents.put("chatbot", props);
+        resolver.setAgents(agents);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> resolver.resolve("chatbot"));
+        assertTrue(error.getMessage().contains("rate-limit-requests-per-minute"));
+    }
+
+    @Test
+    void rateLimitEnabledWithRpmResolves() {
+        ConfigAgentResolver resolver = new ConfigAgentResolver();
+        ConfigAgentResolver.AgentProperties props = new ConfigAgentResolver.AgentProperties();
+        props.setRateLimitEnabled(true);
+        props.setRateLimitRequestsPerMinute(30);
+        props.setRateLimitBurst(10);
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();
+        agents.put("chatbot", props);
+        resolver.setAgents(agents);
+
+        var agent = resolver.resolve("chatbot");
+        assertTrue(agent.getRateLimitSpec().isEnabled());
+        assertEquals(30, agent.getRateLimitSpec().getRequestsPerMinute());
+        assertEquals(10, agent.getRateLimitSpec().getBurst());
     }
 }

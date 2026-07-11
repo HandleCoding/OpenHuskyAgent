@@ -44,12 +44,29 @@ class OpenAiResponseMapper {
     }
 
     ResponseEntity<OpenAiWireResponses.ErrorResponse> runtimeError(ChatResult result) {
-        HttpStatus status = result != null && result.errorCode() == ChatResult.ErrorCode.PARAM_ERROR
-                ? HttpStatus.BAD_REQUEST
-                : HttpStatus.INTERNAL_SERVER_ERROR;
+        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
+        String type = "server_error";
+        if (result != null && result.errorCode() == ChatResult.ErrorCode.PARAM_ERROR) {
+            status = HttpStatus.BAD_REQUEST;
+            type = "invalid_request_error";
+        } else if (result != null && result.errorCode() == ChatResult.ErrorCode.RATE_LIMITED) {
+            status = HttpStatus.TOO_MANY_REQUESTS;
+            type = "rate_limit_error";
+        } else if (result != null && result.errorCode() == ChatResult.ErrorCode.AUTH_ERROR) {
+            status = HttpStatus.UNAUTHORIZED;
+            type = "invalid_request_error";
+        }
         String code = result != null && result.errorCode() != null ? result.errorCode().name().toLowerCase() : "internal_error";
         String message = result != null && result.errorMessage() != null ? result.errorMessage() : "Runtime execution failed";
-        return error(status, message, status == HttpStatus.BAD_REQUEST ? "invalid_request_error" : "server_error", null, code);
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(status);
+        if (status == HttpStatus.TOO_MANY_REQUESTS) {
+            Long retryAfter = result != null ? result.retryAfterSeconds() : null;
+            if (retryAfter != null && retryAfter > 0) {
+                builder.header("Retry-After", Long.toString(retryAfter));
+            }
+        }
+        return builder.body(new OpenAiWireResponses.ErrorResponse(
+                new OpenAiWireResponses.ErrorBody(message, type, null, code)));
     }
 
     ResponseEntity<OpenAiWireResponses.ErrorResponse> featureDisabled() {

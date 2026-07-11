@@ -28,6 +28,18 @@ public interface RuntimeCallbacks {
     default void completed(RuntimeScope scope, ChatResult result) {
     }
 
+    /**
+     * Failure without a typed code. Prefer {@link #failed(RuntimeScope, String, ChatResult.ErrorCode)}
+     * when the error code is known (e.g. RATE_LIMITED).
+     */
     default void failed(RuntimeScope scope, String errorMessage) {
+        failed(scope, errorMessage, null);
+    }
+
+    /**
+     * Failure with optional {@link ChatResult.ErrorCode} so transports can map RATE_LIMITED, AUTH, etc.
+     * Default is a no-op; overrides should not call the two-arg overload unless they ignore the code.
+     */
+    default void failed(RuntimeScope scope, String errorMessage, ChatResult.ErrorCode errorCode) {
     }
 }

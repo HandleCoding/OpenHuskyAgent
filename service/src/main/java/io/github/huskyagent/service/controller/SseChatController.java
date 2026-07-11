@@ -106,6 +106,9 @@ public class SseChatController {
         }
         if (chatResult.success()) {
             SseEventMapper.sendDoneEvent(emitter, chatResult);
+        } else if (chatResult.errorCode() == ChatResult.ErrorCode.RATE_LIMITED) {
+            // Already notified via RuntimeCallbacks.failed with RATE_LIMITED (pre-session reject).
+            return;
         } else {
             SseEventMapper.sendErrorEvent(emitter, chatResult.errorMessage(), chatResult.errorCode());
         }

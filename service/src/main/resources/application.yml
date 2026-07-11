@@ -265,7 +265,8 @@ chatbot:
   enabled: true
 
 # Agent configuration
-# Agent rate-limit fields are parsed into RuntimePolicy but are not enforced yet.
+# Per-agent rate limits are enforced on each inbound user turn when enabled
+# (token bucket: rate-limit-requests-per-minute + optional rate-limit-burst).
 agents:
   assistant:
     system-prompt: ""
@@ -285,6 +286,8 @@ agents:
     audit-enabled: true
     audit-tags: []
     rate-limit-enabled: false
+    # rate-limit-requests-per-minute: 60
+    # rate-limit-burst: 20
   # Chatbot runtime behavior: prompt, tools, approvals, backend, and memory.
   chatbot:
     system-prompt: |
@@ -326,6 +329,8 @@ agents:
     audit-tags:
       - chatbot
     rate-limit-enabled: false
+    # rate-limit-requests-per-minute: 30
+    # rate-limit-burst: 10
 
 # Auth configuration
 auth:

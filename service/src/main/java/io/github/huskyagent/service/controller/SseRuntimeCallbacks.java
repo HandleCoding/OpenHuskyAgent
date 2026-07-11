@@ -54,8 +54,12 @@ class SseRuntimeCallbacks implements RuntimeCallbacks {
     }
 
     @Override
-    public void failed(RuntimeScope scope, String errorMessage) {
-        SseEventMapper.sendErrorEvent(emitter, errorMessage);
+    public void failed(RuntimeScope scope, String errorMessage, ChatResult.ErrorCode errorCode) {
+        if (errorCode != null) {
+            SseEventMapper.sendErrorEvent(emitter, errorMessage, errorCode);
+        } else {
+            SseEventMapper.sendErrorEvent(emitter, errorMessage);
+        }
     }
 
     void unregister() {

@@ -362,7 +362,98 @@ class RuntimeExecutionServiceTest {
         assertEquals("", agentApp.clarifyAnswer);
     }
 
+    @Test
+    void rateLimitRejectsBeforeAgentExecution() {
+        FakeSessionResolver sessionResolver = new FakeSessionResolver(completeScopeWithRateLimit(1, 1));
+        FakeAgentApp agentApp = new FakeAgentApp();
+        RecordingCallbacks callbacks = new RecordingCallbacks();
+        AgentRateLimiter limiter = new InMemoryTokenBucketRateLimiter(() -> 0L);
+        RuntimeExecutionService service = new RuntimeExecutionService(
+                sessionResolver,
+                agentApp,
+                inbound -> Optional.empty(),
+                new FakeCommandService(null),
+                new FakeRouteRegistry(),
+                new FakeAgentRouter(),
+                new ScopedRuntimeContext(),
+                new SessionRunCoordinator(),
+                limiter,
+                agentDefinitionWithRateLimit(1, 1)
+        );
+
+        RuntimeExecutionResult first = service.execute(RuntimeExecutionRequest.builder()
+                .inbound(inbound("hello-1"))
+                .callbacks(callbacks)
+                .build());
+        RuntimeExecutionResult second = service.execute(RuntimeExecutionRequest.builder()
+                .inbound(inbound("hello-2"))
+                .callbacks(callbacks)
+                .build());
+
+        assertTrue(first.chatResult().success());
+        assertFalse(second.chatResult().success());
+        assertEquals(ChatResult.ErrorCode.RATE_LIMITED, second.chatResult().errorCode());
+        assertEquals(ChatResult.ErrorCode.RATE_LIMITED, callbacks.failedErrorCode);
+        assertNotNull(callbacks.failedErrorMessage);
+        assertEquals(1, agentApp.executeCalls);
+        assertEquals(1, sessionResolver.resolveCalls); // second turn rejected before session resolve
+    }
+
+    @Test
+    void channelCommandsBypassRateLimit() {
+        FakeSessionResolver sessionResolver = new FakeSessionResolver(completeScopeWithRateLimit(1, 1));
+        FakeCommandService commandService = new FakeCommandService(OutboundMessage.builder()
+                .kind(OutboundMessage.Kind.TEXT)
+                .sessionId("command-session")
+                .text("stopped")
+                .build());
+        AgentRateLimiter limiter = (agentId, principalId, spec) -> RateLimitDecision.deny(5_000L);
+        RuntimeExecutionService service = new RuntimeExecutionService(
+                sessionResolver,
+                null,
+                inbound -> Optional.of(new ChannelCommand("stop", "", "/stop")),
+                commandService,
+                new FakeRouteRegistry(),
+                new FakeAgentRouter(),
+                new ScopedRuntimeContext(),
+                new SessionRunCoordinator(),
+                limiter
+        );
+
+        RuntimeExecutionResult result = service.execute(RuntimeExecutionRequest.builder()
+                .inbound(inbound("/stop"))
+                .build());
+
+        assertTrue(result.commandHandled());
+        assertEquals(0, sessionResolver.resolveCalls);
+    }
+
+    private static io.github.huskyagent.domain.agent.AgentResolver agentDefinitionWithRateLimit(int rpm, int burst) {
+        return new io.github.huskyagent.domain.agent.AgentResolver() {
+            @Override
+            public AgentDefinition resolve(String agentId) {
+                AgentDefinition def = new AgentDefinition();
+                def.setAgentId(agentId);
+                AgentDefinition.RateLimitSpec spec = new AgentDefinition.RateLimitSpec();
+                spec.setEnabled(true);
+                spec.setRequestsPerMinute(rpm);
+                spec.setBurst(burst);
+                def.setRateLimitSpec(spec);
+                return def;
+            }
+
+            @Override
+            public AgentDefinition resolveDefault() {
+                return resolve("assistant");
+            }
+        };
+    }
+
     private static RuntimeScope completeScope() {
+        return completeScopeWithRateLimit(null, null);
+    }
+
+    private static RuntimeScope completeScopeWithRateLimit(Integer rpm, Integer burst) {
         AgentDefinition scene = new AgentDefinition();
         scene.setAgentId("assistant");
         MemoryPolicyConfig memoryPolicy = MemoryPolicyConfig.builder()
@@ -374,11 +465,18 @@ class RuntimeExecutionServiceTest {
                 .providers(Set.of("builtin"))
                 .allowCrossSessionSearch(true)
                 .build();
+        AgentDefinition.RateLimitSpec rateLimitSpec = new AgentDefinition.RateLimitSpec();
+        if (rpm != null) {
+            rateLimitSpec.setEnabled(true);
+            rateLimitSpec.setRequestsPerMinute(rpm);
+            rateLimitSpec.setBurst(burst != null ? burst : rpm);
+        }
         RuntimePolicy runtimePolicy = RuntimePolicy.builder()
                 .agentId("assistant")
                 .memoryPolicy(memoryPolicy)
                 .capabilityView(CapabilityView.builder().build())
                 .knowledgeSources(Set.of())
+                .rateLimitSpec(rateLimitSpec)
                 .build();
         Principal principal = Principal.builder().id("user-1").channelType(ChannelType.TUI).build();
         ChannelIdentity identity = ChannelIdentity.builder()
@@ -413,10 +511,12 @@ class RuntimeExecutionServiceTest {
     private static class FakeAgentApp implements AgentRuntimeExecutor {
         RuntimeExecutionRequest.PersistenceMode persistenceMode;
         AgentInput input;
+        int executeCalls;
 
         @Override
         public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks) {
             this.input = input;
+            this.executeCalls++;
             return ChatResult.success("ok", scope.getSessionId(), false);
         }
 
@@ -425,7 +525,14 @@ class RuntimeExecutionServiceTest {
                                   RuntimeExecutionRequest.PersistenceMode persistenceMode) {
             this.persistenceMode = persistenceMode;
             this.input = input;
+            this.executeCalls++;
             return ChatResult.success("ok", scope.getSessionId(), false);
+        }
+
+        @Override
+        public ChatResult execute(RuntimeScope scope, AgentInput input, RuntimeCallbacks callbacks,
+                                  RuntimeExecutionRequest.PersistenceMode persistenceMode, RunHandle runHandle) {
+            return execute(scope, input, callbacks, persistenceMode);
         }
     }
 
@@ -564,6 +671,7 @@ class RuntimeExecutionServiceTest {
         String startedSessionId;
         String completedSessionId;
         String failedErrorMessage;
+        ChatResult.ErrorCode failedErrorCode;
 
         @Override
         public void started(RuntimeScope scope) {
@@ -576,8 +684,9 @@ class RuntimeExecutionServiceTest {
         }
 
         @Override
-        public void failed(RuntimeScope scope, String errorMessage) {
+        public void failed(RuntimeScope scope, String errorMessage, ChatResult.ErrorCode errorCode) {
             failedErrorMessage = errorMessage;
+            failedErrorCode = errorCode;
         }
     }
 }

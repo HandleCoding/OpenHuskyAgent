@@ -265,7 +265,22 @@ public class ConfigAgentResolver implements AgentResolver, EnvironmentAware, Ini
         if (props.getRateLimitEnabled() != null) spec.setEnabled(props.getRateLimitEnabled());
         spec.setRequestsPerMinute(props.getRateLimitRequestsPerMinute());
         spec.setBurst(props.getRateLimitBurst());
+        validateRateLimitSpec(spec);
         return spec;
+    }
+
+    private void validateRateLimitSpec(AgentDefinition.RateLimitSpec spec) {
+        if (spec == null || !spec.isEnabled()) {
+            return;
+        }
+        Integer rpm = spec.getRequestsPerMinute();
+        if (rpm == null || rpm <= 0) {
+            throw new IllegalArgumentException(
+                    "rate-limit-requests-per-minute must be > 0 when rate-limit-enabled is true");
+        }
+        if (spec.getBurst() != null && spec.getBurst() < 1) {
+            throw new IllegalArgumentException("rate-limit-burst must be >= 1 when set");
+        }
     }
 
     private AgentDefinition.BackendSpec toBackendSpec(AgentProperties props) {

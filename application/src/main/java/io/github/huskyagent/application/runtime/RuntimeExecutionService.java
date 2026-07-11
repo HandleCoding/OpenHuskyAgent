@@ -12,6 +12,8 @@ import io.github.huskyagent.application.channel.runtime.SessionRouteRegistry;
 import io.github.huskyagent.application.session.RuntimeScope;
 import io.github.huskyagent.application.session.ScopedRuntimeContext;
 import io.github.huskyagent.application.session.SessionResolver;
+import io.github.huskyagent.domain.agent.AgentDefinition;
+import io.github.huskyagent.domain.agent.AgentResolver;
 import io.github.huskyagent.infra.channel.InboundMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +33,8 @@ public class RuntimeExecutionService {
     private final ChannelAgentRouter agentRouter;
     private final ScopedRuntimeContext scopedRuntimeContext;
     private final SessionRunCoordinator runCoordinator;
+    private final AgentRateLimiter rateLimiter;
+    private final AgentResolver agentResolver;
 
     @Autowired
     public RuntimeExecutionService(SessionResolver sessionResolver,
@@ -40,7 +44,9 @@ public class RuntimeExecutionService {
                                    SessionRouteRegistry routeRegistry,
                                    ChannelAgentRouter agentRouter,
                                    ScopedRuntimeContext scopedRuntimeContext,
-                                   SessionRunCoordinator runCoordinator) {
+                                   SessionRunCoordinator runCoordinator,
+                                   AgentRateLimiter rateLimiter,
+                                   AgentResolver agentResolver) {
         this.sessionResolver = sessionResolver;
         this.agentRuntimeExecutor = agentRuntimeExecutor;
         this.commandParser = commandParser;
@@ -49,6 +55,33 @@ public class RuntimeExecutionService {
         this.agentRouter = agentRouter;
         this.scopedRuntimeContext = scopedRuntimeContext;
         this.runCoordinator = runCoordinator;
+        this.rateLimiter = rateLimiter != null ? rateLimiter : AgentRateLimiter.allowAll();
+        this.agentResolver = agentResolver;
+    }
+
+    public RuntimeExecutionService(SessionResolver sessionResolver,
+                                   AgentRuntimeExecutor agentRuntimeExecutor,
+                                   ChannelCommandParser commandParser,
+                                   ChannelCommandService commandService,
+                                   SessionRouteRegistry routeRegistry,
+                                   ChannelAgentRouter agentRouter,
+                                   ScopedRuntimeContext scopedRuntimeContext,
+                                   SessionRunCoordinator runCoordinator,
+                                   AgentRateLimiter rateLimiter) {
+        this(sessionResolver, agentRuntimeExecutor, commandParser, commandService, routeRegistry,
+                agentRouter, scopedRuntimeContext, runCoordinator, rateLimiter, null);
+    }
+
+    public RuntimeExecutionService(SessionResolver sessionResolver,
+                                   AgentRuntimeExecutor agentRuntimeExecutor,
+                                   ChannelCommandParser commandParser,
+                                   ChannelCommandService commandService,
+                                   SessionRouteRegistry routeRegistry,
+                                   ChannelAgentRouter agentRouter,
+                                   ScopedRuntimeContext scopedRuntimeContext,
+                                   SessionRunCoordinator runCoordinator) {
+        this(sessionResolver, agentRuntimeExecutor, commandParser, commandService, routeRegistry,
+                agentRouter, scopedRuntimeContext, runCoordinator, AgentRateLimiter.allowAll(), null);
     }
 
     public RuntimeExecutionService(SessionResolver sessionResolver,
@@ -59,7 +92,7 @@ public class RuntimeExecutionService {
                                    ChannelAgentRouter agentRouter,
                                    ScopedRuntimeContext scopedRuntimeContext) {
         this(sessionResolver, agentRuntimeExecutor, commandParser, commandService, routeRegistry,
-                agentRouter, scopedRuntimeContext, new SessionRunCoordinator());
+                agentRouter, scopedRuntimeContext, new SessionRunCoordinator(), AgentRateLimiter.allowAll(), null);
     }
 
     public StopResult interruptSession(String sessionId, String reason) {
@@ -101,9 +134,25 @@ public class RuntimeExecutionService {
         }
 
         RuntimeCallbacks callbacks = request.callbacksOrNoop();
+        String agentId = effectiveRoute.agentId();
+        String principalId = inbound.getPrincipal() != null ? inbound.getPrincipal().getId() : null;
+
+        // Enforce rate limit before session create/resume so denied turns do not churn sessions/backends.
+        RateLimitDecision rateLimit = checkRateLimit(agentId, principalId);
+        if (!rateLimit.allowed()) {
+            ChatResult limited = ChatResult.rateLimited(
+                    "Rate limit exceeded for this agent.",
+                    rateLimit.retryAfterSeconds());
+            log.info("Rate limited agentId={} principalId={} retryAfterMs={}",
+                    agentId, principalId, rateLimit.retryAfterMs());
+            // Notify channel/TUI paths that listen on callbacks (scope may be null pre-session).
+            callbacks.failed(null, limited.errorMessage(), limited.errorCode());
+            return RuntimeExecutionResult.rejected(limited);
+        }
+
         RuntimeScope scope;
         try {
-            scope = resolveScope(request, inbound, effectiveRoute.agentId());
+            scope = resolveScope(request, inbound, agentId);
         } catch (SecurityException e) {
             return RuntimeExecutionResult.rejected(ChatResult.failure(e.getMessage(), ChatResult.ErrorCode.SESSION_ERROR));
         }
@@ -113,9 +162,9 @@ public class RuntimeExecutionService {
         }
         scope.requireCompleteForExecution();
 
-        log.debug("Resolved runtime scene: channel={}, platformAccountId={}, agentId={}, source={}, bindingId={}",
+        log.debug("Resolved runtime agent: channel={}, platformAccountId={}, agentId={}, source={}, bindingId={}",
                 inbound.getChannelIdentity().getChannelType(), inbound.getChannelIdentity().getPlatformAccountId(),
-                effectiveRoute.agentId(), effectiveRoute.source(), effectiveRoute.bindingId());
+                agentId, effectiveRoute.source(), effectiveRoute.bindingId());
 
         SessionRoute route = buildRoute(scope, inbound);
         RunHandle runHandle = request.getRunHandle() != null
@@ -140,7 +189,7 @@ public class RuntimeExecutionService {
             if (result.success()) {
                 guardedCallbacks.completed(finalScope, result);
             } else if (result.errorCode() != ChatResult.ErrorCode.CANCELLED) {
-                guardedCallbacks.failed(finalScope, result.errorMessage());
+                guardedCallbacks.failed(finalScope, result.errorMessage(), result.errorCode());
             }
             if (!runCoordinator.isCurrent(runHandle)) {
                 return RuntimeExecutionResult.executed(ChatResult.cancelled(finalScope.getSessionId(), "Run cancelled"), finalScope);
@@ -163,6 +212,21 @@ public class RuntimeExecutionService {
                 sessionResolver.releaseEphemeralScope(scope);
             }
         }
+    }
+
+    private RateLimitDecision checkRateLimit(String agentId, String principalId) {
+        AgentDefinition.RateLimitSpec spec = null;
+        if (agentResolver != null && agentId != null && !agentId.isBlank()) {
+            try {
+                AgentDefinition definition = agentResolver.resolve(agentId);
+                spec = definition != null ? definition.getRateLimitSpec() : null;
+            } catch (RuntimeException e) {
+                // Unknown agent will fail later during scope resolve; do not rate-limit on resolve errors.
+                log.debug("Skipping rate limit: cannot resolve agent {}: {}", agentId, e.getMessage());
+                return RateLimitDecision.allow();
+            }
+        }
+        return rateLimiter.tryAcquire(agentId, principalId, spec);
     }
 
     private InboundMessage requireInbound(RuntimeExecutionRequest request) {
@@ -238,9 +302,9 @@ public class RuntimeExecutionService {
             }
 
             @Override
-            public void failed(RuntimeScope scope, String errorMessage) {
+            public void failed(RuntimeScope scope, String errorMessage, ChatResult.ErrorCode errorCode) {
                 if (runCoordinator.isCurrent(handle)) {
-                    target.failed(scope, errorMessage);
+                    target.failed(scope, errorMessage, errorCode);
                 }
             }
         };

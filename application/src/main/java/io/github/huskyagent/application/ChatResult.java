@@ -15,7 +15,8 @@ public record ChatResult(
     ErrorCode errorCode,
     String sessionId,
     boolean streamed,
-    TokenUsage tokenUsage
+    TokenUsage tokenUsage,
+    Long retryAfterSeconds
 ) {
 
     public enum ErrorCode {
@@ -24,27 +25,41 @@ public record ChatResult(
         SESSION_ERROR,
         LLM_ERROR,
         CANCELLED,
+        RATE_LIMITED,
         INTERNAL_ERROR
     }
 
     public static ChatResult success(String content, String sessionId, boolean streamed, TokenUsage tokenUsage) {
-        return new ChatResult(content, true, null, null, sessionId, streamed, tokenUsage);
+        return new ChatResult(content, true, null, null, sessionId, streamed, tokenUsage, null);
     }
 
     public static ChatResult success(String content, String sessionId, boolean streamed) {
-        return new ChatResult(content, true, null, null, sessionId, streamed, null);
+        return new ChatResult(content, true, null, null, sessionId, streamed, null, null);
     }
 
     public static ChatResult failure(String errorMessage) {
-        return new ChatResult(null, false, errorMessage, ErrorCode.INTERNAL_ERROR, null, false, null);
+        return new ChatResult(null, false, errorMessage, ErrorCode.INTERNAL_ERROR, null, false, null, null);
     }
 
     public static ChatResult failure(String errorMessage, ErrorCode errorCode) {
-        return new ChatResult(null, false, errorMessage, errorCode, null, false, null);
+        return new ChatResult(null, false, errorMessage, errorCode, null, false, null, null);
     }
 
     public static ChatResult cancelled(String sessionId, String message) {
         return new ChatResult(null, false, message != null ? message : "Run cancelled",
-                ErrorCode.CANCELLED, sessionId, false, null);
+                ErrorCode.CANCELLED, sessionId, false, null, null);
+    }
+
+    /**
+     * @param retryAfterSeconds optional structured hint for HTTP Retry-After (may be null)
+     */
+    public static ChatResult rateLimited(String message, Long retryAfterSeconds) {
+        String text = message != null && !message.isBlank()
+                ? message
+                : "Rate limit exceeded";
+        if (retryAfterSeconds != null && retryAfterSeconds > 0) {
+            text = text + " Retry after " + retryAfterSeconds + "s.";
+        }
+        return new ChatResult(null, false, text, ErrorCode.RATE_LIMITED, null, false, null, retryAfterSeconds);
     }
 }

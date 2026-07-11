@@ -90,11 +90,14 @@ class AdapterCallbacks implements RuntimeCallbacks {
     }
 
     @Override
-    public void failed(RuntimeScope scope, String errorMessage) {
-        sendStatus(scope, "failed");
+    public void failed(RuntimeScope scope, String errorMessage, ChatResult.ErrorCode errorCode) {
+        String sessionId = scope != null ? scope.getSessionId() : inbound.getRequestedSessionId();
+        if (scope != null) {
+            sendStatus(scope, "failed");
+        }
         adapter.send(OutboundMessage.builder()
                 .kind(OutboundMessage.Kind.ERROR)
-                .sessionId(scope.getSessionId())
+                .sessionId(sessionId)
                 .channelIdentity(inbound.getChannelIdentity())
                 .replyTarget(inbound.getReplyTarget())
                 .text(errorMessage != null ? errorMessage : "Unknown error")
@@ -104,7 +107,7 @@ class AdapterCallbacks implements RuntimeCallbacks {
     private void sendStatus(RuntimeScope scope, String status) {
         adapter.typing(OutboundMessage.builder()
                 .kind(OutboundMessage.Kind.TOOL_STATUS)
-                .sessionId(scope.getSessionId())
+                .sessionId(scope != null ? scope.getSessionId() : null)
                 .channelIdentity(inbound.getChannelIdentity())
                 .replyTarget(inbound.getReplyTarget())
                 .metadata(Map.of("status", status))

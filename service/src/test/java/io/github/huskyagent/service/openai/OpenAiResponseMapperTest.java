@@ -1,6 +1,7 @@
 package io.github.huskyagent.service.openai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.huskyagent.application.ChatResult;
 import io.github.huskyagent.infra.context.TokenUsage;
 import org.junit.jupiter.api.Test;
 
@@ -47,5 +48,26 @@ class OpenAiResponseMapperTest {
 
         assertEquals(400, response.getStatusCode().value());
         assertEquals("model_not_found", response.getBody().error().code());
+    }
+
+    @Test
+    void mapsRateLimitedTo429WithRetryAfter() {
+        ChatResult limited = ChatResult.rateLimited("Rate limit exceeded for this agent.", 5L);
+        var response = mapper.runtimeError(limited);
+
+        assertEquals(429, response.getStatusCode().value());
+        assertEquals("rate_limit_error", response.getBody().error().type());
+        assertEquals("rate_limited", response.getBody().error().code());
+        assertEquals("5", response.getHeaders().getFirst("Retry-After"));
+    }
+
+    @Test
+    void mapsRateLimitedWithoutRetryAfterHeaderWhenMissing() {
+        ChatResult limited = new ChatResult(null, false, "Rate limit exceeded",
+                ChatResult.ErrorCode.RATE_LIMITED, null, false, null, null);
+        var response = mapper.runtimeError(limited);
+
+        assertEquals(429, response.getStatusCode().value());
+        assertNull(response.getHeaders().getFirst("Retry-After"));
     }
 }

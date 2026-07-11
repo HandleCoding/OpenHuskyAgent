@@ -29,12 +29,19 @@ public class JsonRpcEventEmitter {
     }
 
     public void emitMessageComplete(String text, String status, long durationMs, boolean streamed) {
-        dispatcher.sendEvent("message.complete", Map.of(
-                "text", text != null ? text : "",
-                "status", status != null ? status : "ok",
-                "durationMs", durationMs,
-                "streamed", streamed
-        ));
+        emitMessageComplete(text, status, durationMs, streamed, null);
+    }
+
+    public void emitMessageComplete(String text, String status, long durationMs, boolean streamed, String error) {
+        Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("text", text != null ? text : "");
+        payload.put("status", status != null ? status : "ok");
+        payload.put("durationMs", durationMs);
+        payload.put("streamed", streamed);
+        if (error != null && !error.isBlank()) {
+            payload.put("error", error);
+        }
+        dispatcher.sendEvent("message.complete", payload);
     }
 
     public void emitToolStarted(String toolName, String argsPreview) {
