@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import io.github.huskyagent.infra.config.ToolLimitsConfig;
 import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
+import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import io.github.huskyagent.infra.tool.registry.ToolProvider;
 import io.github.huskyagent.infra.tool.registry.ToolResult;
@@ -44,7 +45,7 @@ public class ReadFileTool implements ToolProvider {
 
     @Override
     public List<ToolDefinition> getTools() {
-        return List.of(ToolDefinition.of("read_file",
+        return List.of(ToolDefinition.contextual("read_file",
             "Read a text file with line numbers and pagination. Use this instead of cat/head/tail in terminal. " +
             "Use offset and limit for large files. Cannot read binary files. " +
             "Suggests similar filenames if not found.",
@@ -52,6 +53,10 @@ public class ReadFileTool implements ToolProvider {
     }
 
     public ToolResult handle(Map<String, Object> args) {
+        return handle(args, FileToolRuntime.localContext(workspace));
+    }
+
+    public ToolResult handle(Map<String, Object> args, ToolExecutionContext context) {
         String path = (String) args.get("path");
         int offset = args.containsKey("offset") ? ((Number) args.get("offset")).intValue() : 1;
         int limit = args.containsKey("limit") ? ((Number) args.get("limit")).intValue() : 500;
@@ -68,6 +73,7 @@ public class ReadFileTool implements ToolProvider {
         }
 
         try {
+            Workspace workspace = FileToolRuntime.workspace(context, this.workspace);
             Path filePath = FileSafety.resolve(workspace, path);
             String denied = FileSafety.checkReadAllowed(workspace, path, filePath);
             if (denied != null) {
@@ -87,7 +93,7 @@ public class ReadFileTool implements ToolProvider {
                 return ToolResult.failure("Cannot read binary file: " + path);
             }
 
-            ReadWindow window = readWindow(filePath, offset, limit);
+            ReadWindow window = readWindow(workspace, filePath, offset, limit);
 
             String sessionId = (String) args.get(ToolCallbackFactory.SESSION_ID_KEY);
             Path canonicalPath = FileSafety.canonicalForAccess(workspace, filePath);
@@ -99,12 +105,14 @@ public class ReadFileTool implements ToolProvider {
 
             return ToolResult.success(output);
 
+        } catch (IllegalStateException e) {
+            return ToolResult.failure(e.getMessage());
         } catch (IOException e) {
             return ToolResult.failure("Failed to read: " + e.getMessage());
         }
     }
 
-    private ReadWindow readWindow(Path file, int offset, int limit) throws IOException {
+    private ReadWindow readWindow(Workspace workspace, Path file, int offset, int limit) throws IOException {
         StringBuilder result = new StringBuilder();
         int maxLineLen = 2000;
         int startLine = offset;

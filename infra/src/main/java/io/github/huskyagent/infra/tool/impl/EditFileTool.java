@@ -3,6 +3,7 @@ package io.github.huskyagent.infra.tool.impl;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
+import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
 import io.github.huskyagent.infra.tool.match.FuzzyMatcher;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import io.github.huskyagent.infra.tool.registry.ToolProvider;
@@ -40,13 +41,17 @@ public class EditFileTool implements ToolProvider {
 
     @Override
     public List<ToolDefinition> getTools() {
-        return List.of(ToolDefinition.of("edit_file",
+        return List.of(ToolDefinition.contextual("edit_file",
             "Precise single-file find-and-replace for small, unique edits. Use apply_patch for multi-line blocks, insertions, deletions, or multi-file changes. " +
             "Returns a unified diff. Must read_file before editing.",
             Toolset.CORE, Args.class, this::handle));
     }
 
     public ToolResult handle(Map<String, Object> args) {
+        return handle(args, FileToolRuntime.localContext(workspace));
+    }
+
+    public ToolResult handle(Map<String, Object> args, ToolExecutionContext context) {
         String path = (String) args.get("path");
         String oldString = (String) args.get("old_string");
         String newString = (String) args.get("new_string");
@@ -57,6 +62,7 @@ public class EditFileTool implements ToolProvider {
         }
 
         try {
+            Workspace workspace = FileToolRuntime.workspace(context, this.workspace);
             Path filePath = FileSafety.resolve(workspace, path);
             String denied = FileSafety.checkWriteAllowed(workspace, path, filePath);
             if (denied != null) {
@@ -107,6 +113,8 @@ public class EditFileTool implements ToolProvider {
 
             return ToolResult.success(output);
 
+        } catch (IllegalStateException e) {
+            return ToolResult.failure(e.getMessage());
         } catch (IOException e) {
             return ToolResult.failure("Failed to edit: " + e.getMessage());
         }

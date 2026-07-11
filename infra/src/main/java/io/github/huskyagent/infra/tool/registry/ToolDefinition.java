@@ -61,6 +61,13 @@ public record ToolDefinition(
             null, handler, null, true, null, null, Integer.MAX_VALUE, null);
     }
 
+    public static ToolDefinition contextual(String name, String description, Toolset toolset,
+                                            Class<?> argsType,
+                                            BiFunction<Map<String, Object>, ToolExecutionContext, ToolResult> handler) {
+        return new ToolDefinition(name, description, toolset, schemaFromType(argsType),
+            null, handler, null, true, null, null, Integer.MAX_VALUE, null);
+    }
+
     public static ToolDefinition of(String name, String description, Toolset toolset,
                                     Class<?> argsType,
                                     Function<Map<String, Object>, ToolResult> handler) {

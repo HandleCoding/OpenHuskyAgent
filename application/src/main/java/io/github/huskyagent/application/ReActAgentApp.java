@@ -31,6 +31,7 @@ import io.github.huskyagent.infra.tool.approval.ApprovalInfo;
 import io.github.huskyagent.infra.tool.approval.ApprovalService;
 import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
 import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
+import io.github.huskyagent.infra.tool.adapter.ToolRuntimeEnvironmentFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.async.AsyncGenerator;
@@ -75,6 +76,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
     private final MultimodalMessageBuilder multimodalMessageBuilder;
     private final DynamicPromptSnapshotCache dynamicPromptSnapshotCache;
     private final ToolCallbackFactory toolCallbackFactory;
+    private final ToolRuntimeEnvironmentFactory toolRuntimeEnvironmentFactory;
     private final io.github.huskyagent.application.runtime.SessionRunCoordinator runCoordinator;
 
     /**
@@ -343,13 +345,15 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
         var runtimePolicy = scope.getRuntimePolicy();
         var capabilityView = runtimePolicy.getCapabilityView();
         var toolDefinitions = capabilityView.getVisibleTools();
+        var sessionScope = scope.toSessionScope();
         var executionContext = new ToolExecutionContext(
                 sessionId,
-                scope.toSessionScope(),
+                sessionScope,
                 toolDefinitions,
                 capabilityView.getVisibleToolsets(),
                 capabilityView.getVisibleSkillNames(),
-                capabilityView.getVisiblePromptSections());
+                capabilityView.getVisiblePromptSections(),
+                toolRuntimeEnvironmentFactory.create(sessionScope));
         return RequestToolContext.of(toolDefinitions,
                 toolCallbackFactory.build(toolDefinitions, sessionId, executionContext),
                 runHandle,

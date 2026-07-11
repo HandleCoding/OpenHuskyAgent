@@ -3,8 +3,11 @@ package io.github.huskyagent.application.runtime;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.huskyagent.domain.capability.CapabilityView;
 import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.infra.execute.ExecutionBackendProperties;
 import io.github.huskyagent.infra.memory.BuiltinMemoryProvider;
 import io.github.huskyagent.infra.memory.SessionMemoryProvider;
+import io.github.huskyagent.infra.mcp.McpConnectionProvider;
+import io.github.huskyagent.infra.mcp.McpServerConnector;
 import io.github.huskyagent.infra.mcp.McpToolProvider;
 import io.github.huskyagent.infra.skill.Skill;
 import io.github.huskyagent.infra.skill.SkillManager;
@@ -12,8 +15,10 @@ import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.approval.ApprovalRequest;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -52,6 +57,22 @@ class CapabilityVisibilityResolverTest {
 
     private ToolDefinition mcpTool(String serverName, String toolName) {
         return tool(McpToolProvider.prefixName(serverName, toolName), Toolset.MCP);
+    }
+
+    private CapabilityVisibilityResolver resolverWithMcpConnector(McpServerConnector connector, ToolDefinition... tools) {
+        candidateTools = List.of(tools);
+        ObjectProvider<McpServerConnector> provider = new ObjectProvider<>() {
+            @Override
+            public McpServerConnector getObject() {
+                return connector;
+            }
+
+            @Override
+            public McpServerConnector getIfAvailable() {
+                return connector;
+            }
+        };
+        return new CapabilityVisibilityResolver(new SkillManager(), provider);
     }
 
     private SceneConfig scene() {
@@ -178,6 +199,165 @@ class CapabilityVisibilityResolverTest {
 
         assertTrue(view.getVisibleToolNames().contains("core_tool"));
         assertFalse(view.getVisibleToolNames().contains(McpToolProvider.prefixName("server1", "mcp_tool")));
+    }
+
+    @Test
+    void nonFilesystemBackendHidesFileTools() {
+        CapabilityVisibilityResolver r = resolver(
+                tool("read_file", Toolset.CORE),
+                tool("terminal", Toolset.TERMINAL));
+        SceneConfig s = scene();
+        s.setBackendPolicy(SceneConfig.BackendPolicy.SSH);
+
+        CapabilityView view = resolve(r, s);
+
+        assertFalse(view.getVisibleToolNames().contains("read_file"));
+        assertTrue(view.getVisibleToolNames().contains("terminal"));
+    }
+
+    @Test
+    void dockerPersistentBackendKeepsFileTools() {
+        CapabilityVisibilityResolver r = resolver(tool("write_file", Toolset.CORE));
+        SceneConfig s = scene();
+        SceneConfig.BackendSpec spec = new SceneConfig.BackendSpec();
+        spec.setDockerPersistFilesystem(true);
+        s.setBackendPolicy(SceneConfig.BackendPolicy.DOCKER);
+        s.setBackendSpec(spec);
+
+        CapabilityView view = resolve(r, s);
+
+        assertTrue(view.getVisibleToolNames().contains("write_file"));
+    }
+
+    @Test
+    void dockerGlobalPersistentBackendKeepsFileToolsWhenAgentSpecOmitted() {
+        ExecutionBackendProperties backendProperties = new ExecutionBackendProperties();
+        backendProperties.getDocker().setPersistFilesystem(true);
+        CapabilityVisibilityResolver r = new CapabilityVisibilityResolver(
+                new SkillManager(),
+                null,
+                backendProperties);
+        SceneConfig s = scene();
+        s.setBackendPolicy(SceneConfig.BackendPolicy.DOCKER);
+
+        CapabilityView view = resolve(r, s, tool("read_file", Toolset.CORE));
+
+        assertTrue(view.getVisibleToolNames().contains("read_file"));
+    }
+
+    @Test
+    void nonLocalBackendHidesStdioMcpToolsButKeepsUrlMcpTools() {
+        McpServerConnector connector = new FakeMcpServerConnector(Set.of("stdio"), Set.of("url"));
+        CapabilityVisibilityResolver r = resolverWithMcpConnector(connector,
+                mcpTool("stdio", "read"),
+                mcpTool("url", "read"));
+        SceneConfig s = scene();
+        s.setBackendPolicy(SceneConfig.BackendPolicy.DOCKER);
+
+        CapabilityView view = resolve(r, s);
+
+        assertFalse(view.getVisibleToolNames().contains(McpToolProvider.prefixName("stdio", "read")));
+        assertTrue(view.getVisibleToolNames().contains(McpToolProvider.prefixName("url", "read")));
+    }
+
+    @Test
+    void nonLocalBackendHidesStdioMcpToolsWithSanitizedServerName() {
+        McpServerConnector connector = new FakeMcpServerConnector(Set.of("docs-server"));
+        CapabilityVisibilityResolver r = resolverWithMcpConnector(connector, mcpTool("docs-server", "read"));
+        SceneConfig s = scene();
+        s.setBackendPolicy(SceneConfig.BackendPolicy.SSH);
+
+        CapabilityView view = resolve(r, s);
+
+        assertFalse(view.getVisibleToolNames().contains(McpToolProvider.prefixName("docs-server", "read")));
+    }
+
+    @Test
+    void localBackendKeepsStdioMcpTools() {
+        McpServerConnector connector = new FakeMcpServerConnector(Set.of("stdio"));
+        CapabilityVisibilityResolver r = resolverWithMcpConnector(connector, mcpTool("stdio", "read"));
+        SceneConfig s = scene();
+        s.setBackendPolicy(SceneConfig.BackendPolicy.LOCAL);
+
+        CapabilityView view = resolve(r, s);
+
+        assertTrue(view.getVisibleToolNames().contains(McpToolProvider.prefixName("stdio", "read")));
+    }
+
+    @Test
+    void nonLocalBackendUsesExactMcpToolIndexForPrefixCollisions() throws Exception {
+        McpServerConnector connector = new McpServerConnector(new EmptyMcpConnectionProvider());
+        var indexMethod = McpServerConnector.class.getDeclaredMethod(
+                "indexToolNames",
+                String.class,
+                io.github.huskyagent.infra.mcp.McpServerConfig.class,
+                List.class);
+        indexMethod.setAccessible(true);
+        indexMethod.invoke(connector,
+                "docs",
+                new io.github.huskyagent.infra.mcp.McpServerConfig(
+                        "cmd", List.of(), Map.of(), null, null, Map.of(), true, 30),
+                List.of("lookup"));
+        indexMethod.invoke(connector,
+                "docs-api",
+                new io.github.huskyagent.infra.mcp.McpServerConfig(
+                        null, List.of(), Map.of(), "https://example.com/mcp", "streamable-http", Map.of(), true, 30),
+                List.of("read"));
+        CapabilityVisibilityResolver r = resolverWithMcpConnector(connector,
+                mcpTool("docs", "lookup"),
+                mcpTool("docs-api", "read"));
+        SceneConfig s = scene();
+        s.setBackendPolicy(SceneConfig.BackendPolicy.DOCKER);
+
+        CapabilityView view = resolve(r, s);
+
+        assertFalse(view.getVisibleToolNames().contains(McpToolProvider.prefixName("docs", "lookup")));
+        assertTrue(view.getVisibleToolNames().contains(McpToolProvider.prefixName("docs-api", "read")));
+    }
+
+    private static class FakeMcpServerConnector extends McpServerConnector {
+        private final Set<String> stdioServers;
+        private final Map<String, String> serverByTool = new java.util.HashMap<>();
+
+        FakeMcpServerConnector(Set<String> stdioServers) {
+            this(stdioServers, Set.of());
+        }
+
+        FakeMcpServerConnector(Set<String> stdioServers, Set<String> remoteServers) {
+            super(new EmptyMcpConnectionProvider());
+            this.stdioServers = stdioServers;
+            stdioServers.forEach(server -> serverByTool.put(McpToolProvider.prefixName(server, "read"), server));
+            remoteServers.forEach(server -> serverByTool.put(McpToolProvider.prefixName(server, "read"), server));
+        }
+
+        @Override
+        public boolean isStdioServer(String serverName) {
+            return stdioServers.contains(serverName)
+                    || stdioServers.stream().map(io.github.huskyagent.infra.mcp.McpToolNames::sanitize).anyMatch(serverName::equals);
+        }
+
+        @Override
+        public boolean isStdioTool(String toolName) {
+            String server = serverByTool.get(toolName);
+            return server != null && stdioServers.contains(server);
+        }
+
+        @Override
+        public java.util.Optional<String> serverNameForTool(String toolName) {
+            return java.util.Optional.ofNullable(serverByTool.get(toolName));
+        }
+    }
+
+    private static class EmptyMcpConnectionProvider implements McpConnectionProvider {
+        @Override
+        public ServerLoadResult loadEnabledServers() {
+            return ServerLoadResult.success(Map.of());
+        }
+
+        @Override
+        public ServerLoadResult loadAllServers() {
+            return ServerLoadResult.success(Map.of());
+        }
     }
 
     // --- Group 4: stripApproval ---

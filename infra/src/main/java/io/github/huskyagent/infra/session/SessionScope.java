@@ -21,6 +21,9 @@ public class SessionScope {
     boolean allowCrossSessionMemorySearch;
     Set<String> visibleSkillNames;
     Set<String> knowledgeSourceIds;
+    String backendType;
+    Boolean filesystemAvailable;
+    String runtimeWorkingDirectory;
     String workspaceType;
     String checkpointType;
 }

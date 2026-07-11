@@ -4,12 +4,15 @@ import io.github.huskyagent.domain.capability.CapabilityView;
 import io.github.huskyagent.domain.scene.SceneConfig;
 import io.github.huskyagent.infra.memory.BuiltinMemoryProvider;
 import io.github.huskyagent.infra.memory.SessionMemoryProvider;
+import io.github.huskyagent.infra.execute.ExecutionBackendProperties;
+import io.github.huskyagent.infra.mcp.McpServerConnector;
 import io.github.huskyagent.infra.mcp.McpToolNames;
 import io.github.huskyagent.infra.skill.Skill;
 import io.github.huskyagent.infra.skill.SkillManager;
 import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
@@ -18,9 +21,48 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
-@RequiredArgsConstructor
 public class CapabilityVisibilityResolver {
+    private static final Set<String> FILE_TOOL_NAMES = Set.of(
+            "read_file",
+            "write_file",
+            "edit_file",
+            "apply_patch",
+            "delete_file",
+            "move_file",
+            "search_files",
+            "list_files");
+
     private final SkillManager skillManager;
+    private final ObjectProvider<McpServerConnector> mcpServerConnectorProvider;
+    private final RuntimeBackendCapabilityResolver backendCapabilities;
+
+    @Autowired
+    public CapabilityVisibilityResolver(SkillManager skillManager,
+                                        ObjectProvider<McpServerConnector> mcpServerConnectorProvider,
+                                        RuntimeBackendCapabilityResolver backendCapabilities) {
+        this.skillManager = skillManager;
+        this.mcpServerConnectorProvider = mcpServerConnectorProvider;
+        this.backendCapabilities = backendCapabilities;
+    }
+
+    public CapabilityVisibilityResolver(SkillManager skillManager,
+                                        ObjectProvider<McpServerConnector> mcpServerConnectorProvider,
+                                        ExecutionBackendProperties backendProperties) {
+        this(skillManager, mcpServerConnectorProvider, new RuntimeBackendCapabilityResolver(backendProperties));
+    }
+
+    public CapabilityVisibilityResolver(SkillManager skillManager) {
+        this.skillManager = skillManager;
+        this.mcpServerConnectorProvider = null;
+        this.backendCapabilities = new RuntimeBackendCapabilityResolver(new ExecutionBackendProperties());
+    }
+
+    public CapabilityVisibilityResolver(SkillManager skillManager,
+                                        ObjectProvider<McpServerConnector> mcpServerConnectorProvider) {
+        this.skillManager = skillManager;
+        this.mcpServerConnectorProvider = mcpServerConnectorProvider;
+        this.backendCapabilities = new RuntimeBackendCapabilityResolver(new ExecutionBackendProperties());
+    }
 
     public CapabilityView resolve(SceneConfig sceneConfig, List<ToolDefinition> candidateTools) {
         List<ToolDefinition> tools = filterTools(sceneConfig, candidateTools != null ? candidateTools : List.of());
@@ -94,6 +136,7 @@ public class CapabilityVisibilityResolver {
         }
         tools = tools.stream()
                 .filter(tool -> isAllowedMcpTool(tool, sceneConfig.getAllowedMcpServers(), sceneConfig.getDeniedMcpServers()))
+                .filter(tool -> isAllowedInBackend(tool, sceneConfig))
                 .toList();
         if (sceneConfig.getDeniedTools() != null && !sceneConfig.getDeniedTools().isEmpty()) {
             tools = tools.stream()
@@ -149,7 +192,7 @@ public class CapabilityVisibilityResolver {
         if (tool.toolset() != Toolset.MCP) {
             return true;
         }
-        String server = McpToolNames.serverName(tool.name());
+        String server = mcpServerName(tool.name());
         if (server == null) {
             return true;
         }
@@ -157,5 +200,31 @@ public class CapabilityVisibilityResolver {
             return false;
         }
         return allowedServers == null || allowedServers.isEmpty() || allowedServers.contains(server);
+    }
+
+    private boolean isAllowedInBackend(ToolDefinition tool, SceneConfig sceneConfig) {
+        if (FILE_TOOL_NAMES.contains(tool.name())) {
+            return backendCapabilities.filesystemAvailable(sceneConfig);
+        }
+        if (tool.toolset() == Toolset.MCP && !isLocalBackend(sceneConfig)) {
+            McpServerConnector connector = mcpServerConnectorProvider != null ? mcpServerConnectorProvider.getIfAvailable() : null;
+            return connector != null
+                    && connector.serverNameForTool(tool.name()).isPresent()
+                    && !connector.isStdioTool(tool.name());
+        }
+        return true;
+    }
+
+    private String mcpServerName(String toolName) {
+        McpServerConnector connector = mcpServerConnectorProvider != null ? mcpServerConnectorProvider.getIfAvailable() : null;
+        if (connector != null) {
+            return connector.serverNameForTool(toolName).orElseGet(() -> McpToolNames.serverName(toolName));
+        }
+        return McpToolNames.serverName(toolName);
+    }
+
+    private boolean isLocalBackend(SceneConfig sceneConfig) {
+        SceneConfig.BackendPolicy backendPolicy = sceneConfig.getBackendPolicy();
+        return backendPolicy == null || backendPolicy == SceneConfig.BackendPolicy.LOCAL;
     }
 }

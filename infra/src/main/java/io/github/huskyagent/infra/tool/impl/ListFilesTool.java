@@ -2,6 +2,7 @@ package io.github.huskyagent.infra.tool.impl;
 
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import io.github.huskyagent.infra.tool.Toolset;
+import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import io.github.huskyagent.infra.tool.registry.ToolProvider;
 import io.github.huskyagent.infra.tool.registry.ToolResult;
@@ -36,16 +37,21 @@ public class ListFilesTool implements ToolProvider {
 
     @Override
     public List<ToolDefinition> getTools() {
-        return List.of(ToolDefinition.of("list_files",
+        return List.of(ToolDefinition.contextual("list_files",
             "Recursively list regular files under a directory using a glob matched against file names or root-relative paths. Use search_files for content search.",
             Toolset.SEARCH, Args.class, this::handle));
     }
 
     public ToolResult handle(Map<String, Object> args) {
+        return handle(args, FileToolRuntime.localContext(workspace));
+    }
+
+    public ToolResult handle(Map<String, Object> args, ToolExecutionContext context) {
         String searchPath = args.containsKey("path") ? (String) args.get("path") : ".";
         String glob = args.containsKey("glob") ? (String) args.get("glob") : "*";
 
         try {
+            Workspace workspace = FileToolRuntime.workspace(context, this.workspace);
             Path searchDir = workspace.resolve(searchPath);
             Predicate<Path> matcher = FileUtils.globMatcher(searchDir, glob);
 
@@ -65,7 +71,7 @@ public class ListFilesTool implements ToolProvider {
 
             List<Map<String, Object>> files = matchedFiles.stream()
                 .limit(DEFAULT_LIMIT)
-                .map(this::fileMetadata)
+                .map(path -> fileMetadata(workspace, path))
                 .collect(Collectors.toList());
 
             Map<String, Object> result = new LinkedHashMap<>();
@@ -82,7 +88,7 @@ public class ListFilesTool implements ToolProvider {
         }
     }
 
-    private Map<String, Object> fileMetadata(Path path) {
+    private Map<String, Object> fileMetadata(Workspace workspace, Path path) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("path", path.toString());
         metadata.put("name", path.getFileName().toString());

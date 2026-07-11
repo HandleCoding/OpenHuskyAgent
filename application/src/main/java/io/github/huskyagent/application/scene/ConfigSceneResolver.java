@@ -266,14 +266,14 @@ public class ConfigSceneResolver implements SceneResolver, EnvironmentAware, Ini
     private SceneConfig.BackendSpec toBackendSpec(SceneProperties props) {
         if (props.getDockerImage() == null && props.getDockerMemory() == null
                 && props.getDockerCpus() == null && props.getDockerWorkdir() == null
-                && props.getSshHost() == null) {
+                && props.getDockerPersistFilesystem() == null && props.getSshHost() == null) {
             return null;
         }
         SceneConfig.BackendSpec spec = new SceneConfig.BackendSpec();
         spec.setDockerImage(props.getDockerImage());
         spec.setDockerMemory(props.getDockerMemory());
         spec.setDockerCpus(props.getDockerCpus());
-        spec.setDockerPersistFilesystem(Boolean.TRUE.equals(props.getDockerPersistFilesystem()));
+        spec.setDockerPersistFilesystem(props.getDockerPersistFilesystem());
         spec.setDockerWorkdir(props.getDockerWorkdir());
         spec.setSshHost(props.getSshHost());
         if (props.getSshPort() != null) spec.setSshPort(props.getSshPort());

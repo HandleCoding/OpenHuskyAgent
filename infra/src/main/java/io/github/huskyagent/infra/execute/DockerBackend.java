@@ -47,7 +47,9 @@ public class DockerBackend implements ExecutionBackend {
         this.containerName = "husky-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
         String root = config.getDockerWorkspaceRoot() != null
                 ? config.getDockerWorkspaceRoot() : "/tmp/husky-sandbox";
-        this.hostWorkspaceDir = root + "/" + containerName;
+        this.hostWorkspaceDir = config.getDockerHostWorkspaceDir() != null && !config.getDockerHostWorkspaceDir().isBlank()
+                ? config.getDockerHostWorkspaceDir()
+                : root + "/" + containerName;
         this.executor = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "docker-backend");
             t.setDaemon(true);

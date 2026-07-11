@@ -20,6 +20,7 @@ public class BackendConfig {
     String dockerCpus;
     boolean dockerPersistFilesystem;
     String dockerWorkspaceRoot;
+    String dockerHostWorkspaceDir;
 
     // SSH (Phase 3)
     String sshHost;

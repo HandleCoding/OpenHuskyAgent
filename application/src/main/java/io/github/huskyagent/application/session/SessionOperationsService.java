@@ -1,6 +1,7 @@
 package io.github.huskyagent.application.session;
 
 import io.github.huskyagent.application.runtime.RuntimePolicyResolver;
+import io.github.huskyagent.application.runtime.RuntimeBackendCapabilityResolver;
 import io.github.huskyagent.domain.context.ContextManager;
 import io.github.huskyagent.domain.scene.SceneConfig;
 import io.github.huskyagent.domain.scene.SceneResolver;
@@ -30,6 +31,7 @@ public class SessionOperationsService {
     private final SessionRepository sessionRepository;
     private final SceneResolver sceneResolver;
     private final RuntimePolicyResolver runtimePolicyResolver;
+    private final RuntimeBackendCapabilityResolver backendCapabilities;
     private final ToolRegistry toolRegistry;
 
     public int countMessages(String sessionId) {
@@ -76,6 +78,8 @@ public class SessionOperationsService {
                     .sessionId(sessionId)
                     .checkpointType("local")
                     .workspaceType("local")
+                    .backendType("local")
+                    .filesystemAvailable(true)
                     .build();
         }
 
@@ -86,6 +90,8 @@ public class SessionOperationsService {
                 .sceneId(sceneId)
                 .checkpointType(runtimePolicy.effectiveCheckpointType())
                 .workspaceType(runtimePolicy.effectiveWorkspaceType())
+                .backendType(backendCapabilities.backendType(runtimePolicy))
+                .filesystemAvailable(backendCapabilities.filesystemAvailable(runtimePolicy))
                 .build();
     }
 

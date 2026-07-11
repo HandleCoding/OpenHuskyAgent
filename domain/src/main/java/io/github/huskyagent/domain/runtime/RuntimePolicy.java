@@ -85,7 +85,7 @@ public class RuntimePolicy {
                 value(spec.getDockerImage()),
                 value(spec.getDockerMemory()),
                 value(spec.getDockerCpus()),
-                Boolean.toString(spec.isDockerPersistFilesystem()),
+                value(spec.getDockerPersistFilesystem()),
                 value(spec.getDockerWorkdir()),
                 value(spec.getSshHost()),
                 Integer.toString(spec.getSshPort()),
@@ -115,5 +115,9 @@ public class RuntimePolicy {
 
     private String value(String value) {
         return value != null ? value.trim() : "";
+    }
+
+    private String value(Boolean value) {
+        return value != null ? value.toString() : "";
     }
 }

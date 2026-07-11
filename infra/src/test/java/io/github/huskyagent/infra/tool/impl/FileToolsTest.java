@@ -1,11 +1,15 @@
 package io.github.huskyagent.infra.tool.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.huskyagent.infra.session.SessionScope;
 import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
 import io.github.huskyagent.infra.config.ToolLimitsConfig;
+import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
+import io.github.huskyagent.infra.tool.adapter.ToolRuntimeEnvironment;
 import io.github.huskyagent.infra.tool.registry.ToolResult;
 import io.github.huskyagent.infra.tool.state.ToolStateStore;
 import io.github.huskyagent.infra.workspace.LocalWorkspace;
+import io.github.huskyagent.infra.workspace.ScopedWorkspace;
 import io.github.huskyagent.infra.workspace.Workspace;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -68,6 +73,85 @@ class FileToolsTest {
         String content = extractContent(readResult);
         assertTrue(content.contains("Hello, World!"));
         assertTrue(content.contains("Line 2"));
+    }
+
+    @Test
+    void writeFileReturnsUnavailableWhenContextHasNoFilesystem() {
+        ToolRuntimeEnvironment environment = new ToolRuntimeEnvironment(
+                "ssh",
+                false,
+                () -> workspace,
+                () -> null);
+        ToolExecutionContext context = new ToolExecutionContext(
+                SESSION_ID,
+                SessionScope.builder()
+                        .sessionId(SESSION_ID)
+                        .backendType("ssh")
+                        .filesystemAvailable(false)
+                        .build(),
+                List.of(),
+                Set.of(),
+                Set.of(),
+                Set.of(),
+                environment);
+
+        ToolResult result = writeFileTool.handle(
+                Map.of("path", tempDir.resolve("blocked.txt").toString(), "content", "blocked"),
+                context);
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("File tools are not available"));
+        assertFalse(Files.exists(tempDir.resolve("blocked.txt")));
+    }
+
+    @Test
+    void readFileMapsDockerRuntimeAbsolutePathToHostWorkspace() throws IOException {
+        Files.writeString(tempDir.resolve("mapped.txt"), "from docker workspace");
+        ToolExecutionContext context = dockerFileContext();
+
+        ToolResult result = readFileTool.handle(Map.of("path", "/workspace/mapped.txt"), context);
+
+        assertTrue(result.success());
+        assertTrue(extractContent(result).contains("from docker workspace"));
+    }
+
+    @Test
+    void fileToolFailsClosedWhenContextHasNoRuntimeEnvironment() {
+        ToolExecutionContext context = new ToolExecutionContext(
+                SESSION_ID,
+                SessionScope.builder().sessionId(SESSION_ID).backendType("docker").filesystemAvailable(true).build(),
+                List.of(),
+                Set.of(),
+                Set.of(),
+                Set.of());
+
+        ToolResult result = readFileTool.handle(Map.of("path", tempDir.resolve("x.txt").toString()), context);
+
+        assertFalse(result.success());
+        assertTrue(result.error().contains("No runtime environment"));
+    }
+
+    private ToolExecutionContext dockerFileContext() {
+        Workspace scopedWorkspace = new ScopedWorkspace(workspace, tempDir, Path.of("/workspace"));
+        ToolRuntimeEnvironment environment = new ToolRuntimeEnvironment(
+                "docker",
+                true,
+                () -> scopedWorkspace,
+                () -> null);
+        return new ToolExecutionContext(
+                SESSION_ID,
+                SessionScope.builder()
+                        .sessionId(SESSION_ID)
+                        .backendType("docker")
+                        .filesystemAvailable(true)
+                        .workingDirectory(tempDir.toString())
+                        .runtimeWorkingDirectory("/workspace")
+                        .build(),
+                List.of(),
+                Set.of(),
+                Set.of(),
+                Set.of(),
+                environment);
     }
 
     @Test

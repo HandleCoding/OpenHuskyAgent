@@ -17,10 +17,12 @@ import io.github.huskyagent.infra.config.SubAgentConfig;
 import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
 import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
+import io.github.huskyagent.infra.tool.adapter.ToolRuntimeEnvironmentFactory;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import io.github.huskyagent.infra.tool.registry.ToolProvider;
 import io.github.huskyagent.infra.tool.registry.ToolResult;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -48,7 +50,9 @@ public class DelegateTaskTool implements ToolProvider {
     private final RuntimePolicyResolver runtimePolicyResolver;
     private final DynamicPromptSnapshotCache dynamicPromptSnapshotCache;
     private final ToolCallbackFactory toolCallbackFactory;
+    private final ToolRuntimeEnvironmentFactory toolRuntimeEnvironmentFactory;
 
+    @Autowired
     public DelegateTaskTool(ObjectProvider<AgentGraph> agentGraphProvider,
                             SessionManager sessionManager,
                             HookRegistry hookRegistry,
@@ -56,7 +60,8 @@ public class DelegateTaskTool implements ToolProvider {
                             CapabilityVisibilityResolver capabilityVisibilityResolver,
                             RuntimePolicyResolver runtimePolicyResolver,
                             DynamicPromptSnapshotCache dynamicPromptSnapshotCache,
-                            ToolCallbackFactory toolCallbackFactory) {
+                            ToolCallbackFactory toolCallbackFactory,
+                            ToolRuntimeEnvironmentFactory toolRuntimeEnvironmentFactory) {
         this.agentGraphProvider = agentGraphProvider;
         this.sessionManager = sessionManager;
         this.hookRegistry = hookRegistry;
@@ -65,6 +70,20 @@ public class DelegateTaskTool implements ToolProvider {
         this.runtimePolicyResolver = runtimePolicyResolver;
         this.dynamicPromptSnapshotCache = dynamicPromptSnapshotCache;
         this.toolCallbackFactory = toolCallbackFactory;
+        this.toolRuntimeEnvironmentFactory = toolRuntimeEnvironmentFactory;
+    }
+
+    DelegateTaskTool(ObjectProvider<AgentGraph> agentGraphProvider,
+                     SessionManager sessionManager,
+                     HookRegistry hookRegistry,
+                     SubAgentConfig subAgentConfig,
+                     CapabilityVisibilityResolver capabilityVisibilityResolver,
+                     RuntimePolicyResolver runtimePolicyResolver,
+                     DynamicPromptSnapshotCache dynamicPromptSnapshotCache,
+                     ToolCallbackFactory toolCallbackFactory) {
+        this(agentGraphProvider, sessionManager, hookRegistry, subAgentConfig,
+                capabilityVisibilityResolver, runtimePolicyResolver, dynamicPromptSnapshotCache,
+                toolCallbackFactory, null);
     }
 
     @Override
@@ -198,7 +217,7 @@ public class DelegateTaskTool implements ToolProvider {
 
         List<ToolDefinition> visibleTools = executionContext.visibleTools();
 
-        Path workingDir = Path.of(System.getProperty("user.dir"));
+        Path workingDir = resolveWorkingDirectory(executionContext);
 
         List<SubAgentTask> tasks = new ArrayList<>();
         for (int i = 0; i < taskSpecs.size(); i++) {
@@ -237,6 +256,16 @@ public class DelegateTaskTool implements ToolProvider {
         return buildToolResult(results, totalDurationMs);
     }
 
+    private Path resolveWorkingDirectory(ToolExecutionContext executionContext) {
+        if (executionContext != null
+                && executionContext.sessionScope() != null
+                && executionContext.sessionScope().getWorkingDirectory() != null
+                && !executionContext.sessionScope().getWorkingDirectory().isBlank()) {
+            return Path.of(executionContext.sessionScope().getWorkingDirectory());
+        }
+        return Path.of(System.getProperty("user.dir"));
+    }
+
 
     private record TaskSpec(String goal, String context) {}
 
@@ -273,7 +302,8 @@ public class DelegateTaskTool implements ToolProvider {
         SubAgentRunner runner = new SubAgentRunner(
                 sessionManager, agentGraphProvider.getObject(), subAgentConfig,
                 task, queue, parentSessionId, executionContext,
-                capabilityVisibilityResolver, runtimePolicyResolver, dynamicPromptSnapshotCache, toolCallbackFactory);
+                capabilityVisibilityResolver, runtimePolicyResolver, dynamicPromptSnapshotCache, toolCallbackFactory,
+                toolRuntimeEnvironmentFactory);
 
         CompletableFuture<SubAgentMessage> future = CompletableFuture.supplyAsync(runner::run);
         SubAgentMessage finalMsg = pollQueueUntilDone(queue, future, parentSessionId, timeoutSeconds, task.taskIndex());
@@ -297,7 +327,8 @@ public class DelegateTaskTool implements ToolProvider {
             SubAgentRunner runner = new SubAgentRunner(
                     sessionManager, agentGraphProvider.getObject(), subAgentConfig,
                     tasks.get(i), queue, parentSessionId, executionContext,
-                    capabilityVisibilityResolver, runtimePolicyResolver, dynamicPromptSnapshotCache, toolCallbackFactory);
+                    capabilityVisibilityResolver, runtimePolicyResolver, dynamicPromptSnapshotCache, toolCallbackFactory,
+                    toolRuntimeEnvironmentFactory);
             runners.add(runner);
             final int taskIndex = i;
             futures.add(CompletableFuture.supplyAsync(runner::run, executor)

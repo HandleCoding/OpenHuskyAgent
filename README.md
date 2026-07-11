@@ -378,6 +378,8 @@ Packaged defaults live in `service/src/main/resources/application.yml`. Installe
 
 Storage defaults to local. Non-local workspace/checkpoint providers are extension points; unsupported remote types fail fast instead of silently falling back to local behavior.
 
+Tool runtime follows the selected agent backend. Terminal/process tools execute through the runtime backend. File tools are available for local backend and Docker backend only when persistent filesystem is enabled; SSH and non-persistent Docker runtimes hide file tools and fail closed if called directly. URL-based MCP servers are visible across local/Docker/SSH runtimes, while stdio MCP servers are local-only.
+
 ## Security And Production Hardening
 
 Before exposing Husky beyond local development:

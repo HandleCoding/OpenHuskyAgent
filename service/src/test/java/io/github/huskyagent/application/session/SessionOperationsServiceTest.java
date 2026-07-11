@@ -1,6 +1,7 @@
 package io.github.huskyagent.application.session;
 
 import io.github.huskyagent.application.runtime.RuntimePolicyResolver;
+import io.github.huskyagent.application.runtime.RuntimeBackendCapabilityResolver;
 import io.github.huskyagent.domain.capability.CapabilityView;
 import io.github.huskyagent.domain.context.ContextManager;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
@@ -12,6 +13,7 @@ import io.github.huskyagent.infra.session.CheckpointStoreFactory;
 import io.github.huskyagent.infra.session.SessionContext;
 import io.github.huskyagent.infra.session.SessionRepository;
 import io.github.huskyagent.infra.session.SessionScope;
+import io.github.huskyagent.infra.execute.ExecutionBackendProperties;
 import io.github.huskyagent.infra.tool.registry.ToolRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -111,6 +113,7 @@ class SessionOperationsServiceTest {
                 sessionRepository,
                 sceneResolver,
                 runtimePolicyResolver,
+                new RuntimeBackendCapabilityResolver(new ExecutionBackendProperties()),
                 toolRegistry);
     }
 

@@ -367,7 +367,7 @@ class ChannelRuntimeServiceTest {
         int createCalls;
 
         FakeSessionResolver(String activeSessionId, String newSessionId) {
-            super(null, null, null, null, null, null, null, null, null);
+            super(null, null, null, null, null, null, null, null, null, null);
             this.activeSessionId = activeSessionId;
             this.newSessionId = newSessionId;
         }

@@ -161,12 +161,20 @@ public class SceneConfig {
         private String dockerImage;
         private String dockerMemory;
         private String dockerCpus;
-        private boolean dockerPersistFilesystem = false;
+        private Boolean dockerPersistFilesystem;
         private String dockerWorkdir;
         private String sshHost;
         private int sshPort = 22;
         private String sshUser;
         private String sshIdentityFile;
+
+        public boolean isDockerPersistFilesystem() {
+            return Boolean.TRUE.equals(dockerPersistFilesystem);
+        }
+
+        public boolean hasDockerPersistFilesystemOverride() {
+            return dockerPersistFilesystem != null;
+        }
     }
 
     @Data

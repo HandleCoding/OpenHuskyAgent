@@ -69,12 +69,12 @@ public class RuntimeSection extends AbstractPromptSection {
         sb.append("- **Session**: ").append(context.getSessionId()).append("\n");
 
         if (isDocker) {
-            sb.append("- **Working Directory**: /workspace (Docker container)\n");
+            sb.append("- **Working Directory**: ").append(dockerWorkingDirectory(context)).append(" (Docker container)\n");
         } else if (context.getWorkingDirectory() != null) {
             sb.append("- **Working Directory**: ").append(context.getWorkingDirectory()).append("\n");
         }
 
-        String platformHint = isDocker ? buildDockerPlatformHint() : buildPlatformHint();
+        String platformHint = isDocker ? buildDockerPlatformHint(context) : buildPlatformHint();
         if (!platformHint.isEmpty()) {
             sb.append("\n").append(platformHint).append("\n");
         }
@@ -83,10 +83,25 @@ public class RuntimeSection extends AbstractPromptSection {
         return sb.toString();
     }
 
-    private String buildDockerPlatformHint() {
+    private String buildDockerPlatformHint(PromptContext context) {
+        String workdir = dockerWorkingDirectory(context);
         return "You are running inside a Docker container (Linux/Ubuntu). " +
                "Use Unix-style paths. apt is the package manager. " +
-               "Working directory is /workspace. Files created here persist for this session only.";
+               "Working directory is " + workdir + ". Files created here persist for this session only.";
+    }
+
+    private String dockerWorkingDirectory(PromptContext context) {
+        String runtimeWorkdir = context.getSessionScope()
+                .map(scope -> scope.getRuntimeWorkingDirectory())
+                .orElse(null);
+        if (runtimeWorkdir != null && !runtimeWorkdir.isBlank()) {
+            return runtimeWorkdir;
+        }
+        SceneConfig.BackendSpec spec = context.getRuntimePolicy().getBackendSpec();
+        if (spec != null && spec.getDockerWorkdir() != null && !spec.getDockerWorkdir().isBlank()) {
+            return spec.getDockerWorkdir();
+        }
+        return "/workspace";
     }
 
     private String buildPlatformHint() {

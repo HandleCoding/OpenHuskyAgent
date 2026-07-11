@@ -489,7 +489,7 @@ class RuntimeExecutionServiceTest {
         boolean failWithSecurityException;
 
         FakeSessionResolver(RuntimeScope scope) {
-            super(null, null, null, null, null, null, null, null, null);
+            super(null, null, null, null, null, null, null, null, null, null);
             this.scope = scope;
         }
 

@@ -3,6 +3,7 @@ package io.github.huskyagent.infra.tool.impl;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
+import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import io.github.huskyagent.infra.tool.registry.ToolProvider;
 import io.github.huskyagent.infra.tool.registry.ToolResult;
@@ -35,13 +36,17 @@ public class WriteFileTool implements ToolProvider {
 
     @Override
     public List<ToolDefinition> getTools() {
-        return List.of(ToolDefinition.of("write_file",
+        return List.of(ToolDefinition.contextual("write_file",
             "Write content to a new file or completely replace an existing file. Use this instead of echo/cat heredoc in terminal. " +
             "Creates parent directories automatically. OVERWRITES the entire file — use edit_file for small replacements and apply_patch for multi-line or multi-file edits.",
             Toolset.CORE, Args.class, this::handle));
     }
 
     public ToolResult handle(Map<String, Object> args) {
+        return handle(args, FileToolRuntime.localContext(workspace));
+    }
+
+    public ToolResult handle(Map<String, Object> args, ToolExecutionContext context) {
         String path = (String) args.get("path");
         String content = (String) args.get("content");
 
@@ -50,6 +55,7 @@ public class WriteFileTool implements ToolProvider {
         }
 
         try {
+            Workspace workspace = FileToolRuntime.workspace(context, this.workspace);
             Path filePath = FileSafety.resolve(workspace, path);
             String denied = FileSafety.checkWriteAllowed(workspace, path, filePath);
             if (denied != null) {
@@ -85,6 +91,8 @@ public class WriteFileTool implements ToolProvider {
 
             return ToolResult.success(output);
 
+        } catch (IllegalStateException e) {
+            return ToolResult.failure(e.getMessage());
         } catch (IOException e) {
             return ToolResult.failure("Failed to write: " + e.getMessage());
         }

@@ -1,10 +1,14 @@
 package io.github.huskyagent.infra.tool.executor;
 
 import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
+import io.github.huskyagent.infra.tool.adapter.ToolRuntimeEnvironmentFactory;
+import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
+import io.github.huskyagent.infra.session.SessionScope;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import io.github.huskyagent.infra.tool.registry.ToolRegistry;
 import io.github.huskyagent.infra.tool.registry.ToolResult;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -19,18 +23,22 @@ public class ToolExecutor {
 
     private final ToolRegistry registry;
     private final ExecutorService executorService;
+    private final ToolRuntimeEnvironmentFactory runtimeEnvironmentFactory;
 
     /** Tracks background tool tasks by task id for polling, waiting, and cancellation. */
     private final Map<String, Future<ToolResult>> backgroundTasks = new ConcurrentHashMap<>();
 
+    @Autowired
     public ToolExecutor(ToolRegistry registry,
-                        @Qualifier("toolExecutor") ExecutorService executorService) {
+                        @Qualifier("toolExecutor") ExecutorService executorService,
+                        ToolRuntimeEnvironmentFactory runtimeEnvironmentFactory) {
         this.registry = registry;
         this.executorService = executorService;
+        this.runtimeEnvironmentFactory = runtimeEnvironmentFactory;
     }
 
     public ToolResult execute(String name, Map<String, Object> args) {
-        return execute(name, args, ToolExecutionContext.minimal(null, registry.getAll()));
+        return execute(name, args, localRuntimeContext(args));
     }
 
     public ToolResult execute(String name, Map<String, Object> args, ToolExecutionContext executionContext) {
@@ -49,7 +57,7 @@ public class ToolExecutor {
             log.debug("Executing tool '{}' with args: {}", name, args);
             ToolExecutionContext effectiveContext = executionContext != null
                     ? executionContext
-                    : ToolExecutionContext.minimal(null, registry.getAll());
+                    : localRuntimeContext(args);
             ToolResult result = tool.execute(args, effectiveContext);
 
             if (tool.maxResultSizeChars() < Integer.MAX_VALUE && result.content() != null) {
@@ -63,6 +71,20 @@ public class ToolExecutor {
             log.error("Tool '{}' execution failed: {}", name, e.getMessage(), e);
             return ToolResult.failure("Execution error: " + e.getMessage());
         }
+    }
+
+    private ToolExecutionContext localRuntimeContext(Map<String, Object> args) {
+        String sessionId = args != null && args.get(ToolCallbackFactory.SESSION_ID_KEY) instanceof String id && !id.isBlank()
+                ? id
+                : "tool-executor-local";
+        SessionScope scope = SessionScope.builder()
+                .sessionId(sessionId)
+                .backendType("local")
+                .filesystemAvailable(true)
+                .workspaceType("local")
+                .workingDirectory(System.getProperty("user.dir"))
+                .build();
+        return ToolExecutionContext.scoped(scope, registry.getAll(), runtimeEnvironmentFactory.create(scope));
     }
 
     public Future<ToolResult> executeAsync(String name, Map<String, Object> args, String taskId) {

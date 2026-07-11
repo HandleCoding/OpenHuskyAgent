@@ -7,6 +7,8 @@ import io.github.huskyagent.infra.execute.ExecutionBackendFactory;
 import io.github.huskyagent.infra.execute.ExecutionBackendProperties;
 import io.github.huskyagent.infra.session.SessionContext;
 import io.github.huskyagent.infra.session.SessionScope;
+import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
+import io.github.huskyagent.infra.tool.adapter.ToolRuntimeEnvironment;
 import io.github.huskyagent.infra.tool.registry.ToolResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,7 +16,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -91,6 +95,38 @@ class TerminalToolTest {
 
         assertTrue(result.success());
         assertTrue(extractOutput(result).contains(tempDir.toString()));
+    }
+
+    @Test
+    void terminalUsesExecutionBackendFromContextWhenAvailable() {
+        ExecutionBackend contextBackend = mock(ExecutionBackend.class);
+        when(contextBackend.execute(eq("echo from-context"), eq(tempDir.toString()), anyInt()))
+                .thenReturn(new ExecutionBackend.ExecResult("from-context\n", 0, true));
+        when(contextBackend.isAlive()).thenReturn(true);
+        ToolRuntimeEnvironment environment = new ToolRuntimeEnvironment(
+                "local",
+                true,
+                () -> null,
+                () -> contextBackend);
+        ToolExecutionContext context = new ToolExecutionContext(
+                "session-ctx",
+                SessionScope.builder()
+                        .sessionId("session-ctx")
+                        .workingDirectory(tempDir.toString())
+                        .backendType("local")
+                        .filesystemAvailable(true)
+                        .build(),
+                List.of(),
+                Set.of(),
+                Set.of(),
+                Set.of(),
+                environment);
+
+        ToolResult result = terminalTool.handleTerminal(Map.of("command", "echo from-context"), context);
+
+        assertTrue(result.success());
+        assertTrue(extractOutput(result).contains("from-context"));
+        verify(contextBackend).execute(eq("echo from-context"), eq(tempDir.toString()), anyInt());
     }
 
     @Test

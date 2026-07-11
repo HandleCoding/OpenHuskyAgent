@@ -37,6 +37,8 @@ public class McpServerConnector {
     private final Map<String, McpSyncClient> clients = new ConcurrentHashMap<>();
     private final Map<String, McpServerConfig> serverConfigs = new ConcurrentHashMap<>();
     private final Map<String, List<McpSchema.Tool>> discoveredTools = new ConcurrentHashMap<>();
+    private final Map<String, String> serverByToolName = new ConcurrentHashMap<>();
+    private final Map<String, Boolean> stdioByToolName = new ConcurrentHashMap<>();
     private final Map<String, ServerStatus> statuses = new ConcurrentHashMap<>();
 
     private final Map<String, Integer> failureCounts = new ConcurrentHashMap<>();
@@ -84,6 +86,37 @@ public class McpServerConnector {
         this.toolsChangeListener = listener;
     }
 
+    public Optional<McpServerConfig> getServerConfig(String serverName) {
+        McpServerConfig direct = serverConfigs.get(serverName);
+        if (direct != null) {
+            return Optional.of(direct);
+        }
+        return serverConfigs.entrySet().stream()
+                .filter(entry -> McpToolNames.sanitize(entry.getKey()).equals(serverName))
+                .map(Map.Entry::getValue)
+                .findFirst();
+    }
+
+    public boolean isStdioServer(String serverName) {
+        return getServerConfig(serverName)
+                .map(McpServerConfig::isStdio)
+                .orElse(false);
+    }
+
+    public boolean isStdioTool(String toolName) {
+        if (toolName == null) {
+            return false;
+        }
+        return Boolean.TRUE.equals(stdioByToolName.get(toolName));
+    }
+
+    public Optional<String> serverNameForTool(String toolName) {
+        if (toolName == null || toolName.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(serverByToolName.get(toolName));
+    }
+
     public McpSyncClient connectServer(String name, McpServerConfig config) {
         serverConfigs.put(name, config);
         try {
@@ -95,6 +128,7 @@ public class McpServerConnector {
 
             clients.put(name, client);
             discoveredTools.put(name, tools);
+            replaceToolIndex(name, config, tools);
             statuses.put(name, ServerStatus.CONNECTED);
             failureCounts.remove(name);
             circuitOpenTimes.remove(name);
@@ -156,6 +190,7 @@ public class McpServerConnector {
             var toolResult = client.listTools();
             List<McpSchema.Tool> newTools = toolResult.tools();
             List<McpSchema.Tool> oldTools = discoveredTools.put(serverName, newTools);
+            replaceToolIndex(serverName, serverConfigs.get(serverName), newTools);
 
             Set<String> oldNames = oldTools != null
                     ? new HashSet<>(oldTools.stream().map(McpSchema.Tool::name).toList())
@@ -240,6 +275,7 @@ public class McpServerConnector {
         serverConfigs.putAll(targetConfigs);
         discoveredTools.clear();
         discoveredTools.putAll(targetTools);
+        rebuildToolIndex();
         statuses.clear();
         statuses.putAll(targetStatuses);
         stagedClients.keySet().forEach(serverName -> {
@@ -283,6 +319,53 @@ public class McpServerConnector {
         return Collections.unmodifiableMap(statuses);
     }
 
+    void indexToolNames(String serverName, McpServerConfig config, List<String> toolNames) {
+        List<String> names = toolNames != null ? toolNames : List.of();
+        removeToolIndex(serverName);
+        for (String toolName : names) {
+            indexToolName(serverName, config, toolName);
+        }
+    }
+
+    private void replaceToolIndex(String serverName, McpServerConfig config, List<McpSchema.Tool> tools) {
+        removeToolIndex(serverName);
+        if (tools == null) {
+            return;
+        }
+        for (McpSchema.Tool tool : tools) {
+            indexToolName(serverName, config, tool.name());
+        }
+    }
+
+    private void rebuildToolIndex() {
+        serverByToolName.clear();
+        stdioByToolName.clear();
+        discoveredTools.forEach((serverName, tools) -> {
+            McpServerConfig config = serverConfigs.get(serverName);
+            if (tools != null) {
+                for (McpSchema.Tool tool : tools) {
+                    indexToolName(serverName, config, tool.name());
+                }
+            }
+        });
+    }
+
+    private void indexToolName(String serverName, McpServerConfig config, String toolName) {
+        if (serverName == null || serverName.isBlank() || toolName == null || toolName.isBlank()) {
+            return;
+        }
+        String prefixedName = McpToolNames.prefixName(serverName, toolName);
+        serverByToolName.put(prefixedName, serverName);
+        stdioByToolName.put(prefixedName, config != null && config.isStdio());
+    }
+
+    private void removeToolIndex(String serverName) {
+        if (serverName == null || serverName.isBlank()) {
+            return;
+        }
+        serverByToolName.entrySet().removeIf(entry -> serverName.equals(entry.getValue()));
+        stdioByToolName.keySet().removeIf(toolName -> !serverByToolName.containsKey(toolName));
+    }
 
     private ConnectionSnapshot openConnection(String name, McpServerConfig config) {
         McpSyncClient client = buildClient(name, config);
@@ -323,6 +406,7 @@ public class McpServerConnector {
             try { old.close(); } catch (Exception ignored) {}
         }
         discoveredTools.remove(serverName);
+        removeToolIndex(serverName);
         failureCounts.remove(serverName);
         circuitOpenTimes.remove(serverName);
         reconnectingServers.remove(serverName);
@@ -387,6 +471,7 @@ public class McpServerConnector {
 
             clients.put(serverName, client);
             discoveredTools.put(serverName, tools);
+            replaceToolIndex(serverName, config, tools);
             statuses.put(serverName, ServerStatus.CONNECTED);
             failureCounts.remove(serverName);
             circuitOpenTimes.remove(serverName);
@@ -506,6 +591,7 @@ public class McpServerConnector {
             if (entry.getValue() == config) {
                 String serverName = entry.getKey();
                 discoveredTools.put(serverName, newTools);
+                replaceToolIndex(serverName, config, newTools);
                 log.info("MCP server '{}' tools changed notification: {} tools", serverName, newTools.size());
 
                 if (toolsChangeListener != null) {
@@ -532,6 +618,8 @@ public class McpServerConnector {
         });
         clients.clear();
         discoveredTools.clear();
+        serverByToolName.clear();
+        stdioByToolName.clear();
         statuses.clear();
         serverConfigs.clear();
         failureCounts.clear();

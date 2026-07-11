@@ -2,6 +2,7 @@ package io.github.huskyagent.infra.tool.impl;
 
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import io.github.huskyagent.infra.tool.Toolset;
+import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import io.github.huskyagent.infra.tool.registry.ToolProvider;
 import io.github.huskyagent.infra.tool.registry.ToolResult;
@@ -56,7 +57,7 @@ public class SearchFilesTool implements ToolProvider {
 
     @Override
     public List<ToolDefinition> getTools() {
-        return List.of(ToolDefinition.of("search_files",
+        return List.of(ToolDefinition.contextual("search_files",
             "Search file contents or find files by name. Use this instead of grep/find/ls in terminal.\n\n" +
             "Content search (target='content'): Regex search inside files. Output modes: content, files_only, count.\n" +
             "File search (target='files'): Find files by glob pattern (e.g., '*.java', '*config*'). Results sorted by modification time.",
@@ -64,6 +65,10 @@ public class SearchFilesTool implements ToolProvider {
     }
 
     public ToolResult handle(Map<String, Object> args) {
+        return handle(args, FileToolRuntime.localContext(workspace));
+    }
+
+    public ToolResult handle(Map<String, Object> args, ToolExecutionContext context) {
         String pattern = (String) args.get("pattern");
         String target = args.containsKey("target") ? (String) args.get("target") : "content";
         String searchPath = args.containsKey("path") ? (String) args.get("path") : ".";
@@ -94,10 +99,11 @@ public class SearchFilesTool implements ToolProvider {
         }
 
         try {
+            Workspace workspace = FileToolRuntime.workspace(context, this.workspace);
             Path searchDir = workspace.resolve(searchPath);
 
             if ("files".equals(target)) {
-                return handleSearchByFilename(pattern, searchDir, limit, offset);
+                return handleSearchByFilename(workspace, pattern, searchDir, limit, offset);
             }
 
             Pattern regex;
@@ -117,7 +123,7 @@ public class SearchFilesTool implements ToolProvider {
                 .filter(fileFilter)
                 .filter(p -> !FileUtils.isBinaryFile(p))
                 .filter(p -> FileSafety.canReadContent(workspace, p))
-                .forEach(file -> searchFile(file, regex, outputMode, contextLines, allMatches, fileCounts));
+                .forEach(file -> searchFile(workspace, file, regex, outputMode, contextLines, allMatches, fileCounts));
 
             if ("files_only".equals(outputMode)) {
                 List<String> allFiles = allMatches.stream()
@@ -151,7 +157,7 @@ public class SearchFilesTool implements ToolProvider {
         }
     }
 
-    private void searchFile(Path file, Pattern regex, String outputMode, int contextLines,
+    private void searchFile(Workspace workspace, Path file, Pattern regex, String outputMode, int contextLines,
                             List<Map<String, Object>> allMatches, Map<String, Integer> fileCounts) {
         try {
             List<String> lines = workspace.readAllLines(file);
@@ -192,7 +198,7 @@ public class SearchFilesTool implements ToolProvider {
         return match;
     }
 
-    private ToolResult handleSearchByFilename(String pattern, Path searchDir, int limit, int offset) throws IOException {
+    private ToolResult handleSearchByFilename(Workspace workspace, String pattern, Path searchDir, int limit, int offset) throws IOException {
         Predicate<Path> matcher = FileUtils.globMatcher(searchDir, normalizeFilePattern(pattern));
         List<String> allFiles = workspace.walkFiles(searchDir)
             .stream()

@@ -1,6 +1,7 @@
 package io.github.huskyagent.application.session;
 
 import io.github.huskyagent.application.runtime.RuntimePolicyResolver;
+import io.github.huskyagent.application.runtime.RuntimeBackendCapabilityResolver;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
 import io.github.huskyagent.domain.scene.SceneConfig;
 import io.github.huskyagent.domain.scene.SceneResolver;
@@ -11,7 +12,6 @@ import io.github.huskyagent.infra.execute.ExecutionBackendFactory;
 import io.github.huskyagent.infra.execute.ExecutionBackendProperties;
 import io.github.huskyagent.infra.session.SessionEntity;
 import io.github.huskyagent.infra.session.SessionRepository;
-import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.registry.ToolRegistry;
 import io.github.huskyagent.domain.session.SessionManager;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +35,7 @@ public class SessionResolver {
     private final ToolRegistry toolRegistry;
     private final ExecutionBackendFactory backendFactory;
     private final ExecutionBackendProperties backendProperties;
+    private final RuntimeBackendCapabilityResolver backendCapabilities;
     private final SessionKeyStrategy sessionKeyStrategy;
     private final SessionAccessPolicy sessionAccessPolicy;
 
@@ -127,12 +128,13 @@ public class SessionResolver {
                 .channelIdentity(channelIdentity)
                 .runtimePolicy(runtimePolicy)
                 .workingDirectory(workingDirectory)
+                .filesystemAvailable(backendCapabilities.filesystemAvailable(runtimePolicy))
                 .build();
     }
 
     private void registerBackend(RuntimeScope scope) {
         backendFactory.registerSession(scope.getSessionId(),
-                buildBackendConfig(scope.getRuntimePolicy(), scope.getWorkingDirectory().toString()));
+                buildBackendConfig(scope.getRuntimePolicy(), scope.getSessionId(), scope.getWorkingDirectory().toString()));
         backendFactory.touchSession(scope.getSessionId());
     }
 
@@ -152,20 +154,24 @@ public class SessionResolver {
 
     private Path resolveDockerWorkspaceForFiles(RuntimePolicy runtimePolicy, String sessionId) {
         if (runtimePolicy.getBackendPolicy() != SceneConfig.BackendPolicy.DOCKER) return null;
-        if (!runtimePolicy.getCapabilityView().getVisibleToolsets().contains(Toolset.CORE)) return null;
-        SceneConfig.BackendSpec spec = runtimePolicy.getBackendSpec();
-        boolean persistFs = spec != null ? spec.isDockerPersistFilesystem()
-                : backendProperties.getDocker().isPersistFilesystem();
-        if (!persistFs) return null;
-        String root = backendProperties.getDocker().getWorkspaceRoot();
-        String containerSuffix = sessionId.replace("-", "").substring(0, Math.min(8, sessionId.replace("-", "").length()));
-        return Path.of(root, "husky-" + containerSuffix);
+        if (!backendCapabilities.dockerPersistFilesystem(runtimePolicy.getBackendSpec())) return null;
+        return dockerHostWorkspaceDir(sessionId);
     }
 
-    private BackendConfig buildBackendConfig(RuntimePolicy runtimePolicy, String workDir) {
+    private Path dockerHostWorkspaceDir(String sessionId) {
+        String normalizedSessionId = sessionId != null ? sessionId.replace("-", "") : "";
+        String suffix = normalizedSessionId.substring(0, Math.min(8, normalizedSessionId.length()));
+        if (suffix.isBlank()) {
+            suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        }
+        return Path.of(backendProperties.getDocker().getWorkspaceRoot(), "husky-" + suffix);
+    }
+
+    private BackendConfig buildBackendConfig(RuntimePolicy runtimePolicy, String sessionId, String workDir) {
         SceneConfig.BackendSpec spec = runtimePolicy.getBackendSpec();
         ExecutionBackendProperties.DockerProperties docker = backendProperties.getDocker();
         ExecutionBackendProperties.SshProperties ssh = backendProperties.getSsh();
+        boolean dockerPersistFilesystem = backendCapabilities.dockerPersistFilesystem(spec);
 
         return switch (runtimePolicy.getBackendPolicy()) {
             case DOCKER -> BackendConfig.builder()
@@ -174,8 +180,9 @@ public class SessionResolver {
                     .dockerImage(spec != null && spec.getDockerImage() != null ? spec.getDockerImage() : docker.getImage())
                     .dockerMemory(spec != null && spec.getDockerMemory() != null ? spec.getDockerMemory() : docker.getMemory())
                     .dockerCpus(spec != null && spec.getDockerCpus() != null ? spec.getDockerCpus() : docker.getCpus())
-                    .dockerPersistFilesystem(spec != null ? spec.isDockerPersistFilesystem() : docker.isPersistFilesystem())
+                    .dockerPersistFilesystem(dockerPersistFilesystem)
                     .dockerWorkspaceRoot(docker.getWorkspaceRoot())
+                    .dockerHostWorkspaceDir(dockerPersistFilesystem ? dockerHostWorkspaceDir(sessionId).toString() : null)
                     .build();
             case SSH -> BackendConfig.builder()
                     .type("ssh")

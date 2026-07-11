@@ -22,6 +22,8 @@ import io.github.huskyagent.infra.session.SessionContext;
 import io.github.huskyagent.infra.session.SessionScope;
 import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
 import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
+import io.github.huskyagent.infra.tool.adapter.ToolRuntimeEnvironment;
+import io.github.huskyagent.infra.tool.adapter.ToolRuntimeEnvironmentFactory;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.ChannelType;
 import io.github.huskyagent.infra.channel.ConversationType;
@@ -58,6 +60,7 @@ public class SubAgentRunner {
     private final RuntimePolicyResolver runtimePolicyResolver;
     private final DynamicPromptSnapshotCache dynamicPromptSnapshotCache;
     private final ToolCallbackFactory toolCallbackFactory;
+    private final ToolRuntimeEnvironmentFactory toolRuntimeEnvironmentFactory;
 
     private final List<SubAgentMessage.ToolTraceEntry> toolTrace = new ArrayList<>();
 
@@ -102,7 +105,8 @@ public class SubAgentRunner {
                           CapabilityVisibilityResolver capabilityVisibilityResolver,
                           RuntimePolicyResolver runtimePolicyResolver,
                           DynamicPromptSnapshotCache dynamicPromptSnapshotCache,
-                          ToolCallbackFactory toolCallbackFactory) {
+                          ToolCallbackFactory toolCallbackFactory,
+                          ToolRuntimeEnvironmentFactory toolRuntimeEnvironmentFactory) {
         this.sessionManager = sessionManager;
         this.agentGraph = agentGraph;
         this.config = config;
@@ -114,6 +118,7 @@ public class SubAgentRunner {
         this.runtimePolicyResolver = runtimePolicyResolver;
         this.dynamicPromptSnapshotCache = dynamicPromptSnapshotCache;
         this.toolCallbackFactory = toolCallbackFactory;
+        this.toolRuntimeEnvironmentFactory = toolRuntimeEnvironmentFactory;
     }
 
     public SubAgentMessage run() {
@@ -214,15 +219,25 @@ public class SubAgentRunner {
         var runtimePolicy = scope.getRuntimePolicy();
         var capabilityView = runtimePolicy.getCapabilityView();
         var toolDefinitions = capabilityView.getVisibleTools();
+        var sessionScope = scope.toSessionScope();
         var executionContext = new ToolExecutionContext(
                 sessionId,
-                scope.toSessionScope(),
+                sessionScope,
                 toolDefinitions,
                 capabilityView.getVisibleToolsets(),
                 capabilityView.getVisibleSkillNames(),
-                capabilityView.getVisiblePromptSections());
+                capabilityView.getVisiblePromptSections(),
+                runtimeEnvironmentFor(sessionScope));
         return RequestToolContext.of(toolDefinitions,
                 toolCallbackFactory.build(toolDefinitions, sessionId, executionContext));
+    }
+
+    private ToolRuntimeEnvironment runtimeEnvironmentFor(SessionScope sessionScope) {
+        if (parentExecutionContext != null && parentExecutionContext.hasRuntimeEnvironment()
+                && toolRuntimeEnvironmentFactory != null) {
+            return toolRuntimeEnvironmentFactory.inherit(parentExecutionContext, sessionScope);
+        }
+        return toolRuntimeEnvironmentFactory != null ? toolRuntimeEnvironmentFactory.create(sessionScope) : null;
     }
 
     private RuntimeScope buildChildRuntimeScope(String childSessionId, SceneConfig sceneConfig, RuntimePolicy runtimePolicy) {
@@ -242,6 +257,7 @@ public class SubAgentRunner {
                 .channelIdentity(identity)
                 .runtimePolicy(runtimePolicy)
                 .workingDirectory(task.workingDirectory())
+                .filesystemAvailable(parentExecutionContext != null ? parentExecutionContext.hasFilesystem() : null)
                 .build();
     }
 
@@ -252,7 +268,34 @@ public class SubAgentRunner {
         sceneConfig.setAllowedToolsets(task.allowedToolsets());
         sceneConfig.setApprovalPolicy(SceneConfig.ApprovalPolicy.NONE);
         sceneConfig.getMemoryPolicyConfig().setEnabled(false);
+        inheritParentRuntime(sceneConfig);
         return sceneConfig;
+    }
+
+    private void inheritParentRuntime(SceneConfig sceneConfig) {
+        if (parentExecutionContext == null) {
+            return;
+        }
+        switch (parentExecutionContext.backendType()) {
+            case "docker" -> {
+                sceneConfig.setBackendPolicy(SceneConfig.BackendPolicy.DOCKER);
+                SceneConfig.BackendSpec spec = new SceneConfig.BackendSpec();
+                spec.setDockerPersistFilesystem(parentExecutionContext.hasFilesystem());
+                String runtimeWorkdir = parentRuntimeWorkingDirectory();
+                if (runtimeWorkdir != null) {
+                    spec.setDockerWorkdir(runtimeWorkdir);
+                }
+                sceneConfig.setBackendSpec(spec);
+            }
+            case "ssh" -> sceneConfig.setBackendPolicy(SceneConfig.BackendPolicy.SSH);
+            default -> sceneConfig.setBackendPolicy(SceneConfig.BackendPolicy.LOCAL);
+        }
+    }
+
+    private String parentRuntimeWorkingDirectory() {
+        SessionScope scope = parentExecutionContext != null ? parentExecutionContext.sessionScope() : null;
+        String runtimeWorkdir = scope != null ? scope.getRuntimeWorkingDirectory() : null;
+        return runtimeWorkdir != null && !runtimeWorkdir.isBlank() ? runtimeWorkdir : null;
     }
 
     private CapabilityView buildParentCapabilityView() {

@@ -274,7 +274,7 @@ class TuiSessionServiceTest {
         private int createCalls;
 
         FakeSessionResolver(String... sessionIds) {
-            super(null, null, null, null, null, null, null, null, null);
+            super(null, null, null, null, null, null, null, null, null, null);
             this.sessionIds = List.of(sessionIds);
         }
 

@@ -58,8 +58,63 @@ class RuntimeScopeTest {
         assertTrue(sessionScope.isAllowCrossSessionMemorySearch());
         assertEquals(Set.of("review"), sessionScope.getVisibleSkillNames());
         assertEquals(Set.of("docs"), sessionScope.getKnowledgeSourceIds());
+        assertEquals("local", sessionScope.getBackendType());
+        assertTrue(sessionScope.getFilesystemAvailable());
         assertEquals("local", sessionScope.getWorkspaceType());
         assertEquals("local", sessionScope.getCheckpointType());
+    }
+
+    @Test
+    void toSessionScopeMarksDockerPersistentFilesystemAvailable() {
+        var base = RuntimeScopeTestFixtures.completeScope();
+        var spec = new io.github.huskyagent.domain.scene.SceneConfig.BackendSpec();
+        spec.setDockerPersistFilesystem(true);
+        var policy = io.github.huskyagent.domain.runtime.RuntimePolicy.builder()
+                .sceneId("assistant")
+                .memoryPolicy(RuntimeScopeTestFixtures.runtimePolicy().getMemoryPolicy())
+                .capabilityView(RuntimeScopeTestFixtures.runtimePolicy().getCapabilityView())
+                .knowledgeSources(Set.of("docs"))
+                .backendPolicy(io.github.huskyagent.domain.scene.SceneConfig.BackendPolicy.DOCKER)
+                .backendSpec(spec)
+                .build();
+        RuntimeScope scope = RuntimeScope.builder()
+                .sessionId(base.getSessionId())
+                .principal(base.getPrincipal())
+                .channelIdentity(base.getChannelIdentity())
+                .runtimePolicy(policy)
+                .workingDirectory(base.getWorkingDirectory())
+                .filesystemAvailable(true)
+                .build();
+
+        SessionScope sessionScope = scope.toSessionScope();
+
+        assertEquals("docker", sessionScope.getBackendType());
+        assertTrue(sessionScope.getFilesystemAvailable());
+        assertEquals("/workspace", sessionScope.getRuntimeWorkingDirectory());
+    }
+
+    @Test
+    void toSessionScopeMarksSshFilesystemUnavailable() {
+        var base = RuntimeScopeTestFixtures.completeScope();
+        var policy = io.github.huskyagent.domain.runtime.RuntimePolicy.builder()
+                .sceneId("assistant")
+                .memoryPolicy(RuntimeScopeTestFixtures.runtimePolicy().getMemoryPolicy())
+                .capabilityView(RuntimeScopeTestFixtures.runtimePolicy().getCapabilityView())
+                .knowledgeSources(Set.of("docs"))
+                .backendPolicy(io.github.huskyagent.domain.scene.SceneConfig.BackendPolicy.SSH)
+                .build();
+        RuntimeScope scope = RuntimeScope.builder()
+                .sessionId(base.getSessionId())
+                .principal(base.getPrincipal())
+                .channelIdentity(base.getChannelIdentity())
+                .runtimePolicy(policy)
+                .workingDirectory(base.getWorkingDirectory())
+                .build();
+
+        SessionScope sessionScope = scope.toSessionScope();
+
+        assertEquals("ssh", sessionScope.getBackendType());
+        assertFalse(sessionScope.getFilesystemAvailable());
     }
 
     @Test

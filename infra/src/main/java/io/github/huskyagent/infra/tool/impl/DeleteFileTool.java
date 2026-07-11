@@ -2,6 +2,7 @@ package io.github.huskyagent.infra.tool.impl;
 
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import io.github.huskyagent.infra.tool.Toolset;
+import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import io.github.huskyagent.infra.tool.registry.ToolProvider;
 import io.github.huskyagent.infra.tool.registry.ToolResult;
@@ -30,12 +31,16 @@ public class DeleteFileTool implements ToolProvider {
 
     @Override
     public List<ToolDefinition> getTools() {
-        return List.of(ToolDefinition.of("delete_file",
+        return List.of(ToolDefinition.contextual("delete_file",
             "Delete a file. Use this instead of rm in terminal for single files. Refuses to delete directories or sensitive system paths.",
             Toolset.CORE, Args.class, this::handle));
     }
 
     public ToolResult handle(Map<String, Object> args) {
+        return handle(args, FileToolRuntime.localContext(workspace));
+    }
+
+    public ToolResult handle(Map<String, Object> args, ToolExecutionContext context) {
         String path = (String) args.get("path");
 
         if (path == null || path.isEmpty()) {
@@ -43,6 +48,7 @@ public class DeleteFileTool implements ToolProvider {
         }
 
         try {
+            Workspace workspace = FileToolRuntime.workspace(context, this.workspace);
             Path filePath = FileSafety.resolve(workspace, path);
             String denied = FileSafety.checkMutationAllowed(workspace, path, filePath);
             if (denied != null) {
@@ -64,6 +70,8 @@ public class DeleteFileTool implements ToolProvider {
             output.put("deleted", path);
             return ToolResult.success(output);
 
+        } catch (IllegalStateException e) {
+            return ToolResult.failure(e.getMessage());
         } catch (IOException e) {
             return ToolResult.failure("Failed to delete: " + e.getMessage());
         }

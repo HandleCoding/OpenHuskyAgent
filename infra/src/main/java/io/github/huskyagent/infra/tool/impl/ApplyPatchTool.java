@@ -3,6 +3,7 @@ package io.github.huskyagent.infra.tool.impl;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
+import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
 import io.github.huskyagent.infra.tool.match.FuzzyMatcher;
 import io.github.huskyagent.infra.tool.match.V4aPatchParser;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
@@ -62,7 +63,7 @@ public class ApplyPatchTool implements ToolProvider {
 
     @Override
     public List<ToolDefinition> getTools() {
-        return List.of(ToolDefinition.of("apply_patch",
+        return List.of(ToolDefinition.contextual("apply_patch",
             "Apply a V4A/Codex-style patch for multi-line or multi-file edits. " +
             "Format: '*** Begin Patch' ... '*** End Patch' with operations like " +
             "'*** Update File: path', '*** Add File: path', '*** Delete File: path', '*** Move File: old -> new'. " +
@@ -75,6 +76,10 @@ public class ApplyPatchTool implements ToolProvider {
     }
 
     ToolResult handle(Map<String, Object> args) {
+        return handle(args, FileToolRuntime.localContext(workspace));
+    }
+
+    ToolResult handle(Map<String, Object> args, ToolExecutionContext context) {
         String patchContent = (String) args.get("patch");
 
         if (patchContent == null || patchContent.isBlank()) {
@@ -92,15 +97,16 @@ public class ApplyPatchTool implements ToolProvider {
         }
 
         try {
-            List<PreparedChange> changes = prepareChanges(operations);
+            Workspace workspace = FileToolRuntime.workspace(context, this.workspace);
+            List<PreparedChange> changes = prepareChanges(workspace, operations);
             String sessionId = (String) args.get(ToolCallbackFactory.SESSION_ID_KEY);
-            return commitChanges(changes, sessionId);
+            return commitChanges(workspace, changes, sessionId);
         } catch (Exception e) {
             return ToolResult.failure("Patch validation failed (no files modified): " + e.getMessage());
         }
     }
 
-    private List<PreparedChange> prepareChanges(List<V4aPatchParser.PatchOperation> operations) throws Exception {
+    private List<PreparedChange> prepareChanges(Workspace workspace, List<V4aPatchParser.PatchOperation> operations) throws Exception {
         Map<Path, String> contentByPath = new LinkedHashMap<>();
         Map<Path, String> originalContentByPath = new LinkedHashMap<>();
         Map<Path, String> displayByPath = new LinkedHashMap<>();
@@ -109,10 +115,10 @@ public class ApplyPatchTool implements ToolProvider {
 
         for (V4aPatchParser.PatchOperation op : operations) {
             switch (op.operation()) {
-                case UPDATE -> prepareUpdate(op, contentByPath, originalContentByPath, displayByPath, deletedPaths);
-                case ADD -> prepareAdd(op, contentByPath, originalContentByPath, displayByPath, createdPaths, deletedPaths);
-                case DELETE -> prepareDelete(op, contentByPath, originalContentByPath, displayByPath, createdPaths, deletedPaths);
-                case MOVE -> prepareMove(op, contentByPath, originalContentByPath, displayByPath, createdPaths, deletedPaths);
+                case UPDATE -> prepareUpdate(workspace, op, contentByPath, originalContentByPath, displayByPath, deletedPaths);
+                case ADD -> prepareAdd(workspace, op, contentByPath, originalContentByPath, displayByPath, createdPaths, deletedPaths);
+                case DELETE -> prepareDelete(workspace, op, contentByPath, originalContentByPath, displayByPath, createdPaths, deletedPaths);
+                case MOVE -> prepareMove(workspace, op, contentByPath, originalContentByPath, displayByPath, createdPaths, deletedPaths);
             }
         }
 
@@ -129,25 +135,27 @@ public class ApplyPatchTool implements ToolProvider {
         return changes;
     }
 
-    private void prepareUpdate(V4aPatchParser.PatchOperation op,
+    private void prepareUpdate(Workspace workspace,
+                               V4aPatchParser.PatchOperation op,
                                Map<Path, String> contentByPath,
                                Map<Path, String> originalContentByPath,
                                Map<Path, String> displayByPath,
                                Set<Path> deletedPaths) throws Exception {
-        Path filePath = resolveWritablePath(op.filePath());
+        Path filePath = resolveWritablePath(workspace, op.filePath());
         if (deletedPaths.contains(filePath)) throw new IllegalArgumentException(op.filePath() + ": file was already deleted in this patch");
-        String current = currentContent(filePath, op.filePath(), contentByPath, originalContentByPath, displayByPath);
+        String current = currentContent(workspace, filePath, op.filePath(), contentByPath, originalContentByPath, displayByPath);
         String updated = applyHunks(current, op);
         contentByPath.put(filePath, updated);
     }
 
-    private void prepareAdd(V4aPatchParser.PatchOperation op,
+    private void prepareAdd(Workspace workspace,
+                            V4aPatchParser.PatchOperation op,
                             Map<Path, String> contentByPath,
                             Map<Path, String> originalContentByPath,
                             Map<Path, String> displayByPath,
                             Set<Path> createdPaths,
                             Set<Path> deletedPaths) throws Exception {
-        Path filePath = resolveWritablePath(op.filePath());
+        Path filePath = resolveWritablePath(workspace, op.filePath());
         if (workspace.exists(filePath) || contentByPath.containsKey(filePath)) {
             throw new IllegalArgumentException(op.filePath() + ": file already exists for add");
         }
@@ -163,31 +171,33 @@ public class ApplyPatchTool implements ToolProvider {
         createdPaths.add(filePath);
     }
 
-    private void prepareDelete(V4aPatchParser.PatchOperation op,
+    private void prepareDelete(Workspace workspace,
+                               V4aPatchParser.PatchOperation op,
                                Map<Path, String> contentByPath,
                                Map<Path, String> originalContentByPath,
                                Map<Path, String> displayByPath,
                                Set<Path> createdPaths,
                                Set<Path> deletedPaths) throws Exception {
-        Path filePath = resolveWritablePath(op.filePath());
+        Path filePath = resolveWritablePath(workspace, op.filePath());
         if (createdPaths.contains(filePath)) throw new IllegalArgumentException(op.filePath() + ": cannot delete file added earlier in same patch");
-        String current = currentContent(filePath, op.filePath(), contentByPath, originalContentByPath, displayByPath);
+        String current = currentContent(workspace, filePath, op.filePath(), contentByPath, originalContentByPath, displayByPath);
         contentByPath.put(filePath, null);
         deletedPaths.add(filePath);
     }
 
-    private void prepareMove(V4aPatchParser.PatchOperation op,
+    private void prepareMove(Workspace workspace,
+                             V4aPatchParser.PatchOperation op,
                              Map<Path, String> contentByPath,
                              Map<Path, String> originalContentByPath,
                              Map<Path, String> displayByPath,
                              Set<Path> createdPaths,
                              Set<Path> deletedPaths) throws Exception {
-        Path sourcePath = resolveWritablePath(op.filePath());
-        Path targetPath = resolveWritablePath(op.newPath());
+        Path sourcePath = resolveWritablePath(workspace, op.filePath());
+        Path targetPath = resolveWritablePath(workspace, op.newPath());
         if (workspace.exists(targetPath) || contentByPath.containsKey(targetPath)) {
             throw new IllegalArgumentException(op.newPath() + ": destination already exists");
         }
-        String sourceContent = currentContent(sourcePath, op.filePath(), contentByPath, originalContentByPath, displayByPath);
+        String sourceContent = currentContent(workspace, sourcePath, op.filePath(), contentByPath, originalContentByPath, displayByPath);
         contentByPath.put(sourcePath, null);
         contentByPath.put(targetPath, sourceContent);
         originalContentByPath.put(targetPath, null);
@@ -196,7 +206,7 @@ public class ApplyPatchTool implements ToolProvider {
         deletedPaths.add(sourcePath);
     }
 
-    private Path resolveWritablePath(String path) throws Exception {
+    private Path resolveWritablePath(Workspace workspace, String path) throws Exception {
         Path filePath = FileSafety.resolve(workspace, path);
         String denied = FileSafety.checkWriteAllowed(workspace, path, filePath);
         if (denied != null) {
@@ -205,7 +215,8 @@ public class ApplyPatchTool implements ToolProvider {
         return filePath;
     }
 
-    private String currentContent(Path filePath,
+    private String currentContent(Workspace workspace,
+                                  Path filePath,
                                   String displayPath,
                                   Map<Path, String> contentByPath,
                                   Map<Path, String> originalContentByPath,
@@ -292,10 +303,10 @@ public class ApplyPatchTool implements ToolProvider {
         return content.substring(0, eol + 1) + insertText + "\n" + content.substring(eol + 1);
     }
 
-    private ToolResult commitChanges(List<PreparedChange> changes, String sessionId) throws Exception {
+    private ToolResult commitChanges(Workspace workspace, List<PreparedChange> changes, String sessionId) throws Exception {
         Map<Path, String> rollbackContent = new LinkedHashMap<>();
         List<Path> createdDuringCommit = new ArrayList<>();
-        List<String> warnings = collectWarnings(changes, sessionId);
+        List<String> warnings = collectWarnings(workspace, changes, sessionId);
         try {
             for (PreparedChange change : changes) {
                 if (workspace.exists(change.path())) {
@@ -318,7 +329,7 @@ public class ApplyPatchTool implements ToolProvider {
                 }
             }
         } catch (Exception e) {
-            rollback(rollbackContent, createdDuringCommit);
+            rollback(workspace, rollbackContent, createdDuringCommit);
             return ToolResult.failure("Patch apply failed and rollback was attempted. Run `git diff` to verify state: " + e.getMessage());
         }
 
@@ -349,7 +360,7 @@ public class ApplyPatchTool implements ToolProvider {
         return ToolResult.success(output);
     }
 
-    private List<String> collectWarnings(List<PreparedChange> changes, String sessionId) throws Exception {
+    private List<String> collectWarnings(Workspace workspace, List<PreparedChange> changes, String sessionId) throws Exception {
         if (sessionId == null) {
             return List.of();
         }
@@ -368,7 +379,7 @@ public class ApplyPatchTool implements ToolProvider {
         return warnings;
     }
 
-    private void rollback(Map<Path, String> rollbackContent, List<Path> createdDuringCommit) {
+    private void rollback(Workspace workspace, Map<Path, String> rollbackContent, List<Path> createdDuringCommit) {
         for (Path created : createdDuringCommit) {
             try {
                 workspace.deleteIfExists(created);

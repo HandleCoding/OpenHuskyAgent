@@ -9,6 +9,7 @@ import io.github.huskyagent.infra.execute.LocalBackend;
 import io.github.huskyagent.infra.session.SessionContext;
 import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
+import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
 import io.github.huskyagent.infra.tool.approval.ApprovalRequest;
 import io.github.huskyagent.infra.tool.registry.ToolDefinition;
 import io.github.huskyagent.infra.tool.registry.ToolProvider;
@@ -121,7 +122,7 @@ public class TerminalTool implements ToolProvider {
         ArrayNode required = schema.putArray("required");
         required.add("command");
 
-        return ToolDefinition.withApproval("terminal",
+        return ToolDefinition.withApprovalContextual("terminal",
             "Execute shell commands. Use for builds, git, package managers. Do NOT use for file operations (use file tools instead).",
             Toolset.TERMINAL, schema, this::handleTerminal, this::checkTerminalApproval);
     }
@@ -139,6 +140,10 @@ public class TerminalTool implements ToolProvider {
     }
 
     ToolResult handleTerminal(Map<String, Object> args) {
+        return handleTerminal(args, null);
+    }
+
+    ToolResult handleTerminal(Map<String, Object> args, ToolExecutionContext context) {
         String command = (String) args.get("command");
         int timeout = args.containsKey("timeout")
             ? Math.min(((Number) args.get("timeout")).intValue(), limitsConfig.getTerminalMaxTimeout())
@@ -148,10 +153,10 @@ public class TerminalTool implements ToolProvider {
             return ToolResult.failure("command required");
         }
 
-        ExecutionBackend backend = resolveBackend(args);
+        ExecutionBackend backend = resolveBackend(args, context);
 
         String workdir = args.containsKey("workdir") ? (String) args.get("workdir")
-            : defaultWorkdirFor(backend);
+            : defaultWorkdirFor(backend, context);
 
         if (background) {
             String taskId = backend.startBackground(command, workdir);
@@ -208,18 +213,22 @@ public class TerminalTool implements ToolProvider {
         ArrayNode required = schema.putArray("required");
         required.add("action");
 
-        return ToolDefinition.of("process",
+        return ToolDefinition.contextual("process",
             "Manage background processes. Actions: poll (status + output preview), log (paginated output by line), wait (block until done), kill (terminate), list (show all).",
             Toolset.TERMINAL, schema, this::handleProcess);
     }
 
     ToolResult handleProcess(Map<String, Object> args) {
+        return handleProcess(args, null);
+    }
+
+    ToolResult handleProcess(Map<String, Object> args, ToolExecutionContext context) {
         String action = (String) args.get("action");
         String taskId = (String) args.get("task_id");
 
         if (action == null) return ToolResult.failure("action required");
 
-        ExecutionBackend backend = resolveBackend(args);
+        ExecutionBackend backend = resolveBackend(args, context);
 
         return switch (action) {
             case "poll" -> {
@@ -278,7 +287,10 @@ public class TerminalTool implements ToolProvider {
         };
     }
 
-    private ExecutionBackend resolveBackend(Map<String, Object> args) {
+    private ExecutionBackend resolveBackend(Map<String, Object> args, ToolExecutionContext context) {
+        if (context != null && context.hasRuntimeEnvironment()) {
+            return context.executionBackend();
+        }
         String sessionId = (String) args.get(ToolCallbackFactory.SESSION_ID_KEY);
         if (sessionId == null) sessionId = SessionContext.get();
         if (sessionId == null) {
@@ -287,10 +299,14 @@ public class TerminalTool implements ToolProvider {
         return backendFactory.getForSession(sessionId);
     }
 
-    private String defaultWorkdirFor(ExecutionBackend backend) {
+    private String defaultWorkdirFor(ExecutionBackend backend, ToolExecutionContext context) {
         if (backend instanceof DockerBackend) {
             // Containers define their own working directory contract.
             return null;
+        }
+        var contextScope = context != null ? context.sessionScope() : null;
+        if (contextScope != null && contextScope.getWorkingDirectory() != null) {
+            return contextScope.getWorkingDirectory();
         }
         var scope = SessionContext.getScope();
         return scope != null && scope.getWorkingDirectory() != null

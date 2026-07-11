@@ -378,6 +378,8 @@ Transport -> Channel -> Channel Instance -> Agent -> Runtime Scope -> ReAct Grap
 
 Storage 默认是 local。非本地 workspace/checkpoint provider 是扩展点；不支持的 remote type 会 fail fast，不会静默退回本地行为。
 
+Tool runtime 跟随 agent 选择的 backend。Terminal/process 工具通过 runtime backend 执行。文件工具仅在 local backend 或开启 persistent filesystem 的 Docker backend 下可用；SSH 和 non-persistent Docker runtime 会隐藏文件工具，若被直接调用也会 fail closed。URL 型 MCP server 在 local/Docker/SSH 下都可见，stdio MCP server 仅 local backend 可见。
+
 ## 安全与生产加固
 
 在把 Husky 暴露到本地开发以外的环境前：

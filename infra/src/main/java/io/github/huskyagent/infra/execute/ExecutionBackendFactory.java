@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.Locale;
 import java.util.concurrent.*;
 
 /**
@@ -45,6 +46,17 @@ public class ExecutionBackendFactory {
         sessionMeta.put(sessionId, new SessionMeta(backendConfig));
     }
 
+    public void inheritSession(String parentSessionId, String childSessionId) {
+        if (parentSessionId == null || parentSessionId.isBlank()
+                || childSessionId == null || childSessionId.isBlank()) {
+            return;
+        }
+        SessionMeta parentMeta = sessionMeta.get(parentSessionId);
+        if (parentMeta != null) {
+            sessionMeta.put(childSessionId, parentMeta);
+        }
+    }
+
     /**
      * Get or lazily create the ExecutionBackend for a session.
      * If the session already has a live backend (e.g. from a previous turn), reuse it.
@@ -60,6 +72,31 @@ public class ExecutionBackendFactory {
         SessionMeta meta = sessionMeta.get(sessionId);
         if (meta == null) {
             return getOrCreate(sessionId, BackendConfig.builder().type("local").build());
+        }
+        return getOrCreate(sessionId, meta.backendConfig());
+    }
+
+    public ExecutionBackend getForSession(String sessionId, String expectedBackendType) {
+        String expected = normalizeBackendType(expectedBackendType);
+        if ("local".equals(expected)) {
+            return getForSession(sessionId);
+        }
+
+        SessionMeta meta = sessionMeta.get(sessionId);
+        if (meta == null) {
+            BackendEntry existing = backends.get(sessionId);
+            if (existing != null && existing.backend.isAlive() && expected.equals(existing.backendType)) {
+                existing.touch();
+                return existing.backend;
+            }
+            throw new IllegalStateException("No backend metadata registered for non-local backend '"
+                    + expected + "' in session " + sessionId);
+        }
+
+        String actual = normalizeBackendType(meta.backendConfig().getType());
+        if (!expected.equals(actual)) {
+            throw new IllegalStateException("Backend type mismatch for session " + sessionId
+                    + ": expected " + expected + ", registered " + actual);
         }
         return getOrCreate(sessionId, meta.backendConfig());
     }
@@ -98,28 +135,34 @@ public class ExecutionBackendFactory {
     }
 
     private ExecutionBackend getOrCreate(String sessionId, BackendConfig cfg) {
+        BackendConfig effectiveConfig = cfg != null ? cfg : BackendConfig.builder().type("local").build();
+        String backendType = normalizeBackendType(effectiveConfig.getType());
         BackendEntry entry = backends.compute(sessionId, (sid, existing) -> {
-            if (existing != null && existing.backend.isAlive()) {
+            if (existing != null && existing.backend.isAlive() && existing.backendType.equals(backendType)) {
                 existing.touch();
                 return existing;
             }
             if (existing != null) {
                 safeRelease(existing.backend);
             }
-            BackendConfig effectiveConfig = cfg != null ? cfg : BackendConfig.builder().type("local").build();
             ExecutionBackend backend = createBackend(effectiveConfig);
-            log.info("Created {} backend for session={}", effectiveConfig.getType(), sessionId);
-            return new BackendEntry(backend);
+            log.info("Created {} backend for session={}", backendType, sessionId);
+            return new BackendEntry(backend, backendType);
         });
         return entry.backend;
     }
 
     private ExecutionBackend createBackend(BackendConfig cfg) {
-        return switch (cfg.getType()) {
+        return switch (normalizeBackendType(cfg.getType())) {
             case "docker" -> new DockerBackend(cfg);
             case "ssh"    -> new SshBackend(cfg);
             default       -> new LocalBackend(cfg);
         };
+    }
+
+    private String normalizeBackendType(String type) {
+        String normalized = type != null ? type.trim().toLowerCase(Locale.ROOT) : "";
+        return normalized.isEmpty() ? "local" : normalized;
     }
 
     private void reapIdleBackends() {
@@ -152,10 +195,12 @@ public class ExecutionBackendFactory {
 
     private static class BackendEntry {
         final ExecutionBackend backend;
+        final String backendType;
         volatile long lastUsedMs;
 
-        BackendEntry(ExecutionBackend backend) {
+        BackendEntry(ExecutionBackend backend, String backendType) {
             this.backend = backend;
+            this.backendType = backendType;
             this.lastUsedMs = System.currentTimeMillis();
         }
 

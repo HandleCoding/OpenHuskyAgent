@@ -6,6 +6,7 @@ import io.github.huskyagent.domain.memory.policy.MemoryPolicyConfig;
 import io.github.huskyagent.domain.prompt.section.*;
 import io.github.huskyagent.infra.knowledge.KnowledgeManager;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
+import io.github.huskyagent.domain.scene.SceneConfig;
 import io.github.huskyagent.infra.memory.MemoryManager;
 import io.github.huskyagent.infra.session.SessionScope;
 import io.github.huskyagent.infra.skill.SkillManager;
@@ -78,6 +79,39 @@ class PromptBuilderTest {
         assertTrue(prompt.contains("Date"), "Should contain date");
         assertTrue(prompt.contains("Time"), "Should contain time");
         assertTrue(prompt.contains("OS"), "Should contain OS info");
+    }
+
+    @Test
+    void dockerRuntimeSectionUsesRuntimeWorkingDirectoryFromSessionScope() {
+        SceneConfig.BackendSpec spec = new SceneConfig.BackendSpec();
+        spec.setDockerWorkdir("/image-default");
+        RuntimePolicy policy = RuntimePolicy.builder()
+                .backendPolicy(SceneConfig.BackendPolicy.DOCKER)
+                .backendSpec(spec)
+                .capabilityView(CapabilityView.builder()
+                        .visibleTools(List.of())
+                        .visibleToolNames(Set.of())
+                        .visibleToolsets(Set.of())
+                        .visibleSkills(List.of())
+                        .visibleSkillNames(Set.of())
+                        .visiblePromptSections(Set.of())
+                        .build())
+                .contextPolicy(ContextPolicy.builder().enabled(true).build())
+                .memoryPolicy(MemoryPolicyConfig.from(null))
+                .build();
+        PromptContext context = PromptContext.of("docker-session", Path.of("/host/workspace"))
+                .runtimePolicy(policy)
+                .sessionScope(SessionScope.builder()
+                        .sessionId("docker-session")
+                        .backendType("docker")
+                        .runtimeWorkingDirectory("/app")
+                        .build());
+
+        String prompt = promptBuilder.build(context);
+
+        assertTrue(prompt.contains("Working Directory**: /app (Docker container)"));
+        assertTrue(prompt.contains("Working directory is /app."));
+        assertFalse(prompt.contains("Working Directory**: /workspace"));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package io.github.huskyagent.application.session;
 
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
+import io.github.huskyagent.domain.scene.SceneConfig;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.Principal;
 import io.github.huskyagent.infra.session.SessionScope;
@@ -25,6 +26,8 @@ public class RuntimeScope {
 
     Path workingDirectory;
 
+    Boolean filesystemAvailable;
+
     public RuntimeScope withWorkingDirectory(Path workingDirectory) {
         requireCompleteForExecution();
         if (workingDirectory == null) {
@@ -36,6 +39,7 @@ public class RuntimeScope {
                 .channelIdentity(channelIdentity)
                 .runtimePolicy(runtimePolicy)
                 .workingDirectory(workingDirectory)
+                .filesystemAvailable(filesystemAvailable)
                 .build();
     }
 
@@ -67,8 +71,29 @@ public class RuntimeScope {
                 .allowCrossSessionMemorySearch(runtimePolicy.getMemoryPolicy().isAllowCrossSessionSearch())
                 .visibleSkillNames(runtimePolicy.getCapabilityView().getVisibleSkillNames())
                 .knowledgeSourceIds(runtimePolicy.getKnowledgeSources())
+                .backendType(backendType(runtimePolicy))
+                .filesystemAvailable(filesystemAvailable != null ? filesystemAvailable : localFilesystemDefault(runtimePolicy))
+                .runtimeWorkingDirectory(runtimeWorkingDirectory(runtimePolicy))
                 .workspaceType(runtimePolicy.effectiveWorkspaceType())
                 .checkpointType(runtimePolicy.effectiveCheckpointType())
                 .build();
+    }
+
+    private String backendType(RuntimePolicy policy) {
+        SceneConfig.BackendPolicy backendPolicy = policy.getBackendPolicy();
+        return backendPolicy != null ? backendPolicy.name().toLowerCase() : "local";
+    }
+
+    private boolean localFilesystemDefault(RuntimePolicy policy) {
+        SceneConfig.BackendPolicy backendPolicy = policy.getBackendPolicy();
+        return backendPolicy == null || backendPolicy == SceneConfig.BackendPolicy.LOCAL;
+    }
+
+    private String runtimeWorkingDirectory(RuntimePolicy policy) {
+        if (policy.getBackendPolicy() != SceneConfig.BackendPolicy.DOCKER) {
+            return null;
+        }
+        SceneConfig.BackendSpec spec = policy.getBackendSpec();
+        return spec != null && spec.getDockerWorkdir() != null ? spec.getDockerWorkdir() : "/workspace";
     }
 }
