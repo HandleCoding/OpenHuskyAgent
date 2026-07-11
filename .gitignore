@@ -52,3 +52,7 @@ skills/
 
 ### Environment config (contains API keys) ###
 .env
+
+### Local planning / internal roadmaps (not for public repo) ###
+docs/roadmap.md
+docs/agent-platform-roadmap.md
