@@ -18,13 +18,19 @@ import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.Principal;
 import io.github.huskyagent.infra.context.TokenCounter;
 import io.github.huskyagent.infra.context.TokenUsage;
+import io.github.huskyagent.infra.llm.ModelSelection;
+import io.github.huskyagent.infra.llm.SpringAiLlmMessageMapper;
+import io.github.huskyagent.infra.llm.api.LlmMessage;
+import io.github.huskyagent.infra.llm.api.LlmRequest;
+import io.github.huskyagent.infra.llm.api.LlmResult;
+import io.github.huskyagent.infra.llm.api.LlmStreamEvent;
+import io.github.huskyagent.infra.llm.api.LlmTransport;
+import io.github.huskyagent.infra.llm.api.LlmUsage;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.AsyncNodeActionWithConfig;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.metadata.Usage;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -40,7 +46,8 @@ public class CallModelNode {
 
     private static final String DYNAMIC_PROMPT_TURN_ID_METADATA = "dynamicPromptTurnId";
 
-    private final ChatClient chatClient;
+    private final LlmTransport llmTransport;
+    private final ModelSelection modelSelection;
     private final LlmRetryPolicy llmRetryPolicy;
     private final LlmUsageDetailsExtractor usageDetailsExtractor;
     private final DynamicPromptSnapshotCache dynamicPromptSnapshotCache;
@@ -53,7 +60,8 @@ public class CallModelNode {
     private final TokenCounter tokenCounter;
 
     public CallModelNode(Dependencies dependencies) {
-        this.chatClient = dependencies.chatClient();
+        this.llmTransport = dependencies.llmTransport();
+        this.modelSelection = dependencies.modelSelection();
         this.llmRetryPolicy = dependencies.llmRetryPolicy();
         this.usageDetailsExtractor = dependencies.usageDetailsExtractor();
         this.dynamicPromptSnapshotCache = dependencies.dynamicPromptSnapshotCache();
@@ -66,7 +74,8 @@ public class CallModelNode {
         this.tokenCounter = dependencies.tokenCounter();
     }
 
-    public record Dependencies(ChatClient chatClient,
+    public record Dependencies(LlmTransport llmTransport,
+                               ModelSelection modelSelection,
                                LlmRetryPolicy llmRetryPolicy,
                                LlmUsageDetailsExtractor usageDetailsExtractor,
                                DynamicPromptSnapshotCache dynamicPromptSnapshotCache,
@@ -135,13 +144,23 @@ public class CallModelNode {
                 long initialBackoffMs = llmRetryPolicy.getInitialBackoffMs();
                 Exception lastException = null;
 
-                StringBuilder fullText      = new StringBuilder();
-                StringBuilder fullReasoning = new StringBuilder();
-                final AssistantMessage[] lastWithToolCalls = {null};
-                final String[]           finalFinishReason = {"unknown"};
-                AtomicReference<Usage> lastUsage = new AtomicReference<>();
+                LlmResult llmResult = null;
                 AtomicReference<Long> firstChunkLatencyMs = new AtomicReference<>();
                 AtomicReference<Long> firstTokenLatencyMs = new AtomicReference<>();
+
+                List<LlmMessage> llmMessages = new ArrayList<>();
+                if (systemPrompt != null && !systemPrompt.isBlank()) {
+                    llmMessages.add(LlmMessage.system(systemPrompt));
+                }
+                llmMessages.addAll(SpringAiLlmMessageMapper.toLlmMessages(requestMessages));
+                LlmRequest llmRequest = LlmRequest.builder()
+                        .model(modelSelection != null ? modelSelection.getModelName() : null)
+                        .messages(llmMessages)
+                        .tools(SpringAiLlmMessageMapper.toLlmTools(requestToolContext.toolDefinitions()))
+                        .temperature(modelSelection != null ? modelSelection.getTemperature() : null)
+                        .maxTokens(modelSelection != null ? modelSelection.getMaxTokens() : null)
+                        .stream(true)
+                        .build();
 
                 for (int attempt = 0; attempt <= maxRetries; attempt++) {
                     if (attempt > 0) {
@@ -150,55 +169,23 @@ public class CallModelNode {
                         Thread.sleep(backoff);
                     }
 
-                    fullText.setLength(0);
-                    fullReasoning.setLength(0);
-                    lastWithToolCalls[0] = null;
-                    finalFinishReason[0] = "unknown";
-                    lastUsage.set(null);
                     firstChunkLatencyMs.set(null);
                     firstTokenLatencyMs.set(null);
 
                     try {
-                        chatClient.prompt()
-                                .messages(requestMessages)
-                                .toolCallbacks(requestToolContext.toolCallbacks())
-                                .stream()
-                                .chatResponse()
-                                .doOnNext(chunk -> {
-                                    firstChunkLatencyMs.compareAndSet(null, elapsedMs(llmStartNanos));
-                                    Usage u = chunk.getMetadata() != null ? chunk.getMetadata().getUsage() : null;
-                                    if (u != null && (u.getTotalTokens() != null && u.getTotalTokens() > 0)) {
-                                        lastUsage.set(u);
-                                    }
-                                    if (chunk.getResult() == null || chunk.getResult().getOutput() == null) return;
-                                    AssistantMessage am = chunk.getResult().getOutput();
+                        llmResult = llmTransport.stream(llmRequest, event -> {
+                            firstChunkLatencyMs.compareAndSet(null, elapsedMs(llmStartNanos));
+                            if (event instanceof LlmStreamEvent.TextDelta td) {
+                                firstTokenLatencyMs.compareAndSet(null, elapsedMs(llmStartNanos));
+                                eventBus.streamToken(sessionId, td.text(), false);
+                            } else if (event instanceof LlmStreamEvent.ReasoningDelta rd) {
+                                firstTokenLatencyMs.compareAndSet(null, elapsedMs(llmStartNanos));
+                                eventBus.streamToken(sessionId, rd.text(), true);
+                            }
+                        });
 
-                                    Object reasoning = am.getMetadata().get("reasoningContent");
-                                    if (reasoning != null && !reasoning.toString().isEmpty()) {
-                                        String r = reasoning.toString();
-                                        firstTokenLatencyMs.compareAndSet(null, elapsedMs(llmStartNanos));
-                                        fullReasoning.append(r);
-                                        eventBus.streamToken(sessionId, r, true);
-                                        return;
-                                    }
-
-                                    String token = am.getText();
-                                    if (token != null && !token.isEmpty()) {
-                                        firstTokenLatencyMs.compareAndSet(null, elapsedMs(llmStartNanos));
-                                        fullText.append(token);
-                                        eventBus.streamToken(sessionId, token, false);
-                                    }
-
-                                    if (am.hasToolCalls()) lastWithToolCalls[0] = am;
-
-                                    if (chunk.getResult().getMetadata().getFinishReason() != null) {
-                                        String fr = chunk.getResult().getMetadata().getFinishReason().toString();
-                                        if (!fr.isBlank() && !"NONE".equals(fr)) finalFinishReason[0] = fr;
-                                    }
-                                })
-                                .blockLast(Duration.ofMinutes(callBlockTimeoutMinutes));
-
-                        LlmUsageDetails usageDetails = usageDetailsExtractor.extract(lastUsage.get());
+                        LlmUsage usage = llmResult.usage();
+                        LlmUsageDetails usageDetails = usageDetailsFrom(usage);
                         log.info("[model] LLM timing breakdown: session={}, attempt={}, promptBuild={}ms, beforeHook={}ms, debugDump={}ms, firstChunk={}ms, firstToken={}ms, stream={}ms, total={}ms, requestMessages={}, dynamicPromptChars={}, dynamicPromptHash={}, dynamicPromptCacheHit={}, estimatedHistoryTokens={}, estimatedStablePromptTokens={}, estimatedDynamicPromptTokens={}, estimatedRequestTokens={}, estimatedPromptTokens={}, promptTokens={}, completionTokens={}, totalTokens={}, cachedPromptTokens={}, uncachedPromptTokens={}, nativeUsageType={}, hasPromptTokenDetails={}",
                                 sessionId,
                                 attempt + 1,
@@ -226,7 +213,7 @@ public class CallModelNode {
                                 usageDetails.nativeUsageType(),
                                 usageDetails.hasPromptTokenDetails());
 
-                        if (isEmptyFinalResponse(fullText, lastWithToolCalls[0])) {
+                        if (isEmptyFinalResponse(llmResult)) {
                             throw new EmptyLlmResponseException();
                         }
 
@@ -261,39 +248,19 @@ public class CallModelNode {
                 if (lastException != null) {
                     throw lastException;
                 }
-
-                AssistantMessage output;
-                String reasoning = fullReasoning.isEmpty() ? null : fullReasoning.toString();
-                if (lastWithToolCalls[0] != null) {
-                    AssistantMessage tc = lastWithToolCalls[0];
-                    String finalText = fullText.isEmpty()
-                            ? (tc.getText() != null ? tc.getText() : "")
-                            : fullText.toString();
-                    AssistantMessage.Builder builder = AssistantMessage.builder()
-                            .content(finalText)
-                            .toolCalls(tc.getToolCalls());
-                    if (reasoning != null) {
-                        builder.properties(Map.of("reasoningContent", reasoning));
-                    }
-                    output = builder.build();
-                } else {
-                    if (reasoning != null) {
-                        output = AssistantMessage.builder()
-                                .content(fullText.toString())
-                                .properties(Map.of("reasoningContent", reasoning))
-                                .build();
-                    } else {
-                        output = new AssistantMessage(fullText.toString());
-                    }
+                if (llmResult == null) {
+                    throw new EmptyLlmResponseException();
                 }
 
-                GraphUtils.logLlmResponse(output, finalFinishReason[0]);
+                AssistantMessage output = SpringAiLlmMessageMapper.toAssistantMessage(llmResult);
+                String finishReason = llmResult.finishReason() != null ? llmResult.finishReason() : "unknown";
+                GraphUtils.logLlmResponse(output, finishReason);
                 int newCount = state.modelCallCount() + 1;
 
                 // ── LLM_CALL_AFTER Hook ────────────────────────────────────────
                 hookRegistry.fireAfter(HookEvent.LLM_CALL_AFTER, sessionId,
                         Map.of(HookDataKeys.LLM_RESPONSE, output,
-                               HookDataKeys.LLM_FINISH_REASON, finalFinishReason[0],
+                               HookDataKeys.LLM_FINISH_REASON, finishReason,
                                HookDataKeys.LLM_DURATION_MS, System.currentTimeMillis() - startTime,
                                HookDataKeys.LLM_MODEL_CALL_COUNT, newCount,
                                HookDataKeys.LLM_HAS_TOOL_CALLS, output.hasToolCalls()));
@@ -301,26 +268,43 @@ public class CallModelNode {
                 Map<String, Object> result = new java.util.HashMap<>();
                 result.put("messages", output);
                 result.put(ReActAgentState.MODEL_CALL_COUNT, newCount);
-                Usage u = lastUsage.get();
-                if (u != null) {
+                LlmUsage u = llmResult.usage();
+                if (u != null && (u.promptTokens() != null || u.completionTokens() != null || u.totalTokens() != null)) {
                     result.put(ReActAgentState.LAST_TOKEN_USAGE, new TokenUsage(
-                            u.getPromptTokens() != null ? u.getPromptTokens().intValue() : 0,
-                            u.getCompletionTokens() != null ? u.getCompletionTokens().intValue() : 0,
-                            u.getTotalTokens() != null ? u.getTotalTokens().intValue() : 0));
+                            u.promptTokens() != null ? u.promptTokens() : 0,
+                            u.completionTokens() != null ? u.completionTokens() : 0,
+                            u.totalTokens() != null ? u.totalTokens() : 0));
                 }
                 return completedFuture(result);
             } catch (Exception e) {
                 Throwable cause = e.getCause() != null ? e.getCause() : e;
                 if (isCancellation(e)) {
                     log.info("[model] LLM call cancelled: session={}", sessionId);
-                } else if (cause instanceof org.springframework.web.reactive.function.client.WebClientResponseException wce) {
-                    log.error("[model] API {} error: body={}", wce.getStatusCode(), wce.getResponseBodyAsString());
+                } else if (cause instanceof io.github.huskyagent.infra.llm.transport.OpenAiChatCompletionsTransport.LlmHttpException httpEx) {
+                    log.error("[model] API {} error: body={}", httpEx.statusCode(), httpEx.body());
                 } else {
                     log.error("[model] LLM call failed: {}", cause.getMessage());
                 }
                 return failedFuture(e);
             }
         };
+    }
+
+    private LlmUsageDetails usageDetailsFrom(LlmUsage usage) {
+        if (usage == null) {
+            return usageDetailsExtractor.extract(null);
+        }
+        // Reuse extractor for null-safe zeros via a lightweight adapter is overkill; build details manually
+        return new LlmUsageDetails(
+                usage.promptTokens() != null ? usage.promptTokens() : 0,
+                usage.completionTokens() != null ? usage.completionTokens() : 0,
+                usage.totalTokens() != null ? usage.totalTokens() : 0,
+                usage.cachedPromptTokens(),
+                usage.cachedPromptTokens() != null && usage.promptTokens() != null
+                        ? Math.max(0, usage.promptTokens() - usage.cachedPromptTokens())
+                        : null,
+                "llm-transport",
+                usage.cachedPromptTokens() != null);
     }
 
     private static long elapsedMs(long startNanos) {
@@ -376,6 +360,19 @@ public class CallModelNode {
 
     static boolean isEmptyFinalResponse(StringBuilder fullText, AssistantMessage lastWithToolCalls) {
         return lastWithToolCalls == null && (fullText == null || fullText.toString().isBlank());
+    }
+
+    static boolean isEmptyFinalResponse(LlmResult result) {
+        if (result == null) {
+            return true;
+        }
+        if (result.hasToolCalls()) {
+            return false;
+        }
+        boolean noText = result.text() == null || result.text().isBlank();
+        // Reasoning-only is still a non-empty model turn for thinking models (e.g. DeepSeek v4).
+        boolean noReasoning = result.reasoning() == null || result.reasoning().isBlank();
+        return noText && noReasoning;
     }
 
     private static final class EmptyLlmResponseException extends RuntimeException {

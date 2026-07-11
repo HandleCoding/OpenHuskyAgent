@@ -25,16 +25,39 @@ public class LlmProperties {
     @Data
     public static class Provider {
         /**
-         * Protocol type. v1 only supports {@code openai-compatible}.
+         * Wire protocol: {@code openai_chat_completions} or {@code anthropic_messages}.
+         * Prefer this over legacy {@link #type}.
+         */
+        private String protocol;
+        /**
+         * Legacy alias for protocol. Values like {@code openai-compatible} still work.
          */
         private String type = "openai-compatible";
         private String baseUrl;
         private String apiKey;
         private String completionsPath = "/v1/chat/completions";
         /**
+         * Anthropic Messages path (relative to base-url). Default {@code /v1/messages}.
+         */
+        private String messagesPath = "/v1/messages";
+        /**
+         * Anthropic API version header.
+         */
+        private String anthropicVersion = "2023-06-01";
+        /**
          * Optional default model name when agent selection omits model name.
          */
         private String model;
         private Double temperature;
+
+        /**
+         * Effective protocol config string (protocol preferred, else type).
+         */
+        public String effectiveProtocolConfig() {
+            if (protocol != null && !protocol.isBlank()) {
+                return protocol.trim();
+            }
+            return type;
+        }
     }
 }

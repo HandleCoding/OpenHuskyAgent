@@ -1,6 +1,9 @@
 package io.github.huskyagent.infra.llm;
 
 import io.github.huskyagent.infra.config.AgentConfig;
+import io.github.huskyagent.infra.llm.api.LlmProtocol;
+import io.github.huskyagent.infra.llm.api.LlmTransport;
+import io.github.huskyagent.infra.llm.transport.LlmTransportFactory;
 import io.micrometer.observation.ObservationRegistry;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +26,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Resolves {@link ModelSelection} to a cached {@link ChatModel}.
+ * Resolves {@link ModelSelection} to a cached {@link LlmTransport} (primary) or legacy {@link ChatModel}.
  * Seeds a {@code main} provider from {@code spring.ai.openai.*} when not explicitly configured.
  */
 @Slf4j
@@ -38,6 +41,7 @@ public class LlmClientRegistry {
     private final ToolCallingManager toolCallingManager;
     private final ObjectProvider<RetryTemplate> retryTemplateProvider;
     private final ObjectProvider<ObservationRegistry> observationRegistryProvider;
+    private final LlmTransportFactory transportFactory;
 
     private final String springBaseUrl;
     private final String springApiKey;
@@ -47,6 +51,7 @@ public class LlmClientRegistry {
 
     private final ConcurrentHashMap<String, OpenAiApi> apiCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ChatModel> modelCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, LlmTransport> transportCache = new ConcurrentHashMap<>();
 
     public LlmClientRegistry(
             LlmProperties llmProperties,
@@ -69,6 +74,7 @@ public class LlmClientRegistry {
         this.springCompletionsPath = springCompletionsPath;
         this.springModel = springModel;
         this.springTemperature = springTemperature;
+        this.transportFactory = new LlmTransportFactory();
     }
 
     @PostConstruct
@@ -154,6 +160,19 @@ public class LlmClientRegistry {
                 .build();
     }
 
+    /**
+     * Primary model path: protocol-specific HTTP transport (not Spring AI ChatModel).
+     */
+    public LlmTransport getTransport(ModelSelection selection) {
+        ModelSelection effective = resolveSelection(selection);
+        LlmProperties.Provider provider = requireProvider(effective.getProviderId());
+        String cacheKey = transportCacheKey(provider);
+        return transportCache.computeIfAbsent(cacheKey, key -> createTransport(provider));
+    }
+
+    /**
+     * Legacy Spring AI ChatModel path (auxiliary / summary). Prefer {@link #getTransport}.
+     */
     public ChatModel getChatModel(ModelSelection selection) {
         ModelSelection effective = resolveSelection(selection);
         String cacheKey = effective.fingerprint();
@@ -176,12 +195,30 @@ public class LlmClientRegistry {
         return llmProperties.getProviders().get(providerId.trim());
     }
 
+    private LlmTransport createTransport(LlmProperties.Provider provider) {
+        if (isBlank(provider.getBaseUrl())) {
+            throw new IllegalArgumentException("LLM provider is missing base-url");
+        }
+        LlmProtocol protocol = LlmProtocol.fromConfig(provider.effectiveProtocolConfig());
+        Duration timeout = Duration.ofMinutes(Math.max(1, agentConfig.getLlm().getReadTimeoutMinutes()));
+        LlmTransportFactory.ProviderEndpoint endpoint = new LlmTransportFactory.ProviderEndpoint(
+                protocol,
+                provider.getBaseUrl().trim(),
+                provider.getApiKey() != null ? provider.getApiKey() : "",
+                provider.getCompletionsPath(),
+                provider.getMessagesPath(),
+                provider.getAnthropicVersion(),
+                timeout);
+        log.info("Creating LlmTransport protocol={} baseUrl={}", protocol, provider.getBaseUrl());
+        return transportFactory.create(endpoint);
+    }
+
     private ChatModel createChatModel(ModelSelection selection) {
         LlmProperties.Provider provider = requireProvider(selection.getProviderId());
-        String type = provider.getType() != null ? provider.getType().trim().toLowerCase(Locale.ROOT) : TYPE_OPENAI_COMPATIBLE;
-        if (!TYPE_OPENAI_COMPATIBLE.equals(type) && !"openai".equals(type)) {
-            throw new IllegalArgumentException("Unsupported LLM provider type '" + provider.getType()
-                    + "' for provider '" + selection.getProviderId() + "'. v1 only supports openai-compatible");
+        LlmProtocol protocol = LlmProtocol.fromConfig(provider.effectiveProtocolConfig());
+        if (protocol != LlmProtocol.OPENAI_CHAT_COMPLETIONS) {
+            throw new IllegalArgumentException("Legacy ChatModel path only supports openai_chat_completions; provider '"
+                    + selection.getProviderId() + "' uses " + protocol);
         }
         if (isBlank(provider.getBaseUrl())) {
             throw new IllegalArgumentException("LLM provider '" + selection.getProviderId() + "' is missing base-url");
@@ -206,6 +243,16 @@ public class LlmClientRegistry {
                 toolCallingManager,
                 retryTemplate,
                 observationRegistry);
+    }
+
+    private String transportCacheKey(LlmProperties.Provider provider) {
+        return String.join("|",
+                nullToEmpty(provider.effectiveProtocolConfig()),
+                nullToEmpty(provider.getBaseUrl()),
+                nullToEmpty(provider.getApiKey()),
+                nullToEmpty(provider.getCompletionsPath()),
+                nullToEmpty(provider.getMessagesPath()),
+                nullToEmpty(provider.getAnthropicVersion()));
     }
 
     private RetryTemplate resolveRetryTemplate() {
@@ -241,7 +288,7 @@ public class LlmClientRegistry {
 
     private String apiCacheKey(LlmProperties.Provider provider) {
         return String.join("|",
-                nullToEmpty(provider.getType()),
+                nullToEmpty(provider.effectiveProtocolConfig()),
                 nullToEmpty(provider.getBaseUrl()),
                 nullToEmpty(provider.getApiKey()),
                 nullToEmpty(provider.getCompletionsPath()));

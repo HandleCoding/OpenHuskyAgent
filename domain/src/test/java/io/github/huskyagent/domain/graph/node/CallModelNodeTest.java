@@ -4,6 +4,7 @@ import io.github.huskyagent.domain.prompt.PromptBuilder;
 import io.github.huskyagent.domain.prompt.PromptContext;
 import io.github.huskyagent.infra.ai.DynamicPromptSnapshotCache;
 import io.github.huskyagent.infra.context.TokenCounter;
+import io.github.huskyagent.infra.llm.api.LlmResult;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -37,6 +38,9 @@ class CallModelNodeTest {
                 .toolCalls(List.of(new AssistantMessage.ToolCall("call-1", "function", "read_file", "{}")))
                 .build();
         assertFalse(CallModelNode.isEmptyFinalResponse(new StringBuilder(), toolCallMessage));
+        assertFalse(CallModelNode.isEmptyFinalResponse(new LlmResult("ok", null, List.of(), null, "stop")));
+        assertFalse(CallModelNode.isEmptyFinalResponse(new LlmResult(null, "thinking", List.of(), null, "stop")));
+        assertTrue(CallModelNode.isEmptyFinalResponse(new LlmResult(null, null, List.of(), null, "stop")));
     }
 
     @Test
@@ -77,7 +81,7 @@ class CallModelNodeTest {
                 .thenAnswer(invocation -> "runtime data " + builds.incrementAndGet());
         DynamicPromptSnapshotCache cache = new DynamicPromptSnapshotCache();
         CallModelNode node = new CallModelNode(new CallModelNode.Dependencies(
-                null, null, null, cache, 1, null, null, promptBuilder, PromptContext.of("base", null), "stable", new TokenCounter()));
+                null, null, null, null, cache, 1, null, null, promptBuilder, PromptContext.of("base", null), "stable", new TokenCounter()));
         List<Message> firstTurnMessages = List.of(
                 new UserMessage("question"),
                 new AssistantMessage("tool call result summary"));
@@ -108,7 +112,7 @@ class CallModelNodeTest {
                 .thenAnswer(invocation -> "runtime data " + builds.incrementAndGet());
         DynamicPromptSnapshotCache cache = new DynamicPromptSnapshotCache();
         CallModelNode node = new CallModelNode(new CallModelNode.Dependencies(
-                null, null, null, cache, 1, null, null, promptBuilder, PromptContext.of("base", null), "stable", new TokenCounter()));
+                null, null, null, null, cache, 1, null, null, promptBuilder, PromptContext.of("base", null), "stable", new TokenCounter()));
         List<Message> messages = List.of(new UserMessage("question"));
 
         DynamicPromptSnapshotCache.Snapshot turnOne = node.dynamicPromptSnapshot("session-1", "turn-1", null, null, messages);

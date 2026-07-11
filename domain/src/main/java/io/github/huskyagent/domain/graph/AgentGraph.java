@@ -15,6 +15,8 @@ import io.github.huskyagent.infra.channel.Principal;
 import io.github.huskyagent.infra.config.AgentConfig;
 import io.github.huskyagent.infra.context.TokenCounter;
 import io.github.huskyagent.infra.llm.LlmClientRegistry;
+import io.github.huskyagent.infra.llm.ModelSelection;
+import io.github.huskyagent.infra.llm.api.LlmTransport;
 import io.github.huskyagent.infra.session.CheckpointStore;
 import io.github.huskyagent.infra.session.CheckpointStoreFactory;
 import io.github.huskyagent.infra.session.SessionScope;
@@ -24,9 +26,7 @@ import org.bsc.langgraph4j.*;
 import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.bsc.langgraph4j.spring.ai.serializer.jackson.SpringAIJacksonStateSerializer;
 import org.bsc.langgraph4j.utils.EdgeMappings;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -116,16 +116,12 @@ public class AgentGraph {
                 .agentId(runtimePolicy.getAgentId());
         String systemPrompt = promptBuilder.buildSessionStable(promptContext);
 
-        ChatModel effectiveModel = resolveChatModel(runtimePolicy);
-        ChatClient chatClient = ChatClient.builder(effectiveModel)
-                .defaultOptions(ToolCallingChatOptions.builder()
-                        .internalToolExecutionEnabled(false)
-                        .build())
-                .defaultSystem(systemPrompt)
-                .build();
+        ModelSelection modelSelection = resolveModelSelection(runtimePolicy);
+        LlmTransport llmTransport = resolveLlmTransport(modelSelection);
 
         StateGraph<ReActAgentState> graph = buildStateGraph(new GraphBuildContext(
-                chatClient,
+                llmTransport,
+                modelSelection,
                 effectiveHookRegistry,
                 promptContext,
                 systemPrompt,
@@ -139,14 +135,19 @@ public class AgentGraph {
                 .build());
     }
 
-    private ChatModel resolveChatModel(RuntimePolicy runtimePolicy) {
-        if (llmClientRegistry != null && runtimePolicy != null) {
-            return llmClientRegistry.getChatModel(runtimePolicy.getModelSelection());
-        }
+    private ModelSelection resolveModelSelection(RuntimePolicy runtimePolicy) {
+        ModelSelection selection = runtimePolicy != null ? runtimePolicy.getModelSelection() : null;
         if (llmClientRegistry != null) {
-            return llmClientRegistry.getChatModel(null);
+            return llmClientRegistry.resolveSelection(selection);
         }
-        return chatModel;
+        return selection;
+    }
+
+    private LlmTransport resolveLlmTransport(ModelSelection modelSelection) {
+        if (llmClientRegistry != null) {
+            return llmClientRegistry.getTransport(modelSelection);
+        }
+        throw new IllegalStateException("LlmClientRegistry is required for model calls");
     }
 
     private int resolveMaxReactLoops(RuntimePolicy runtimePolicy) {
@@ -161,7 +162,8 @@ public class AgentGraph {
         var serializer = new SpringAIJacksonStateSerializer<>(ReActAgentState::new);
         var graph      = new StateGraph<>(ReActAgentState.SCHEMA, serializer);
         var modelDependencies = new CallModelNode.Dependencies(
-                context.chatClient(),
+                context.llmTransport(),
+                context.modelSelection(),
                 llmRetryPolicy,
                 usageDetailsExtractor,
                 dynamicPromptSnapshotCache,
@@ -235,7 +237,8 @@ public class AgentGraph {
         return graph;
     }
 
-    private record GraphBuildContext(ChatClient chatClient,
+    private record GraphBuildContext(LlmTransport llmTransport,
+                                     ModelSelection modelSelection,
                                      HookRegistry effectiveHookRegistry,
                                      PromptContext promptContext,
                                      String systemPrompt,
