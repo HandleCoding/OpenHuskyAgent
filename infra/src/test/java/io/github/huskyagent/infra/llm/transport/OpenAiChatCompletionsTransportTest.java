@@ -192,8 +192,8 @@ class OpenAiChatCompletionsTransportTest {
         statusCode = 401;
         responseBody = "{\"error\":{\"message\":\"bad key\"}}";
 
-        OpenAiChatCompletionsTransport.LlmHttpException ex = assertThrows(
-                OpenAiChatCompletionsTransport.LlmHttpException.class,
+        LlmHttpException ex = assertThrows(
+                LlmHttpException.class,
                 () -> transport().complete(simpleRequest(false)));
         assertEquals(401, ex.statusCode());
     }
@@ -203,10 +203,10 @@ class OpenAiChatCompletionsTransportTest {
         assertEquals(LlmProtocol.OPENAI_CHAT_COMPLETIONS, transport().protocol());
         LlmTransportFactory factory = new LlmTransportFactory();
         assertTrue(factory.supports(LlmProtocol.OPENAI_CHAT_COMPLETIONS));
-        assertFalse(factory.supports(LlmProtocol.ANTHROPIC_MESSAGES));
+        assertTrue(factory.supports(LlmProtocol.ANTHROPIC_MESSAGES));
         assertNotNull(factory.create(new LlmTransportFactory.ProviderEndpoint(
                 LlmProtocol.OPENAI_CHAT_COMPLETIONS, baseUrl, "k", "/v1/chat/completions", null, null, null)));
-        assertThrows(UnsupportedOperationException.class, () -> factory.create(new LlmTransportFactory.ProviderEndpoint(
+        assertNotNull(factory.create(new LlmTransportFactory.ProviderEndpoint(
                 LlmProtocol.ANTHROPIC_MESSAGES, baseUrl, "k", null, "/v1/messages", "2023-06-01", null)));
     }
 

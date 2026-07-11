@@ -466,28 +466,4 @@ public final class OpenAiChatCompletionsTransport implements LlmTransport {
         }
     }
 
-    public static class LlmTransportException extends RuntimeException {
-        public LlmTransportException(String message, Throwable cause) {
-            super(message, cause);
-        }
-    }
-
-    public static class LlmHttpException extends RuntimeException {
-        private final int statusCode;
-        private final String body;
-
-        public LlmHttpException(int statusCode, String body) {
-            super("LLM HTTP " + statusCode + ": " + truncate(body, 300));
-            this.statusCode = statusCode;
-            this.body = body;
-        }
-
-        public int statusCode() {
-            return statusCode;
-        }
-
-        public String body() {
-            return body;
-        }
-    }
 }

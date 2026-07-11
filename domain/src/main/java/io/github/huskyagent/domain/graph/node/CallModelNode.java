@@ -280,7 +280,7 @@ public class CallModelNode {
                 Throwable cause = e.getCause() != null ? e.getCause() : e;
                 if (isCancellation(e)) {
                     log.info("[model] LLM call cancelled: session={}", sessionId);
-                } else if (cause instanceof io.github.huskyagent.infra.llm.transport.OpenAiChatCompletionsTransport.LlmHttpException httpEx) {
+                } else if (cause instanceof io.github.huskyagent.infra.llm.transport.LlmHttpException httpEx) {
                     log.error("[model] API {} error: body={}", httpEx.statusCode(), httpEx.body());
                 } else {
                     log.error("[model] LLM call failed: {}", cause.getMessage());

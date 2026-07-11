@@ -42,6 +42,16 @@ tui:
 # When empty, provider "main" is seeded from spring.ai.openai.*
 llm:
   default-provider: main
+  # Providers are usually seeded from spring.ai.openai.* as "main".
+  # Example second provider (Anthropic Messages wire, e.g. DeepSeek dual endpoint):
+  # providers:
+  #   deepseek-anthropic:
+  #     protocol: anthropic_messages
+  #     base-url: https://api.deepseek.com/anthropic
+  #     api-key: ${OPENAI_API_KEY}
+  #     messages-path: /v1/messages
+  #     anthropic-version: "2023-06-01"
+  #     model: deepseek-v4-pro
   providers: {}
 
 # Agent configuration

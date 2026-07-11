@@ -53,12 +53,16 @@ public final class LlmTransportFactory {
                         java.net.http.HttpClient.newBuilder()
                                 .connectTimeout(Duration.ofSeconds(30))
                                 .build()));
-        // Anthropic: registered as unsupported until PR3
-        register(LlmProtocol.ANTHROPIC_MESSAGES, endpoint -> {
-            throw new UnsupportedOperationException(
-                    "anthropic_messages transport is not implemented yet; use openai_chat_completions "
-                            + "or wait for AnthropicMessagesTransport");
-        });
+        register(LlmProtocol.ANTHROPIC_MESSAGES, endpoint ->
+                new AnthropicMessagesTransport(
+                        endpoint.baseUrl(),
+                        endpoint.apiKey(),
+                        endpoint.messagesPath() != null ? endpoint.messagesPath() : "/v1/messages",
+                        endpoint.anthropicVersion() != null ? endpoint.anthropicVersion() : "2023-06-01",
+                        endpoint.timeout(),
+                        java.net.http.HttpClient.newBuilder()
+                                .connectTimeout(Duration.ofSeconds(30))
+                                .build()));
     }
 
     public void register(LlmProtocol protocol, Creator creator) {
@@ -75,11 +79,6 @@ public final class LlmTransportFactory {
     }
 
     public boolean supports(LlmProtocol protocol) {
-        Creator creator = creators.get(protocol);
-        if (creator == null) {
-            return false;
-        }
-        // anthropic registered but throws — treat as not ready for production create
-        return protocol != LlmProtocol.ANTHROPIC_MESSAGES;
+        return creators.containsKey(protocol);
     }
 }
