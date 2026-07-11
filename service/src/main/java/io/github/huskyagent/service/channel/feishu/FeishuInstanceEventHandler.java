@@ -150,7 +150,7 @@ public class FeishuInstanceEventHandler {
             return;
         }
         log.info("Dispatching Feishu inbound message: sessionScene={}, principal={}, chatId={}, textLength={}",
-                inbound.getSceneId(),
+                inbound.getAgentId(),
                 inbound.getPrincipal() != null ? inbound.getPrincipal().getId() : null,
                 inbound.getChannelIdentity() != null ? inbound.getChannelIdentity().getChatId() : null,
                 inbound.getText() != null ? inbound.getText().length() : 0);

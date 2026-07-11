@@ -14,7 +14,7 @@ import io.github.huskyagent.domain.hook.HookResult;
 import io.github.huskyagent.domain.subagent.SubAgentMessage;
 import io.github.huskyagent.domain.subagent.SubAgentMessageQueue;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.domain.session.SessionManager;
 import io.github.huskyagent.infra.config.SubAgentConfig;
 import io.github.huskyagent.infra.ai.DynamicPromptSnapshotCache;
@@ -130,10 +130,10 @@ public class SubAgentRunner {
         try {
             String systemPrompt = buildSystemPrompt();
 
-            SceneConfig sceneConfig = buildSceneConfig(systemPrompt);
-            CapabilityView capabilityView = capabilityVisibilityResolver.resolveSubAgent(sceneConfig, buildParentCapabilityView());
-            RuntimePolicy runtimePolicy = runtimePolicyResolver.assemble(sceneConfig, capabilityView);
-            RuntimeScope childScope = buildChildRuntimeScope(childSessionId, sceneConfig, runtimePolicy);
+            AgentDefinition agentDefinition = buildAgentDefinition(systemPrompt);
+            CapabilityView capabilityView = capabilityVisibilityResolver.resolveSubAgent(agentDefinition, buildParentCapabilityView());
+            RuntimePolicy runtimePolicy = runtimePolicyResolver.assemble(agentDefinition, capabilityView);
+            RuntimeScope childScope = buildChildRuntimeScope(childSessionId, agentDefinition, runtimePolicy);
             ReActAgentState finalState = runWithLegacySessionContext(childScope, () -> {
                 try {
                     CompiledGraph<ReActAgentState> graph = agentGraph.buildGraph(
@@ -240,7 +240,7 @@ public class SubAgentRunner {
         return toolRuntimeEnvironmentFactory != null ? toolRuntimeEnvironmentFactory.create(sessionScope) : null;
     }
 
-    private RuntimeScope buildChildRuntimeScope(String childSessionId, SceneConfig sceneConfig, RuntimePolicy runtimePolicy) {
+    private RuntimeScope buildChildRuntimeScope(String childSessionId, AgentDefinition agentDefinition, RuntimePolicy runtimePolicy) {
         Principal principal = Principal.builder()
                 .id(parentExecutionContext != null && parentExecutionContext.sessionId() != null
                         ? parentExecutionContext.sessionId()
@@ -261,34 +261,34 @@ public class SubAgentRunner {
                 .build();
     }
 
-    private SceneConfig buildSceneConfig(String systemPrompt) {
-        SceneConfig sceneConfig = new SceneConfig();
-        sceneConfig.setSceneId("subagent");
-        sceneConfig.setSystemPrompt(systemPrompt);
-        sceneConfig.setAllowedToolsets(task.allowedToolsets());
-        sceneConfig.setApprovalPolicy(SceneConfig.ApprovalPolicy.NONE);
-        sceneConfig.getMemoryPolicyConfig().setEnabled(false);
-        inheritParentRuntime(sceneConfig);
-        return sceneConfig;
+    private AgentDefinition buildAgentDefinition(String systemPrompt) {
+        AgentDefinition agentDefinition = new AgentDefinition();
+        agentDefinition.setAgentId("subagent");
+        agentDefinition.setSystemPrompt(systemPrompt);
+        agentDefinition.setAllowedToolsets(task.allowedToolsets());
+        agentDefinition.setApprovalPolicy(AgentDefinition.ApprovalPolicy.NONE);
+        agentDefinition.getMemoryPolicyConfig().setEnabled(false);
+        inheritParentRuntime(agentDefinition);
+        return agentDefinition;
     }
 
-    private void inheritParentRuntime(SceneConfig sceneConfig) {
+    private void inheritParentRuntime(AgentDefinition agentDefinition) {
         if (parentExecutionContext == null) {
             return;
         }
         switch (parentExecutionContext.backendType()) {
             case "docker" -> {
-                sceneConfig.setBackendPolicy(SceneConfig.BackendPolicy.DOCKER);
-                SceneConfig.BackendSpec spec = new SceneConfig.BackendSpec();
+                agentDefinition.setBackendPolicy(AgentDefinition.BackendPolicy.DOCKER);
+                AgentDefinition.BackendSpec spec = new AgentDefinition.BackendSpec();
                 spec.setDockerPersistFilesystem(parentExecutionContext.hasFilesystem());
                 String runtimeWorkdir = parentRuntimeWorkingDirectory();
                 if (runtimeWorkdir != null) {
                     spec.setDockerWorkdir(runtimeWorkdir);
                 }
-                sceneConfig.setBackendSpec(spec);
+                agentDefinition.setBackendSpec(spec);
             }
-            case "ssh" -> sceneConfig.setBackendPolicy(SceneConfig.BackendPolicy.SSH);
-            default -> sceneConfig.setBackendPolicy(SceneConfig.BackendPolicy.LOCAL);
+            case "ssh" -> agentDefinition.setBackendPolicy(AgentDefinition.BackendPolicy.SSH);
+            default -> agentDefinition.setBackendPolicy(AgentDefinition.BackendPolicy.LOCAL);
         }
     }
 
@@ -301,7 +301,7 @@ public class SubAgentRunner {
     private CapabilityView buildParentCapabilityView() {
         if (parentExecutionContext == null) {
             return CapabilityView.builder()
-                    .sceneId("parent")
+                    .agentId("parent")
                     .visibleTools(List.of())
                     .visibleToolNames(java.util.Set.of())
                     .visibleToolsets(java.util.Set.of())
@@ -315,7 +315,7 @@ public class SubAgentRunner {
                 ? parentExecutionContext.visibleTools()
                 : List.of();
         return CapabilityView.builder()
-                .sceneId("parent")
+                .agentId("parent")
                 .visibleTools(visibleTools)
                 .visibleToolNames(visibleTools.stream()
                         .map(io.github.huskyagent.infra.tool.registry.ToolDefinition::name)

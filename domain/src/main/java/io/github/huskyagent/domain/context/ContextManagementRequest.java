@@ -8,7 +8,7 @@ import java.util.List;
 
 public record ContextManagementRequest(
         String sessionId,
-        String sceneId,
+        String agentId,
         ContextPolicy policy,
         List<Message> persistedMessages,
         int currentTokens,

@@ -33,7 +33,7 @@ public class DefaultSessionAccessPolicy implements SessionAccessPolicy {
     private boolean isLegacy(SessionEntity existing) {
         return isBlank(existing.getOwnerPrincipalId())
                 || isBlank(existing.getChannelType())
-                || isBlank(existing.getSceneId());
+                || isBlank(existing.getAgentId());
     }
 
     private boolean samePrincipal(IsolationScope current, SessionEntity existing) {
@@ -44,7 +44,7 @@ public class DefaultSessionAccessPolicy implements SessionAccessPolicy {
     }
 
     private boolean sameScene(IsolationScope current, SessionEntity existing) {
-        return equals(current.getSceneId(), existing.getSceneId());
+        return equals(current.getAgentId(), existing.getAgentId());
     }
 
     private boolean sameChannel(IsolationScope current, SessionEntity existing) {

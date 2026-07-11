@@ -105,7 +105,7 @@ public class AgentGraph {
                 .gatewaySystemPrompt(systemPromptOverride)
                 .channelIdentity(channelIdentity)
                 .principal(principal)
-                .sceneId(runtimePolicy.getSceneId());
+                .agentId(runtimePolicy.getAgentId());
         String systemPrompt = promptBuilder.buildSessionStable(promptContext);
 
         ChatClient chatClient = ChatClient.builder(chatModel)

@@ -3,8 +3,8 @@ package io.github.huskyagent.application.session;
 import io.github.huskyagent.application.runtime.RuntimePolicyResolver;
 import io.github.huskyagent.application.runtime.RuntimeBackendCapabilityResolver;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
-import io.github.huskyagent.domain.scene.SceneResolver;
+import io.github.huskyagent.domain.agent.AgentDefinition;
+import io.github.huskyagent.domain.agent.AgentResolver;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.Principal;
 import io.github.huskyagent.infra.execute.BackendConfig;
@@ -30,7 +30,7 @@ public class SessionResolver {
 
     private final SessionManager sessionManager;
     private final SessionRepository sessionRepository;
-    private final SceneResolver sceneResolver;
+    private final AgentResolver agentResolver;
     private final RuntimePolicyResolver runtimePolicyResolver;
     private final ToolRegistry toolRegistry;
     private final ExecutionBackendFactory backendFactory;
@@ -40,10 +40,10 @@ public class SessionResolver {
     private final SessionAccessPolicy sessionAccessPolicy;
 
     public RuntimeScope resolveOrCreateSession(Principal principal, ChannelIdentity channelIdentity,
-                                                String sceneId, String requestedSessionId) {
-        SceneConfig sceneConfig = sceneResolver.resolve(sceneId);
-        RuntimePolicy runtimePolicy = runtimePolicyResolver.resolve(sceneConfig, toolRegistry.getAllEnabled());
-        IsolationScope requestedScope = IsolationScope.from(null, principal, channelIdentity, sceneConfig);
+                                                String agentId, String requestedSessionId) {
+        AgentDefinition agentDefinition = agentResolver.resolve(agentId);
+        RuntimePolicy runtimePolicy = runtimePolicyResolver.resolve(agentDefinition, toolRegistry.getAllEnabled());
+        IsolationScope requestedScope = IsolationScope.from(null, principal, channelIdentity, agentDefinition);
         String sessionKey = sessionKeyStrategy.buildKey(requestedScope);
         String sessionId;
 
@@ -51,8 +51,8 @@ public class SessionResolver {
             SessionEntity existing = sessionRepository.findSession(requestedSessionId)
                     .orElseThrow(() -> new SecurityException("Session not found"));
             if (!sessionAccessPolicy.canResume(requestedScope, existing)) {
-                log.warn("Session scope validation failed: sessionId={}, principalId={}, channel={}, scene={}",
-                        requestedSessionId, principal.getId(), requestedScope.getChannelType(), sceneConfig.getSceneId());
+                log.warn("Session scope validation failed: sessionId={}, principalId={}, channel={}, agent={}",
+                        requestedSessionId, principal.getId(), requestedScope.getChannelType(), agentDefinition.getAgentId());
                 throw new SecurityException("Session is outside current isolation scope");
             }
             sessionId = requestedSessionId;
@@ -71,10 +71,10 @@ public class SessionResolver {
         return scope;
     }
 
-    public RuntimeScope createSession(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
-        SceneConfig sceneConfig = sceneResolver.resolve(sceneId);
-        RuntimePolicy runtimePolicy = runtimePolicyResolver.resolve(sceneConfig, toolRegistry.getAllEnabled());
-        IsolationScope requestedScope = IsolationScope.from(null, principal, channelIdentity, sceneConfig);
+    public RuntimeScope createSession(Principal principal, ChannelIdentity channelIdentity, String agentId) {
+        AgentDefinition agentDefinition = agentResolver.resolve(agentId);
+        RuntimePolicy runtimePolicy = runtimePolicyResolver.resolve(agentDefinition, toolRegistry.getAllEnabled());
+        IsolationScope requestedScope = IsolationScope.from(null, principal, channelIdentity, agentDefinition);
         String sessionKey = sessionKeyStrategy.buildKey(requestedScope);
         String sessionId = sessionManager.createSessionForUser(principal.getId());
         updateIsolationMetadata(sessionId, requestedScope, sessionKey);
@@ -86,9 +86,9 @@ public class SessionResolver {
         return scope;
     }
 
-    public RuntimeScope createEphemeralScope(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
-        SceneConfig sceneConfig = sceneResolver.resolve(sceneId);
-        RuntimePolicy runtimePolicy = runtimePolicyResolver.resolve(sceneConfig, toolRegistry.getAllEnabled());
+    public RuntimeScope createEphemeralScope(Principal principal, ChannelIdentity channelIdentity, String agentId) {
+        AgentDefinition agentDefinition = agentResolver.resolve(agentId);
+        RuntimePolicy runtimePolicy = runtimePolicyResolver.resolve(agentDefinition, toolRegistry.getAllEnabled());
         String sessionId = UUID.randomUUID().toString();
         RuntimeScope scope = buildRuntimeScope(sessionId, principal, channelIdentity, runtimePolicy,
                 resolveEffectiveWorkingDirectory(runtimePolicy, sessionId));
@@ -102,19 +102,19 @@ public class SessionResolver {
         }
     }
 
-    public Optional<String> findActiveSessionId(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
-        SceneConfig sceneConfig = sceneResolver.resolve(sceneId);
-        IsolationScope scope = IsolationScope.from(null, principal, channelIdentity, sceneConfig);
+    public Optional<String> findActiveSessionId(Principal principal, ChannelIdentity channelIdentity, String agentId) {
+        AgentDefinition agentDefinition = agentResolver.resolve(agentId);
+        IsolationScope scope = IsolationScope.from(null, principal, channelIdentity, agentDefinition);
         String sessionKey = sessionKeyStrategy.buildKey(scope);
         return sessionRepository.findBySessionKey(sessionKey)
                 .filter(existing -> sessionAccessPolicy.canResume(scope, existing))
                 .map(SessionEntity::getId);
     }
 
-    public List<SessionEntity> listSessions(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
-        SceneConfig sceneConfig = sceneResolver.resolve(sceneId);
-        IsolationScope scope = IsolationScope.from(null, principal, channelIdentity, sceneConfig);
-        return sessionRepository.findSessionsByScope(scope.getPrincipalId(), scope.getChannelType(), scope.getSceneId())
+    public List<SessionEntity> listSessions(Principal principal, ChannelIdentity channelIdentity, String agentId) {
+        AgentDefinition agentDefinition = agentResolver.resolve(agentId);
+        IsolationScope scope = IsolationScope.from(null, principal, channelIdentity, agentDefinition);
+        return sessionRepository.findSessionsByScope(scope.getPrincipalId(), scope.getChannelType(), scope.getAgentId())
                 .stream()
                 .filter(session -> sessionAccessPolicy.canList(scope, session))
                 .toList();
@@ -145,7 +145,7 @@ public class SessionResolver {
     }
 
     private Path resolveWorkingDirectory(RuntimePolicy runtimePolicy) {
-        if (runtimePolicy.getWorkingDirectoryPolicy() == SceneConfig.WorkingDirectoryPolicy.FIXED
+        if (runtimePolicy.getWorkingDirectoryPolicy() == AgentDefinition.WorkingDirectoryPolicy.FIXED
                 && runtimePolicy.getFixedWorkingDirectory() != null) {
             return Path.of(runtimePolicy.getFixedWorkingDirectory());
         }
@@ -153,7 +153,7 @@ public class SessionResolver {
     }
 
     private Path resolveDockerWorkspaceForFiles(RuntimePolicy runtimePolicy, String sessionId) {
-        if (runtimePolicy.getBackendPolicy() != SceneConfig.BackendPolicy.DOCKER) return null;
+        if (runtimePolicy.getBackendPolicy() != AgentDefinition.BackendPolicy.DOCKER) return null;
         if (!backendCapabilities.dockerPersistFilesystem(runtimePolicy.getBackendSpec())) return null;
         return dockerHostWorkspaceDir(sessionId);
     }
@@ -168,7 +168,7 @@ public class SessionResolver {
     }
 
     private BackendConfig buildBackendConfig(RuntimePolicy runtimePolicy, String sessionId, String workDir) {
-        SceneConfig.BackendSpec spec = runtimePolicy.getBackendSpec();
+        AgentDefinition.BackendSpec spec = runtimePolicy.getBackendSpec();
         ExecutionBackendProperties.DockerProperties docker = backendProperties.getDocker();
         ExecutionBackendProperties.SshProperties ssh = backendProperties.getSsh();
         boolean dockerPersistFilesystem = backendCapabilities.dockerPersistFilesystem(spec);
@@ -205,7 +205,7 @@ public class SessionResolver {
                 sessionId,
                 scope.getPrincipalId(),
                 scope.getChannelType(),
-                scope.getSceneId(),
+                scope.getAgentId(),
                 scope.getConversationType(),
                 scope.getChatId(),
                 scope.getThreadId(),

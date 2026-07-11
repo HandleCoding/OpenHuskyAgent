@@ -17,7 +17,7 @@ public class MemoryScopeResolver {
                 .currentSessionId(sessionScope != null ? sessionScope.getSessionId() : null)
                 .principalId(sessionScope != null ? sessionScope.getPrincipalId() : null)
                 .channelType(sessionScope != null ? sessionScope.getChannelType() : null)
-                .sceneId(sessionScope != null ? sessionScope.getSceneId() : null)
+                .agentId(sessionScope != null ? sessionScope.getAgentId() : null)
                 .memoryPolicy(policy)
                 .build();
     }
@@ -32,6 +32,6 @@ public class MemoryScopeResolver {
         if ("PRINCIPAL".equals(policy) || "USER_PROFILE".equals(policy)) {
             return MemoryScope.SearchBoundary.SAME_PRINCIPAL;
         }
-        return MemoryScope.SearchBoundary.SAME_PRINCIPAL_AND_SCENE;
+        return MemoryScope.SearchBoundary.SAME_PRINCIPAL_AND_AGENT;
     }
 }

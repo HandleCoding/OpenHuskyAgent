@@ -1,8 +1,8 @@
 package io.github.huskyagent;
 
 import io.github.huskyagent.application.runtime.RuntimePolicyResolver;
-import io.github.huskyagent.domain.scene.SceneConfig;
-import io.github.huskyagent.domain.scene.SceneResolver;
+import io.github.huskyagent.domain.agent.AgentDefinition;
+import io.github.huskyagent.domain.agent.AgentResolver;
 import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.registry.ToolRegistry;
 import org.junit.jupiter.api.Test;
@@ -10,10 +10,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class ChatbotSceneConfigTest extends AbstractIntegrationTest {
+class ChatbotAgentConfigTest extends AbstractIntegrationTest {
 
     @Autowired
-    private SceneResolver sceneResolver;
+    private AgentResolver agentResolver;
 
     @Autowired
     private RuntimePolicyResolver runtimePolicyResolver;
@@ -23,12 +23,12 @@ class ChatbotSceneConfigTest extends AbstractIntegrationTest {
 
     @Test
     void chatbotSceneDoesNotExposeTerminalToolsWithoutApproval() {
-        SceneConfig scene = sceneResolver.resolve("chatbot");
+        AgentDefinition scene = agentResolver.resolve("chatbot");
 
         var policy = runtimePolicyResolver.resolve(scene, toolRegistry.getAllEnabled());
         var visibleTools = policy.getCapabilityView().getVisibleToolNames();
 
-        assertEquals(SceneConfig.ApprovalPolicy.NONE, scene.getApprovalPolicy());
+        assertEquals(AgentDefinition.ApprovalPolicy.NONE, scene.getApprovalPolicy());
         assertFalse(policy.getSystemPrompt().isBlank());
         assertFalse(scene.getAllowedToolsets().contains(Toolset.TERMINAL));
         assertTrue(scene.getDeniedTools().contains("terminal"));

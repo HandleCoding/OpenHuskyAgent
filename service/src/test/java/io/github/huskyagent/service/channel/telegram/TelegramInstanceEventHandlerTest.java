@@ -98,7 +98,7 @@ class TelegramInstanceEventHandlerTest {
                         .chatId("1001")
                         .senderId("1001")
                         .build())
-                .sceneId("assistant")
+                .agentId("assistant")
                 .build();
     }
 

@@ -21,7 +21,7 @@ class ConfigChannelBindingResolverTest {
 
         ChannelInstanceBinding resolved = resolver.resolve(identity(ChannelType.FEISHU, "cli_assistant")).orElseThrow();
 
-        assertEquals("assistant", resolved.sceneId());
+        assertEquals("assistant", resolved.agentId());
         assertEquals("assistant@feishu:assistant-bot", resolved.bindingId());
     }
 
@@ -35,8 +35,8 @@ class ConfigChannelBindingResolverTest {
                 )
         );
 
-        assertEquals("assistant", resolver.resolve(identity(ChannelType.FEISHU, "cli_assistant")).orElseThrow().sceneId());
-        assertEquals("assistant", resolver.resolve(identity(ChannelType.SLACK, "U123BOT")).orElseThrow().sceneId());
+        assertEquals("assistant", resolver.resolve(identity(ChannelType.FEISHU, "cli_assistant")).orElseThrow().agentId());
+        assertEquals("assistant", resolver.resolve(identity(ChannelType.SLACK, "U123BOT")).orElseThrow().agentId());
     }
 
     @Test
@@ -49,8 +49,8 @@ class ConfigChannelBindingResolverTest {
                 )
         );
 
-        assertEquals("support", resolver.resolve(identity(ChannelType.FEISHU, "cli_cn")).orElseThrow().sceneId());
-        assertEquals("support", resolver.resolve(identity(ChannelType.FEISHU, "cli_global")).orElseThrow().sceneId());
+        assertEquals("support", resolver.resolve(identity(ChannelType.FEISHU, "cli_cn")).orElseThrow().agentId());
+        assertEquals("support", resolver.resolve(identity(ChannelType.FEISHU, "cli_global")).orElseThrow().agentId());
     }
 
     @Test
@@ -72,7 +72,7 @@ class ConfigChannelBindingResolverTest {
 
         ChannelInstanceBinding resolved = resolver.resolve(identity(ChannelType.TELEGRAM, "assistant_bot")).orElseThrow();
 
-        assertEquals("assistant", resolved.sceneId());
+        assertEquals("assistant", resolved.agentId());
     }
 
     @Test

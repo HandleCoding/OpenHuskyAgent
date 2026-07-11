@@ -1,7 +1,7 @@
 package io.github.huskyagent.application.channel.binding;
 
-import io.github.huskyagent.domain.scene.SceneConfig;
-import io.github.huskyagent.domain.scene.SceneResolver;
+import io.github.huskyagent.domain.agent.AgentDefinition;
+import io.github.huskyagent.domain.agent.AgentResolver;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.ChannelType;
 import io.github.huskyagent.infra.channel.InboundMessage;
@@ -11,56 +11,56 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class ChannelSceneRouterTest {
+class ChannelAgentRouterTest {
 
     @Test
     void bindingRoutesInboundToAgent() {
-        ChannelSceneRouter router = router(binding("assistant-binding", ChannelType.FEISHU, "cli_assistant", "assistant"));
+        ChannelAgentRouter router = router(binding("assistant-binding", ChannelType.FEISHU, "cli_assistant", "assistant"));
         InboundMessage inbound = inbound(ChannelType.FEISHU, "cli_assistant", null);
 
         EffectiveChannelRoute route = router.resolve(inbound);
 
-        assertEquals("assistant", route.sceneId());
+        assertEquals("assistant", route.agentId());
         assertEquals("assistant-binding", route.bindingId());
         assertEquals(EffectiveChannelRoute.Source.BINDING, route.source());
     }
 
     @Test
     void bindingBeatsNonHttpExplicitScene() {
-        ChannelSceneRouter router = router(binding("assistant-binding", ChannelType.FEISHU, "cli_assistant", "assistant"));
+        ChannelAgentRouter router = router(binding("assistant-binding", ChannelType.FEISHU, "cli_assistant", "assistant"));
         InboundMessage inbound = inbound(ChannelType.FEISHU, "cli_assistant", "support");
 
         EffectiveChannelRoute route = router.resolve(inbound);
 
-        assertEquals("assistant", route.sceneId());
+        assertEquals("assistant", route.agentId());
         assertEquals(EffectiveChannelRoute.Source.BINDING, route.source());
     }
 
     @Test
     void httpExplicitAgentIsAllowed() {
-        ChannelSceneRouter router = router(binding("http-binding", ChannelType.HTTP, "chatbot", "chatbot"));
+        ChannelAgentRouter router = router(binding("http-binding", ChannelType.HTTP, "chatbot", "chatbot"));
         InboundMessage inbound = inbound(ChannelType.HTTP, "chatbot", "assistant");
 
         EffectiveChannelRoute route = router.resolve(inbound);
 
-        assertEquals("assistant", route.sceneId());
+        assertEquals("assistant", route.agentId());
         assertEquals(EffectiveChannelRoute.Source.EXPLICIT, route.source());
     }
 
     @Test
     void httpBindingAppliesWithoutExplicitAgent() {
-        ChannelSceneRouter router = router(binding("http-binding", ChannelType.HTTP, "chatbot", "chatbot"));
+        ChannelAgentRouter router = router(binding("http-binding", ChannelType.HTTP, "chatbot", "chatbot"));
         InboundMessage inbound = inbound(ChannelType.HTTP, "chatbot", null);
 
         EffectiveChannelRoute route = router.resolve(inbound);
 
-        assertEquals("chatbot", route.sceneId());
+        assertEquals("chatbot", route.agentId());
         assertEquals(EffectiveChannelRoute.Source.BINDING, route.source());
     }
 
     @Test
     void unboundInboundFailsClosed() {
-        ChannelSceneRouter router = router(Optional.empty());
+        ChannelAgentRouter router = router(Optional.empty());
         InboundMessage inbound = inbound(ChannelType.FEISHU, "cli_unknown", null);
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> router.resolve(inbound));
@@ -70,7 +70,7 @@ class ChannelSceneRouterTest {
 
     @Test
     void unknownBindingAgentFailsClosed() {
-        ChannelSceneRouter router = router(binding("bad-binding", ChannelType.FEISHU, "cli_assistant", "missing-agent"));
+        ChannelAgentRouter router = router(binding("bad-binding", ChannelType.FEISHU, "cli_assistant", "missing-agent"));
         InboundMessage inbound = inbound(ChannelType.FEISHU, "cli_assistant", null);
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> router.resolve(inbound));
@@ -78,7 +78,7 @@ class ChannelSceneRouterTest {
         assertTrue(error.getMessage().contains("missing-agent"));
     }
 
-    private ChannelSceneRouter router(Optional<ChannelInstanceBinding> binding) {
+    private ChannelAgentRouter router(Optional<ChannelInstanceBinding> binding) {
         ChannelBindingResolver bindingResolver = new ChannelBindingResolver() {
             @Override
             public Optional<ChannelInstanceBinding> resolve(ChannelIdentity identity) {
@@ -97,23 +97,23 @@ class ChannelSceneRouterTest {
                         : Optional.empty();
             }
         };
-        SceneResolver sceneResolver = new SceneResolver() {
+        AgentResolver agentResolver = new AgentResolver() {
             @Override
-            public SceneConfig resolve(String sceneId) {
-                if (sceneId == null || "missing-agent".equals(sceneId)) {
-                    throw new IllegalArgumentException("Unknown agent: " + sceneId);
+            public AgentDefinition resolve(String agentId) {
+                if (agentId == null || "missing-agent".equals(agentId)) {
+                    throw new IllegalArgumentException("Unknown agent: " + agentId);
                 }
-                SceneConfig config = new SceneConfig();
-                config.setSceneId(sceneId);
+                AgentDefinition config = new AgentDefinition();
+                config.setAgentId(agentId);
                 return config;
             }
 
             @Override
-            public SceneConfig resolveDefault() {
+            public AgentDefinition resolveDefault() {
                 throw new UnsupportedOperationException("No default agent in final routing model");
             }
         };
-        return new ChannelSceneRouter(bindingResolver, sceneResolver);
+        return new ChannelAgentRouter(bindingResolver, agentResolver);
     }
 
     private Optional<ChannelInstanceBinding> binding(String bindingId, ChannelType channelType,
@@ -127,7 +127,7 @@ class ChannelSceneRouterTest {
                         .channelType(channelType)
                         .platformAccountId(platformAccountId)
                         .build())
-                .sceneId(agentId)
+                .agentId(agentId)
                 .build();
     }
 }

@@ -3,8 +3,8 @@ package io.github.huskyagent.application.session;
 import io.github.huskyagent.application.runtime.RuntimeBackendCapabilityResolver;
 import io.github.huskyagent.application.runtime.RuntimePolicyResolver;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
-import io.github.huskyagent.domain.scene.SceneResolver;
+import io.github.huskyagent.domain.agent.AgentDefinition;
+import io.github.huskyagent.domain.agent.AgentResolver;
 import io.github.huskyagent.domain.session.SessionManager;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.ChannelType;
@@ -33,7 +33,7 @@ class SessionResolverTest {
 
     @Test
     void dockerPersistentScopeSharesHostWorkspaceWithBackendConfig() {
-        SceneConfig.BackendSpec spec = new SceneConfig.BackendSpec();
+        AgentDefinition.BackendSpec spec = new AgentDefinition.BackendSpec();
         spec.setDockerPersistFilesystem(true);
 
         TestFixture fixture = fixture(spec, false);
@@ -50,7 +50,7 @@ class SessionResolverTest {
 
     @Test
     void dockerPersistFallsBackToGlobalWhenAgentSpecOmitsOverride() {
-        SceneConfig.BackendSpec spec = new SceneConfig.BackendSpec();
+        AgentDefinition.BackendSpec spec = new AgentDefinition.BackendSpec();
         spec.setDockerImage("node:22");
 
         TestFixture fixture = fixture(spec, true);
@@ -66,7 +66,7 @@ class SessionResolverTest {
 
     @Test
     void dockerPersistAgentFalseOverridesGlobalTrue() {
-        SceneConfig.BackendSpec spec = new SceneConfig.BackendSpec();
+        AgentDefinition.BackendSpec spec = new AgentDefinition.BackendSpec();
         spec.setDockerPersistFilesystem(false);
 
         TestFixture fixture = fixture(spec, true);
@@ -80,20 +80,20 @@ class SessionResolverTest {
         assertFalse(scope.getFilesystemAvailable());
     }
 
-    private TestFixture fixture(SceneConfig.BackendSpec spec, boolean globalPersistFilesystem) {
-        SceneConfig scene = new SceneConfig();
-        scene.setSceneId("assistant");
-        scene.setBackendPolicy(SceneConfig.BackendPolicy.DOCKER);
+    private TestFixture fixture(AgentDefinition.BackendSpec spec, boolean globalPersistFilesystem) {
+        AgentDefinition scene = new AgentDefinition();
+        scene.setAgentId("assistant");
+        scene.setBackendPolicy(AgentDefinition.BackendPolicy.DOCKER);
         scene.setBackendSpec(spec);
 
         RuntimePolicy policy = RuntimePolicy.builder()
-                .sceneId("assistant")
-                .backendPolicy(SceneConfig.BackendPolicy.DOCKER)
+                .agentId("assistant")
+                .backendPolicy(AgentDefinition.BackendPolicy.DOCKER)
                 .backendSpec(spec)
                 .build();
 
-        SceneResolver sceneResolver = mock(SceneResolver.class);
-        when(sceneResolver.resolve("assistant")).thenReturn(scene);
+        AgentResolver agentResolver = mock(AgentResolver.class);
+        when(agentResolver.resolve("assistant")).thenReturn(scene);
         RuntimePolicyResolver runtimePolicyResolver = mock(RuntimePolicyResolver.class);
         ToolRegistry toolRegistry = mock(ToolRegistry.class);
         when(toolRegistry.getAllEnabled()).thenReturn(List.of());
@@ -107,7 +107,7 @@ class SessionResolverTest {
         SessionResolver resolver = new SessionResolver(
                 mock(SessionManager.class),
                 mock(SessionRepository.class),
-                sceneResolver,
+                agentResolver,
                 runtimePolicyResolver,
                 toolRegistry,
                 backendFactory,

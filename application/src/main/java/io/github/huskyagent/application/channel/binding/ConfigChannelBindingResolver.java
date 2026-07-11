@@ -79,10 +79,10 @@ public class ConfigChannelBindingResolver implements ChannelBindingResolver {
                 }
                 String key = channelKey(binding.channelType(), binding.platformAccountId());
                 ChannelInstanceBinding existing = result.get(key);
-                if (existing != null && !existing.sceneId().equals(binding.sceneId())) {
+                if (existing != null && !existing.agentId().equals(binding.agentId())) {
                     throw new IllegalArgumentException("Channel instance is bound to multiple agents: "
                             + binding.channelType().getName() + ":" + binding.platformAccountId()
-                            + " -> " + existing.sceneId() + ", " + binding.sceneId());
+                            + " -> " + existing.agentId() + ", " + binding.agentId());
                 }
                 result.put(key, binding);
             }

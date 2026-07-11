@@ -1,7 +1,7 @@
 package io.github.huskyagent.application.channel.binding;
 
 public record EffectiveChannelRoute(
-        String sceneId,
+        String agentId,
         String bindingId,
         Source source
 ) {
@@ -10,6 +10,6 @@ public record EffectiveChannelRoute(
         BINDING,
         CHANNEL_LEGACY_DEFAULT,
         GLOBAL_DEFAULT,
-        SCENE_DEFAULT
+        AGENT_DEFAULT
     }
 }

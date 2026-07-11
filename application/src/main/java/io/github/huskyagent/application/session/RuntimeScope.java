@@ -1,7 +1,7 @@
 package io.github.huskyagent.application.session;
 
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.Principal;
 import io.github.huskyagent.infra.session.SessionScope;
@@ -61,7 +61,7 @@ public class RuntimeScope {
                 .sessionId(sessionId)
                 .principalId(principal.getId())
                 .channelType(channelIdentity.getChannelType().getName())
-                .sceneId(runtimePolicy.getSceneId())
+                .agentId(runtimePolicy.getAgentId())
                 .workingDirectory(workingDirectory.toString())
                 .memoryPolicy(runtimePolicy.getMemoryPolicy().legacyPolicy().name())
                 .memoryStrategyId(runtimePolicy.getMemoryPolicy().getStrategyId())
@@ -80,20 +80,20 @@ public class RuntimeScope {
     }
 
     private String backendType(RuntimePolicy policy) {
-        SceneConfig.BackendPolicy backendPolicy = policy.getBackendPolicy();
+        AgentDefinition.BackendPolicy backendPolicy = policy.getBackendPolicy();
         return backendPolicy != null ? backendPolicy.name().toLowerCase() : "local";
     }
 
     private boolean localFilesystemDefault(RuntimePolicy policy) {
-        SceneConfig.BackendPolicy backendPolicy = policy.getBackendPolicy();
-        return backendPolicy == null || backendPolicy == SceneConfig.BackendPolicy.LOCAL;
+        AgentDefinition.BackendPolicy backendPolicy = policy.getBackendPolicy();
+        return backendPolicy == null || backendPolicy == AgentDefinition.BackendPolicy.LOCAL;
     }
 
     private String runtimeWorkingDirectory(RuntimePolicy policy) {
-        if (policy.getBackendPolicy() != SceneConfig.BackendPolicy.DOCKER) {
+        if (policy.getBackendPolicy() != AgentDefinition.BackendPolicy.DOCKER) {
             return null;
         }
-        SceneConfig.BackendSpec spec = policy.getBackendSpec();
+        AgentDefinition.BackendSpec spec = policy.getBackendSpec();
         return spec != null && spec.getDockerWorkdir() != null ? spec.getDockerWorkdir() : "/workspace";
     }
 }

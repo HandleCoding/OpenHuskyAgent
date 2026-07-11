@@ -35,7 +35,7 @@ class SlackInstanceAdapterTest {
         assertEquals("U999", inbound.getChannelIdentity().getPlatformAccountId());
         assertEquals("C1", inbound.getChannelIdentity().getChatId());
         assertEquals("1710000000.000100", inbound.getReplyTarget().getMessageId());
-        assertNull(inbound.getSceneId());
+        assertNull(inbound.getAgentId());
     }
 
     @Test

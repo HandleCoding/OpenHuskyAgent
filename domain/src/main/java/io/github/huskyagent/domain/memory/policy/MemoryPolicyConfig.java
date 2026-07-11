@@ -1,6 +1,6 @@
 package io.github.huskyagent.domain.memory.policy;
 
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import lombok.Builder;
 import lombok.Value;
 
@@ -12,14 +12,14 @@ import java.util.stream.Collectors;
 public class MemoryPolicyConfig {
     boolean enabled;
     String strategyId;
-    SceneConfig.MemoryAccess access;
-    SceneConfig.MemoryScopePolicy scope;
+    AgentDefinition.MemoryAccess access;
+    AgentDefinition.MemoryScopePolicy scope;
     Set<String> providers;
-    SceneConfig.MemoryPromptMode promptMode;
+    AgentDefinition.MemoryPromptMode promptMode;
     boolean allowCrossSessionSearch;
 
-    public static MemoryPolicyConfig from(SceneConfig.MemoryPolicySpec spec) {
-        SceneConfig.MemoryPolicySpec effective = spec != null ? spec : new SceneConfig.MemoryPolicySpec();
+    public static MemoryPolicyConfig from(AgentDefinition.MemoryPolicySpec spec) {
+        AgentDefinition.MemoryPolicySpec effective = spec != null ? spec : new AgentDefinition.MemoryPolicySpec();
         return MemoryPolicyConfig.builder()
                 .enabled(effective.isEnabled())
                 .strategyId(effective.getStrategy() != null ? effective.getStrategy() : "default")
@@ -32,21 +32,21 @@ public class MemoryPolicyConfig {
     }
 
     public boolean writeAllowed() {
-        return enabled && access == SceneConfig.MemoryAccess.READWRITE;
+        return enabled && access == AgentDefinition.MemoryAccess.READWRITE;
     }
 
-    public SceneConfig.LegacyMemoryPolicy legacyPolicy() {
-        if (!enabled || access == SceneConfig.MemoryAccess.DISABLED) {
-            return SceneConfig.LegacyMemoryPolicy.DISABLED;
+    public AgentDefinition.LegacyMemoryPolicy legacyPolicy() {
+        if (!enabled || access == AgentDefinition.MemoryAccess.DISABLED) {
+            return AgentDefinition.LegacyMemoryPolicy.DISABLED;
         }
-        if (access == SceneConfig.MemoryAccess.READONLY) {
-            return SceneConfig.LegacyMemoryPolicy.READONLY;
+        if (access == AgentDefinition.MemoryAccess.READONLY) {
+            return AgentDefinition.LegacyMemoryPolicy.READONLY;
         }
         return switch (scope) {
-            case USER_PROFILE -> SceneConfig.LegacyMemoryPolicy.USER_PROFILE;
-            case PRINCIPAL -> SceneConfig.LegacyMemoryPolicy.PRINCIPAL;
-            case SCENE -> SceneConfig.LegacyMemoryPolicy.SCENE;
-            default -> SceneConfig.LegacyMemoryPolicy.SESSION;
+            case USER_PROFILE -> AgentDefinition.LegacyMemoryPolicy.USER_PROFILE;
+            case PRINCIPAL -> AgentDefinition.LegacyMemoryPolicy.PRINCIPAL;
+            case AGENT -> AgentDefinition.LegacyMemoryPolicy.AGENT;
+            default -> AgentDefinition.LegacyMemoryPolicy.SESSION;
         };
     }
 

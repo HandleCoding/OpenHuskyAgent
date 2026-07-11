@@ -273,10 +273,10 @@ class MemorySystemIntegrationTest extends AbstractIntegrationTest {
                         memoryScopeResolver.resolve(principalScope, "all")).size(),
                 "PRINCIPAL policy should include same principal and channel across scenes");
 
-        SessionScope sceneScope = sessionScope(current, "api:user-a", "http", "assistant", "SCENE", java.util.Set.of(SessionMemoryProvider.NAME), true);
+        SessionScope sceneScope = sessionScope(current, "api:user-a", "http", "assistant", "AGENT", java.util.Set.of(SessionMemoryProvider.NAME), true);
         assertEquals(3, sessionMemoryProvider.prefetch(keyword, options,
                         memoryScopeResolver.resolve(sceneScope, "all")).size(),
-                "SCENE policy should include only same principal, channel, and scene");
+                "AGENT policy should include only same principal, channel, and agent");
 
         System.out.println("✅ Session search isolation policy verified");
     }
@@ -349,13 +349,13 @@ class MemorySystemIntegrationTest extends AbstractIntegrationTest {
 
     }
 
-    private SessionScope sessionScope(String sessionId, String principalId, String channelType, String sceneId,
+    private SessionScope sessionScope(String sessionId, String principalId, String channelType, String agentId,
                                       String memoryPolicy, java.util.Set<String> providerIds, boolean allowCrossSessionSearch) {
         return SessionScope.builder()
                 .sessionId(sessionId)
                 .principalId(principalId)
                 .channelType(channelType)
-                .sceneId(sceneId)
+                .agentId(agentId)
                 .memoryPolicy(memoryPolicy)
                 .memoryStrategyId("default")
                 .memoryProviderIds(providerIds)
@@ -365,13 +365,13 @@ class MemorySystemIntegrationTest extends AbstractIntegrationTest {
     }
 
     private void createScopedMemorySession(String sessionId, String principalId, String channelType,
-                                           String sceneId, String content) {
+                                           String agentId, String content) {
         sessionManager.createSession(sessionId);
         sessionRepository.updateSessionIsolation(
                 sessionId,
                 principalId,
                 channelType,
-                sceneId,
+                agentId,
                 "direct",
                 "chat-1",
                 "thread-1",

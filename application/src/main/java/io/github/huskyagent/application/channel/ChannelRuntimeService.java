@@ -1,7 +1,7 @@
 package io.github.huskyagent.application.channel;
 
 import io.github.huskyagent.application.ChatResult;
-import io.github.huskyagent.application.channel.binding.ChannelSceneRouter;
+import io.github.huskyagent.application.channel.binding.ChannelAgentRouter;
 import io.github.huskyagent.application.channel.binding.EffectiveChannelRoute;
 import io.github.huskyagent.application.runtime.RuntimeExecutionRequest;
 import io.github.huskyagent.application.runtime.RuntimeExecutionResult;
@@ -24,7 +24,7 @@ public class ChannelRuntimeService {
     private final RuntimeExecutionService runtimeExecutionService;
     private final ChannelInboundQueue inboundQueue;
     private final ChannelRuntimeQueueKeyFactory queueKeyFactory;
-    private final ChannelSceneRouter sceneRouter;
+    private final ChannelAgentRouter agentRouter;
     private final ChannelCommandParser commandParser;
     private final BypassCommandPolicy bypassCommandPolicy;
     private final SessionResolver sessionResolver;
@@ -33,14 +33,14 @@ public class ChannelRuntimeService {
     public ChannelRuntimeService(RuntimeExecutionService runtimeExecutionService,
                                  ChannelInboundQueue inboundQueue,
                                  ChannelRuntimeQueueKeyFactory queueKeyFactory,
-                                 ChannelSceneRouter sceneRouter,
+                                 ChannelAgentRouter agentRouter,
                                  ChannelCommandParser commandParser,
                                  BypassCommandPolicy bypassCommandPolicy,
                                  SessionResolver sessionResolver) {
         this.runtimeExecutionService = runtimeExecutionService;
         this.inboundQueue = inboundQueue;
         this.queueKeyFactory = queueKeyFactory;
-        this.sceneRouter = sceneRouter;
+        this.agentRouter = agentRouter;
         this.commandParser = commandParser;
         this.bypassCommandPolicy = bypassCommandPolicy;
         this.sessionResolver = sessionResolver;
@@ -49,13 +49,13 @@ public class ChannelRuntimeService {
     public ChannelRuntimeService(RuntimeExecutionService runtimeExecutionService,
                                  ChannelInboundQueue inboundQueue,
                                  ChannelRuntimeQueueKeyFactory queueKeyFactory,
-                                 ChannelSceneRouter sceneRouter) {
-        this(runtimeExecutionService, inboundQueue, queueKeyFactory, sceneRouter,
+                                 ChannelAgentRouter agentRouter) {
+        this(runtimeExecutionService, inboundQueue, queueKeyFactory, agentRouter,
                 inbound -> Optional.empty(), new BypassCommandPolicy(), null);
     }
 
     public CompletableFuture<ChatResult> handleInboundAsync(InboundMessage inbound, ChannelAdapter adapter, Executor executor) {
-        EffectiveChannelRoute route = sceneRouter.resolve(inbound);
+        EffectiveChannelRoute route = agentRouter.resolve(inbound);
         String queueKey = queueKeyFactory.keyFor(inbound, route);
         Optional<ChannelCommand> command = parseCommand(inbound);
         CommandExecutionMode mode = command.map(bypassCommandPolicy::modeFor).orElse(CommandExecutionMode.NORMAL_QUEUED);
@@ -76,7 +76,7 @@ public class ChannelRuntimeService {
     }
 
     public ChatResult handleInbound(InboundMessage inbound, ChannelAdapter adapter) {
-        EffectiveChannelRoute route = sceneRouter.resolve(inbound);
+        EffectiveChannelRoute route = agentRouter.resolve(inbound);
         return handleInbound(inbound, adapter, route);
     }
 
@@ -116,7 +116,7 @@ public class ChannelRuntimeService {
             adapter.send(reply(inbound, null, result.errorMessage()));
             return result;
         }
-        RuntimeScope scope = sessionResolver.createSession(inbound.getPrincipal(), inbound.getChannelIdentity(), route.sceneId());
+        RuntimeScope scope = sessionResolver.createSession(inbound.getPrincipal(), inbound.getChannelIdentity(), route.agentId());
         String text = "Created new session: " + scope.getSessionId();
         adapter.send(reply(inbound, scope.getSessionId(), text));
         return ChatResult.success(text, scope.getSessionId(), false);
@@ -127,7 +127,7 @@ public class ChannelRuntimeService {
             return Optional.of(inbound.getRequestedSessionId());
         }
         return sessionResolver != null
-                ? sessionResolver.findActiveSessionId(inbound.getPrincipal(), inbound.getChannelIdentity(), route.sceneId())
+                ? sessionResolver.findActiveSessionId(inbound.getPrincipal(), inbound.getChannelIdentity(), route.agentId())
                 : Optional.empty();
     }
 

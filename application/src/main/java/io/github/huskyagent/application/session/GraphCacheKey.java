@@ -8,19 +8,19 @@ import java.nio.file.Path;
 public class GraphCacheKey {
 
     /** Keeps per-session callback closures from leaking across otherwise shared compiled graphs. */
-    String sceneId;
+    String agentId;
     String workingDirectory;
     String runtimePolicyFingerprint;
     String promptVariant;
     String principalId;
     String sessionScopeId;
 
-    public static GraphCacheKey of(String sceneId, Path workingDirectory,
+    public static GraphCacheKey of(String agentId, Path workingDirectory,
                                    String runtimePolicyFingerprint,
                                    String promptVariant, String principalId,
                                    String sessionScopeId) {
         return new GraphCacheKey(
-                sceneId,
+                agentId,
                 workingDirectory.toString(),
                 runtimePolicyFingerprint != null ? runtimePolicyFingerprint : "default",
                 promptVariant != null ? promptVariant : "default",

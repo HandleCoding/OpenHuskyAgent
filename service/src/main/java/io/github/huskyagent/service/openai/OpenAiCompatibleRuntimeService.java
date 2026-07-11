@@ -4,7 +4,7 @@ import io.github.huskyagent.application.AgentInput;
 import io.github.huskyagent.application.ChatResult;
 import io.github.huskyagent.application.channel.ChannelInboundQueue;
 import io.github.huskyagent.application.channel.ChannelRuntimeQueueKeyFactory;
-import io.github.huskyagent.application.channel.binding.ChannelSceneRouter;
+import io.github.huskyagent.application.channel.binding.ChannelAgentRouter;
 import io.github.huskyagent.application.channel.binding.EffectiveChannelRoute;
 import io.github.huskyagent.application.runtime.RuntimeExecutionRequest;
 import io.github.huskyagent.application.runtime.RuntimeExecutionResult;
@@ -33,7 +33,7 @@ class OpenAiCompatibleRuntimeService {
     private final RuntimeExecutionService runtimeExecutionService;
     private final ChannelInboundQueue inboundQueue;
     private final ChannelRuntimeQueueKeyFactory queueKeyFactory;
-    private final ChannelSceneRouter sceneRouter;
+    private final ChannelAgentRouter agentRouter;
     private final OpenAiCompatibleProperties properties;
     private final OpenAiModelCatalog modelCatalog;
     private final OpenAiPromptMapper promptMapper;
@@ -43,7 +43,7 @@ class OpenAiCompatibleRuntimeService {
     OpenAiCompatibleRuntimeService(RuntimeExecutionService runtimeExecutionService,
                                    ChannelInboundQueue inboundQueue,
                                    ChannelRuntimeQueueKeyFactory queueKeyFactory,
-                                   ChannelSceneRouter sceneRouter,
+                                   ChannelAgentRouter agentRouter,
                                    OpenAiCompatibleProperties properties,
                                    OpenAiModelCatalog modelCatalog,
                                    OpenAiPromptMapper promptMapper,
@@ -52,7 +52,7 @@ class OpenAiCompatibleRuntimeService {
         this.runtimeExecutionService = runtimeExecutionService;
         this.inboundQueue = inboundQueue;
         this.queueKeyFactory = queueKeyFactory;
-        this.sceneRouter = sceneRouter;
+        this.agentRouter = agentRouter;
         this.properties = properties;
         this.modelCatalog = modelCatalog;
         this.promptMapper = promptMapper;
@@ -95,10 +95,10 @@ class OpenAiCompatibleRuntimeService {
     }
 
     private RuntimeContext buildContext(OpenAiChatCompletionRequest request, String sessionId) {
-        String sceneId = modelCatalog.resolveSceneId(request.model());
+        String agentId = modelCatalog.resolveAgentId(request.model());
         OpenAiPromptMapper.MappedPrompt mappedPrompt = promptMapper.map(request);
-        InboundMessage inbound = buildInbound(request, sceneId, mappedPrompt.displayText(), sessionId);
-        EffectiveChannelRoute route = sceneRouter.resolve(inbound);
+        InboundMessage inbound = buildInbound(request, agentId, mappedPrompt.displayText(), sessionId);
+        EffectiveChannelRoute route = agentRouter.resolve(inbound);
         AgentInput agentInput = AgentInput.structuredMessages(mappedPrompt.messages(), mappedPrompt.displayText());
         return new RuntimeContext(inbound, route, agentInput, normalize(sessionId) != null);
     }
@@ -140,7 +140,7 @@ class OpenAiCompatibleRuntimeService {
         }
     }
 
-    private InboundMessage buildInbound(OpenAiChatCompletionRequest request, String sceneId, String prompt, String sessionId) {
+    private InboundMessage buildInbound(OpenAiChatCompletionRequest request, String agentId, String prompt, String sessionId) {
         Principal principal = principal(request);
         ChannelIdentity channelIdentity = ChannelIdentity.builder()
                 .channelType(ChannelType.HTTP)
@@ -154,9 +154,9 @@ class OpenAiCompatibleRuntimeService {
                 .requestedSessionId(normalize(sessionId))
                 .principal(principal)
                 .channelIdentity(channelIdentity)
-                .sceneId(sceneId)
+                .agentId(agentId)
                 .rawPayload(request)
-                .metadata(metadata(request, sceneId))
+                .metadata(metadata(request, agentId))
                 .build();
     }
 
@@ -176,13 +176,13 @@ class OpenAiCompatibleRuntimeService {
                 .build();
     }
 
-    private Map<String, Object> metadata(OpenAiChatCompletionRequest request, String sceneId) {
+    private Map<String, Object> metadata(OpenAiChatCompletionRequest request, String agentId) {
         Map<String, Object> metadata = new HashMap<>();
         if (request.metadata() != null) {
             metadata.putAll(request.metadata());
         }
         metadata.put("openai.model", request.model());
-        metadata.put("openai.agentId", sceneId);
+        metadata.put("openai.agentId", agentId);
         metadata.put("openai.stream", request.streamEnabled());
         return metadata;
     }

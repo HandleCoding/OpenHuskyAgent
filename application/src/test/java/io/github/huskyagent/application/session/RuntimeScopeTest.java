@@ -48,7 +48,7 @@ class RuntimeScopeTest {
         assertEquals("session-1", sessionScope.getSessionId());
         assertEquals("user-1", sessionScope.getPrincipalId());
         assertEquals("tui", sessionScope.getChannelType());
-        assertEquals("assistant", sessionScope.getSceneId());
+        assertEquals("assistant", sessionScope.getAgentId());
         assertEquals("/tmp/work", sessionScope.getWorkingDirectory());
         assertEquals("SESSION", sessionScope.getMemoryPolicy());
         assertEquals("custom", sessionScope.getMemoryStrategyId());
@@ -67,14 +67,14 @@ class RuntimeScopeTest {
     @Test
     void toSessionScopeMarksDockerPersistentFilesystemAvailable() {
         var base = RuntimeScopeTestFixtures.completeScope();
-        var spec = new io.github.huskyagent.domain.scene.SceneConfig.BackendSpec();
+        var spec = new io.github.huskyagent.domain.agent.AgentDefinition.BackendSpec();
         spec.setDockerPersistFilesystem(true);
         var policy = io.github.huskyagent.domain.runtime.RuntimePolicy.builder()
-                .sceneId("assistant")
+                .agentId("assistant")
                 .memoryPolicy(RuntimeScopeTestFixtures.runtimePolicy().getMemoryPolicy())
                 .capabilityView(RuntimeScopeTestFixtures.runtimePolicy().getCapabilityView())
                 .knowledgeSources(Set.of("docs"))
-                .backendPolicy(io.github.huskyagent.domain.scene.SceneConfig.BackendPolicy.DOCKER)
+                .backendPolicy(io.github.huskyagent.domain.agent.AgentDefinition.BackendPolicy.DOCKER)
                 .backendSpec(spec)
                 .build();
         RuntimeScope scope = RuntimeScope.builder()
@@ -97,11 +97,11 @@ class RuntimeScopeTest {
     void toSessionScopeMarksSshFilesystemUnavailable() {
         var base = RuntimeScopeTestFixtures.completeScope();
         var policy = io.github.huskyagent.domain.runtime.RuntimePolicy.builder()
-                .sceneId("assistant")
+                .agentId("assistant")
                 .memoryPolicy(RuntimeScopeTestFixtures.runtimePolicy().getMemoryPolicy())
                 .capabilityView(RuntimeScopeTestFixtures.runtimePolicy().getCapabilityView())
                 .knowledgeSources(Set.of("docs"))
-                .backendPolicy(io.github.huskyagent.domain.scene.SceneConfig.BackendPolicy.SSH)
+                .backendPolicy(io.github.huskyagent.domain.agent.AgentDefinition.BackendPolicy.SSH)
                 .build();
         RuntimeScope scope = RuntimeScope.builder()
                 .sessionId(base.getSessionId())
@@ -121,15 +121,15 @@ class RuntimeScopeTest {
     void toSessionScopeUsesRemoteStorageSpecWhenConfigured() {
         var base = RuntimeScopeTestFixtures.completeScope();
         var basePolicy = RuntimeScopeTestFixtures.runtimePolicy();
-        var storageSpec = new io.github.huskyagent.domain.scene.SceneConfig.StorageSpec();
+        var storageSpec = new io.github.huskyagent.domain.agent.AgentDefinition.StorageSpec();
         storageSpec.setWorkspaceType("s3");
         storageSpec.setCheckpointType("postgres");
         var policy = io.github.huskyagent.domain.runtime.RuntimePolicy.builder()
-                .sceneId(basePolicy.getSceneId())
+                .agentId(basePolicy.getAgentId())
                 .memoryPolicy(basePolicy.getMemoryPolicy())
                 .capabilityView(basePolicy.getCapabilityView())
                 .knowledgeSources(basePolicy.getKnowledgeSources())
-                .storagePolicy(io.github.huskyagent.domain.scene.SceneConfig.StoragePolicy.REMOTE)
+                .storagePolicy(io.github.huskyagent.domain.agent.AgentDefinition.StoragePolicy.REMOTE)
                 .storageSpec(storageSpec)
                 .build();
         RuntimeScope scope = RuntimeScope.builder()
@@ -150,15 +150,15 @@ class RuntimeScopeTest {
     void toSessionScopeForcesLocalWhenStoragePolicyIsLocal() {
         var base = RuntimeScopeTestFixtures.completeScope();
         var basePolicy = RuntimeScopeTestFixtures.runtimePolicy();
-        var storageSpec = new io.github.huskyagent.domain.scene.SceneConfig.StorageSpec();
+        var storageSpec = new io.github.huskyagent.domain.agent.AgentDefinition.StorageSpec();
         storageSpec.setWorkspaceType("s3");
         storageSpec.setCheckpointType("postgres");
         var policy = io.github.huskyagent.domain.runtime.RuntimePolicy.builder()
-                .sceneId(basePolicy.getSceneId())
+                .agentId(basePolicy.getAgentId())
                 .memoryPolicy(basePolicy.getMemoryPolicy())
                 .capabilityView(basePolicy.getCapabilityView())
                 .knowledgeSources(basePolicy.getKnowledgeSources())
-                .storagePolicy(io.github.huskyagent.domain.scene.SceneConfig.StoragePolicy.LOCAL)
+                .storagePolicy(io.github.huskyagent.domain.agent.AgentDefinition.StoragePolicy.LOCAL)
                 .storageSpec(storageSpec)
                 .build();
         RuntimeScope scope = RuntimeScope.builder()

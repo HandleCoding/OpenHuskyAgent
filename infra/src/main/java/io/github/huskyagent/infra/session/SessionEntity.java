@@ -9,7 +9,7 @@ public class SessionEntity {
     private String userId;
     private String ownerPrincipalId;
     private String channelType;
-    private String sceneId;
+    private String agentId;
     private String conversationType;
     private String sourceChatId;
     private String sourceThreadId;

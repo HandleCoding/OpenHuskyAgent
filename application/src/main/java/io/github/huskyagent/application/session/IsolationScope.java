@@ -1,6 +1,6 @@
 package io.github.huskyagent.application.session;
 
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.Principal;
 import lombok.Builder;
@@ -18,10 +18,10 @@ public class IsolationScope {
     String chatId;
     String threadId;
     String senderId;
-    String sceneId;
+    String agentId;
 
     public static IsolationScope from(String sessionId, Principal principal,
-                                      ChannelIdentity channelIdentity, SceneConfig sceneConfig) {
+                                      ChannelIdentity channelIdentity, AgentDefinition agentDefinition) {
         return IsolationScope.builder()
                 .sessionId(sessionId)
                 .principalId(principal != null ? principal.getId() : null)
@@ -33,7 +33,7 @@ public class IsolationScope {
                 .chatId(channelIdentity != null ? channelIdentity.getChatId() : null)
                 .threadId(channelIdentity != null ? channelIdentity.getThreadId() : null)
                 .senderId(channelIdentity != null ? channelIdentity.getSenderId() : null)
-                .sceneId(sceneConfig != null ? sceneConfig.getSceneId() : null)
+                .agentId(agentDefinition != null ? agentDefinition.getAgentId() : null)
                 .build();
     }
 }

@@ -25,7 +25,7 @@ import io.github.huskyagent.infra.ai.DynamicPromptSnapshotCache;
 import io.github.huskyagent.infra.context.TokenCounter;
 import io.github.huskyagent.domain.hook.DefaultHookRegistry;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.session.SessionScope;
 import io.github.huskyagent.infra.tool.approval.ApprovalInfo;
 import io.github.huskyagent.infra.tool.approval.ApprovalService;
@@ -123,7 +123,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
         final String sid = scope.getSessionId();
         try {
             scope.requireCompleteForExecution();
-            log.info("Starting graph execution: sessionId={}, scene={}", sid, scope.getRuntimePolicy().getSceneId());
+            log.info("Starting graph execution: sessionId={}, agent={}", sid, scope.getRuntimePolicy().getAgentId());
             if (!stateless) {
                 initSession(sid);
             }
@@ -258,15 +258,15 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
 
     private CompiledGraph<ReActAgentState> buildStatelessGraph(RuntimeScope scope) throws Exception {
         RuntimePolicy runtimePolicy = scope.getRuntimePolicy();
-        log.info("Building stateless CompiledGraph: sceneId={}, workDir={}, policy={}",
-                runtimePolicy.getSceneId(), scope.getWorkingDirectory(), runtimePolicy.fingerprint());
+        log.info("Building stateless CompiledGraph: agentId={}, workDir={}, policy={}",
+                runtimePolicy.getAgentId(), scope.getWorkingDirectory(), runtimePolicy.fingerprint());
         return agentGraph.buildGraph(
                 scope.getSessionId(),
                 scope.getWorkingDirectory(),
                 scope.toSessionScope(),
                 runtimePolicy,
                 null,
-                runtimePolicy.getApprovalPolicy() == SceneConfig.ApprovalPolicy.NONE ? null : defaultHookRegistry,
+                runtimePolicy.getApprovalPolicy() == AgentDefinition.ApprovalPolicy.NONE ? null : defaultHookRegistry,
                 scope.getChannelIdentity(),
                 scope.getPrincipal(),
                 true
@@ -281,7 +281,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
     public CompiledGraph<ReActAgentState> getOrBuildGraph(RuntimeScope scope) throws Exception {
         RuntimePolicy runtimePolicy = scope.getRuntimePolicy();
         GraphCacheKey key = GraphCacheKey.of(
-                runtimePolicy.getSceneId(),
+                runtimePolicy.getAgentId(),
                 scope.getWorkingDirectory(),
                 runtimePolicy.fingerprint(),
                 runtimePolicy.getSystemPrompt(),
@@ -296,8 +296,8 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
 
         return graphCache.computeIfAbsent(key, k -> {
             try {
-                log.info("Building CompiledGraph: sceneId={}, workDir={}, policy={}",
-                        runtimePolicy.getSceneId(), scope.getWorkingDirectory(), runtimePolicy.fingerprint());
+                log.info("Building CompiledGraph: agentId={}, workDir={}, policy={}",
+                        runtimePolicy.getAgentId(), scope.getWorkingDirectory(), runtimePolicy.fingerprint());
 
                 ChannelIdentity channelIdentity = scope.getChannelIdentity();
                 Principal principal = scope.getPrincipal();
@@ -308,12 +308,12 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
                         sessionScope,
                         runtimePolicy,
                         null,
-                        runtimePolicy.getApprovalPolicy() == SceneConfig.ApprovalPolicy.NONE ? null : defaultHookRegistry,
+                        runtimePolicy.getApprovalPolicy() == AgentDefinition.ApprovalPolicy.NONE ? null : defaultHookRegistry,
                         channelIdentity,
                         principal
                 );
             } catch (Exception e) {
-                throw new RuntimeException("Failed to build graph for scene=" + runtimePolicy.getSceneId(), e);
+                throw new RuntimeException("Failed to build graph for agent=" + runtimePolicy.getAgentId(), e);
             }
         });
     }
@@ -390,7 +390,7 @@ public class ReActAgentApp implements AgentRuntimeExecutor {
         List<Message> compacted = contextManager.prepareActiveContext(
                 scope.getSessionId(),
                 scope.getRuntimePolicy(),
-                scope.getRuntimePolicy().getSceneId(),
+                scope.getRuntimePolicy().getAgentId(),
                 activeMessages);
         if (compacted == null || compacted.isEmpty() || compacted == activeMessages || compacted.equals(activeMessages)) {
             return;

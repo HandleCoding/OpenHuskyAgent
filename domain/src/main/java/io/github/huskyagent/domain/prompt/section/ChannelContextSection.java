@@ -26,9 +26,9 @@ public class ChannelContextSection extends AbstractPromptSection {
     public String build(PromptContext context) {
         ChannelIdentity identity = context.getChannelIdentity().orElse(null);
         Principal principal = context.getPrincipal().orElse(null);
-        String sceneId = context.getSceneId().orElse(null);
+        String agentId = context.getAgentId().orElse(null);
 
-        if (identity == null && principal == null && sceneId == null) {
+        if (identity == null && principal == null && agentId == null) {
             return "";
         }
 
@@ -62,8 +62,8 @@ public class ChannelContextSection extends AbstractPromptSection {
             }
         }
 
-        if (sceneId != null && !sceneId.isBlank()) {
-            sb.append("**Scene:** ").append(sceneId).append("\n");
+        if (agentId != null && !agentId.isBlank()) {
+            sb.append("**Scene:** ").append(agentId).append("\n");
         }
 
         sb.append("\n");

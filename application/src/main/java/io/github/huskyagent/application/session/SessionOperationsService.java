@@ -3,8 +3,8 @@ package io.github.huskyagent.application.session;
 import io.github.huskyagent.application.runtime.RuntimePolicyResolver;
 import io.github.huskyagent.application.runtime.RuntimeBackendCapabilityResolver;
 import io.github.huskyagent.domain.context.ContextManager;
-import io.github.huskyagent.domain.scene.SceneConfig;
-import io.github.huskyagent.domain.scene.SceneResolver;
+import io.github.huskyagent.domain.agent.AgentDefinition;
+import io.github.huskyagent.domain.agent.AgentResolver;
 import io.github.huskyagent.domain.session.SessionManager;
 import io.github.huskyagent.infra.context.ContextStatus;
 import io.github.huskyagent.infra.session.CheckpointStore;
@@ -29,7 +29,7 @@ public class SessionOperationsService {
     private final CheckpointStoreFactory checkpointStoreFactory;
     private final ContextManager contextManager;
     private final SessionRepository sessionRepository;
-    private final SceneResolver sceneResolver;
+    private final AgentResolver agentResolver;
     private final RuntimePolicyResolver runtimePolicyResolver;
     private final RuntimeBackendCapabilityResolver backendCapabilities;
     private final ToolRegistry toolRegistry;
@@ -71,9 +71,9 @@ public class SessionOperationsService {
             return current;
         }
 
-        String sceneId = sessionRepository.getSessionScene(sessionId);
-        if (sceneId == null || sceneId.isBlank()) {
-            log.warn("[rewind] no scene_id recorded for session={} - using local checkpoint store", sessionId);
+        String agentId = sessionRepository.getSessionAgentId(sessionId);
+        if (agentId == null || agentId.isBlank()) {
+            log.warn("[rewind] no agent_id recorded for session={} - using local checkpoint store", sessionId);
             return SessionScope.builder()
                     .sessionId(sessionId)
                     .checkpointType("local")
@@ -83,11 +83,11 @@ public class SessionOperationsService {
                     .build();
         }
 
-        SceneConfig sceneConfig = sceneResolver.resolve(sceneId);
-        var runtimePolicy = runtimePolicyResolver.resolve(sceneConfig, toolRegistry.getAllEnabled());
+        AgentDefinition agentDefinition = agentResolver.resolve(agentId);
+        var runtimePolicy = runtimePolicyResolver.resolve(agentDefinition, toolRegistry.getAllEnabled());
         return SessionScope.builder()
                 .sessionId(sessionId)
-                .sceneId(sceneId)
+                .agentId(agentId)
                 .checkpointType(runtimePolicy.effectiveCheckpointType())
                 .workspaceType(runtimePolicy.effectiveWorkspaceType())
                 .backendType(backendCapabilities.backendType(runtimePolicy))

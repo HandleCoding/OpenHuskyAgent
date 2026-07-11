@@ -11,12 +11,12 @@ public class MemoryScope {
     String currentSessionId;
     String principalId;
     String channelType;
-    String sceneId;
+    String agentId;
     String memoryPolicy;
 
     public enum SearchBoundary {
         CURRENT_SESSION,
         SAME_PRINCIPAL,
-        SAME_PRINCIPAL_AND_SCENE
+        SAME_PRINCIPAL_AND_AGENT
     }
 }

@@ -3,7 +3,7 @@ package io.github.huskyagent.service.controller;
 import io.github.huskyagent.application.ChatResult;
 import io.github.huskyagent.application.channel.ChannelInboundQueue;
 import io.github.huskyagent.application.channel.ChannelRuntimeQueueKeyFactory;
-import io.github.huskyagent.application.channel.binding.ChannelSceneRouter;
+import io.github.huskyagent.application.channel.binding.ChannelAgentRouter;
 import io.github.huskyagent.application.channel.binding.EffectiveChannelRoute;
 import io.github.huskyagent.application.runtime.RuntimeExecutionRequest;
 import io.github.huskyagent.application.runtime.RuntimeExecutionResult;
@@ -89,7 +89,7 @@ class SseChatControllerTest {
                 runtime,
                 new ChannelInboundQueue(),
                 new FixedQueueKeyFactory(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 Runnable::run
         );
     }
@@ -128,14 +128,14 @@ class SseChatControllerTest {
         }
     }
 
-    private static class FakeSceneRouter extends ChannelSceneRouter {
-        FakeSceneRouter() {
+    private static class FakeAgentRouter extends ChannelAgentRouter {
+        FakeAgentRouter() {
             super(null, null);
         }
 
         @Override
         public EffectiveChannelRoute resolve(InboundMessage inbound) {
-            return new EffectiveChannelRoute("assistant", null, EffectiveChannelRoute.Source.SCENE_DEFAULT);
+            return new EffectiveChannelRoute("assistant", null, EffectiveChannelRoute.Source.AGENT_DEFAULT);
         }
     }
 

@@ -1,6 +1,6 @@
 package io.github.huskyagent.application.subagent;
 
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
 import io.github.huskyagent.domain.memory.policy.MemoryPolicyConfig;
 import io.github.huskyagent.domain.subagent.SubAgentMessageQueue;
@@ -30,11 +30,11 @@ class SubAgentRunnerRuntimeInheritanceTest {
         ToolExecutionContext parentContext = parentContext("ssh", false);
         SubAgentRunner runner = runner(parentContext);
 
-        Method method = SubAgentRunner.class.getDeclaredMethod("buildSceneConfig", String.class);
+        Method method = SubAgentRunner.class.getDeclaredMethod("buildAgentDefinition", String.class);
         method.setAccessible(true);
-        SceneConfig sceneConfig = (SceneConfig) method.invoke(runner, "system");
+        AgentDefinition agentDefinition = (AgentDefinition) method.invoke(runner, "system");
 
-        assertEquals(SceneConfig.BackendPolicy.SSH, sceneConfig.getBackendPolicy());
+        assertEquals(AgentDefinition.BackendPolicy.SSH, agentDefinition.getBackendPolicy());
     }
 
     @Test
@@ -42,13 +42,13 @@ class SubAgentRunnerRuntimeInheritanceTest {
         ToolExecutionContext parentContext = parentContext("docker", true, "/app");
         SubAgentRunner runner = runner(parentContext);
 
-        Method method = SubAgentRunner.class.getDeclaredMethod("buildSceneConfig", String.class);
+        Method method = SubAgentRunner.class.getDeclaredMethod("buildAgentDefinition", String.class);
         method.setAccessible(true);
-        SceneConfig sceneConfig = (SceneConfig) method.invoke(runner, "system");
+        AgentDefinition agentDefinition = (AgentDefinition) method.invoke(runner, "system");
 
-        assertEquals(SceneConfig.BackendPolicy.DOCKER, sceneConfig.getBackendPolicy());
-        assertNotNull(sceneConfig.getBackendSpec());
-        assertEquals("/app", sceneConfig.getBackendSpec().getDockerWorkdir());
+        assertEquals(AgentDefinition.BackendPolicy.DOCKER, agentDefinition.getBackendPolicy());
+        assertNotNull(agentDefinition.getBackendSpec());
+        assertEquals("/app", agentDefinition.getBackendSpec().getDockerWorkdir());
     }
 
     @Test
@@ -95,8 +95,8 @@ class SubAgentRunnerRuntimeInheritanceTest {
         ToolExecutionContext parentContext = parentContext("docker", true, "/app");
         SubAgentRunner runner = runner(parentContext);
         RuntimePolicy policy = RuntimePolicy.builder()
-                .sceneId("subagent")
-                .backendPolicy(SceneConfig.BackendPolicy.DOCKER)
+                .agentId("subagent")
+                .backendPolicy(AgentDefinition.BackendPolicy.DOCKER)
                 .backendSpec(dockerSpec("/app", true))
                 .memoryPolicy(memoryPolicy())
                 .capabilityView(io.github.huskyagent.domain.capability.CapabilityView.builder().build())
@@ -106,14 +106,14 @@ class SubAgentRunnerRuntimeInheritanceTest {
         Method method = SubAgentRunner.class.getDeclaredMethod(
                 "buildChildRuntimeScope",
                 String.class,
-                SceneConfig.class,
+                AgentDefinition.class,
                 RuntimePolicy.class);
         method.setAccessible(true);
         io.github.huskyagent.application.session.RuntimeScope scope =
                 (io.github.huskyagent.application.session.RuntimeScope) method.invoke(
                         runner,
                         "child-session",
-                        new SceneConfig(),
+                        new AgentDefinition(),
                         policy);
 
         assertTrue(scope.getFilesystemAvailable());
@@ -126,8 +126,8 @@ class SubAgentRunnerRuntimeInheritanceTest {
         ToolExecutionContext parentContext = parentContext("ssh", false);
         SubAgentRunner runner = runner(parentContext);
         RuntimePolicy policy = RuntimePolicy.builder()
-                .sceneId("subagent")
-                .backendPolicy(SceneConfig.BackendPolicy.SSH)
+                .agentId("subagent")
+                .backendPolicy(AgentDefinition.BackendPolicy.SSH)
                 .memoryPolicy(memoryPolicy())
                 .capabilityView(io.github.huskyagent.domain.capability.CapabilityView.builder().build())
                 .knowledgeSources(Set.of())
@@ -136,14 +136,14 @@ class SubAgentRunnerRuntimeInheritanceTest {
         Method method = SubAgentRunner.class.getDeclaredMethod(
                 "buildChildRuntimeScope",
                 String.class,
-                SceneConfig.class,
+                AgentDefinition.class,
                 RuntimePolicy.class);
         method.setAccessible(true);
         io.github.huskyagent.application.session.RuntimeScope scope =
                 (io.github.huskyagent.application.session.RuntimeScope) method.invoke(
                         runner,
                         "child-session",
-                        new SceneConfig(),
+                        new AgentDefinition(),
                         policy);
 
         assertFalse(scope.getFilesystemAvailable());
@@ -171,8 +171,8 @@ class SubAgentRunnerRuntimeInheritanceTest {
                 new ToolRuntimeEnvironment(backendType, filesystemAvailable, () -> null, () -> null));
     }
 
-    private SceneConfig.BackendSpec dockerSpec(String runtimeWorkingDirectory, boolean persistFilesystem) {
-        SceneConfig.BackendSpec spec = new SceneConfig.BackendSpec();
+    private AgentDefinition.BackendSpec dockerSpec(String runtimeWorkingDirectory, boolean persistFilesystem) {
+        AgentDefinition.BackendSpec spec = new AgentDefinition.BackendSpec();
         spec.setDockerWorkdir(runtimeWorkingDirectory);
         spec.setDockerPersistFilesystem(persistFilesystem);
         return spec;
@@ -182,9 +182,9 @@ class SubAgentRunnerRuntimeInheritanceTest {
         return MemoryPolicyConfig.builder()
                 .enabled(false)
                 .strategyId("default")
-                .access(SceneConfig.MemoryAccess.DISABLED)
-                .scope(SceneConfig.MemoryScopePolicy.SESSION)
-                .promptMode(SceneConfig.MemoryPromptMode.NONE)
+                .access(AgentDefinition.MemoryAccess.DISABLED)
+                .scope(AgentDefinition.MemoryScopePolicy.SESSION)
+                .promptMode(AgentDefinition.MemoryPromptMode.NONE)
                 .providers(Set.of())
                 .build();
     }

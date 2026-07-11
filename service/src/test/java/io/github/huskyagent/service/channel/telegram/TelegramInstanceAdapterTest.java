@@ -40,7 +40,7 @@ class TelegramInstanceAdapterTest {
         assertEquals("test_bot", inbound.getChannelIdentity().getPlatformAccountId());
         assertEquals("1001", inbound.getChannelIdentity().getChatId());
         assertEquals("11", inbound.getReplyTarget().getMessageId());
-        assertNull(inbound.getSceneId());
+        assertNull(inbound.getAgentId());
     }
 
     @Test

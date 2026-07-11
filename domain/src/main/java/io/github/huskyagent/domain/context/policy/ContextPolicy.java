@@ -1,6 +1,6 @@
 package io.github.huskyagent.domain.context.policy;
 
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.context.ContextConfig;
 import lombok.Builder;
 import lombok.Value;
@@ -20,12 +20,12 @@ public class ContextPolicy {
     int maxSummaryTokens;
     String summaryFocus;
 
-    public static ContextPolicy from(SceneConfig.ContextPolicySpec scenePolicy, ContextConfig defaults) {
+    public static ContextPolicy from(AgentDefinition.ContextPolicySpec scenePolicy, ContextConfig defaults) {
         return from(scenePolicy, defaults, null);
     }
 
-    public static ContextPolicy from(SceneConfig.ContextPolicySpec scenePolicy, ContextConfig defaults, String modelName) {
-        SceneConfig.ContextPolicySpec spec = scenePolicy != null ? scenePolicy : new SceneConfig.ContextPolicySpec();
+    public static ContextPolicy from(AgentDefinition.ContextPolicySpec scenePolicy, ContextConfig defaults, String modelName) {
+        AgentDefinition.ContextPolicySpec spec = scenePolicy != null ? scenePolicy : new AgentDefinition.ContextPolicySpec();
         return ContextPolicy.builder()
                 .enabled(spec.isEnabled())
                 .mode(spec.getMode() != null ? spec.getMode() : "prune-then-summary")

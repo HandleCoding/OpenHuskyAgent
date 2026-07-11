@@ -5,7 +5,7 @@ import io.github.huskyagent.domain.context.ContextManagementStrategyResolver;
 import io.github.huskyagent.domain.context.policy.ContextPolicy;
 import io.github.huskyagent.domain.memory.policy.MemoryPolicyConfig;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.context.ContextConfig;
 import io.github.huskyagent.infra.knowledge.KnowledgeManager;
 import io.github.huskyagent.infra.memory.MemoryManager;
@@ -31,36 +31,36 @@ public class RuntimePolicyResolver {
     @Value("${spring.ai.openai.chat.options.model:}")
     private String modelName;
 
-    public RuntimePolicy resolve(SceneConfig sceneConfig, List<ToolDefinition> candidateTools) {
-        return assemble(sceneConfig, capabilityVisibilityResolver.resolve(sceneConfig, candidateTools));
+    public RuntimePolicy resolve(AgentDefinition agentDefinition, List<ToolDefinition> candidateTools) {
+        return assemble(agentDefinition, capabilityVisibilityResolver.resolve(agentDefinition, candidateTools));
     }
 
-    public RuntimePolicy assemble(SceneConfig sceneConfig, CapabilityView capabilityView) {
+    public RuntimePolicy assemble(AgentDefinition agentDefinition, CapabilityView capabilityView) {
         Objects.requireNonNull(capabilityView, "capabilityView is required");
-        ContextPolicy contextPolicy = ContextPolicy.from(sceneConfig.getContextPolicy(), contextConfig, modelName);
+        ContextPolicy contextPolicy = ContextPolicy.from(agentDefinition.getContextPolicy(), contextConfig, modelName);
         contextManagementStrategyResolver.resolve(contextPolicy.getStrategyId());
-        MemoryPolicyConfig memoryPolicy = MemoryPolicyConfig.from(sceneConfig.getMemoryPolicyConfig());
+        MemoryPolicyConfig memoryPolicy = MemoryPolicyConfig.from(agentDefinition.getMemoryPolicyConfig());
         memoryRuntimeStrategyResolver.resolve(memoryPolicy.getStrategyId());
         memoryManager.validateProviderIds(memoryPolicy.getProviders());
-        knowledgeManager.validateSourceIds(sceneConfig.getKnowledgeSources());
+        knowledgeManager.validateSourceIds(agentDefinition.getKnowledgeSources());
         return RuntimePolicy.builder()
-                .sceneId(sceneConfig.getSceneId())
+                .agentId(agentDefinition.getAgentId())
                 .capabilityView(capabilityView)
                 .contextPolicy(contextPolicy)
                 .memoryPolicy(memoryPolicy)
-                .approvalPolicy(sceneConfig.getApprovalPolicy())
-                .backendPolicy(sceneConfig.getBackendPolicy())
-                .workingDirectoryPolicy(sceneConfig.getWorkingDirectoryPolicy())
-                .auditSpec(sceneConfig.getAuditSpec())
-                .rateLimitSpec(sceneConfig.getRateLimitSpec())
-                .knowledgeSources(sceneConfig.getKnowledgeSources())
-                .systemPrompt(sceneConfig.getSystemPrompt())
-                .promptFiles(sceneConfig.getPromptFiles())
-                .promptFilePolicy(sceneConfig.getPromptFilePolicy())
-                .backendSpec(sceneConfig.getBackendSpec())
-                .storagePolicy(sceneConfig.getStoragePolicy())
-                .storageSpec(sceneConfig.getStorageSpec())
-                .fixedWorkingDirectory(sceneConfig.getFixedWorkingDirectory())
+                .approvalPolicy(agentDefinition.getApprovalPolicy())
+                .backendPolicy(agentDefinition.getBackendPolicy())
+                .workingDirectoryPolicy(agentDefinition.getWorkingDirectoryPolicy())
+                .auditSpec(agentDefinition.getAuditSpec())
+                .rateLimitSpec(agentDefinition.getRateLimitSpec())
+                .knowledgeSources(agentDefinition.getKnowledgeSources())
+                .systemPrompt(agentDefinition.getSystemPrompt())
+                .promptFiles(agentDefinition.getPromptFiles())
+                .promptFilePolicy(agentDefinition.getPromptFilePolicy())
+                .backendSpec(agentDefinition.getBackendSpec())
+                .storagePolicy(agentDefinition.getStoragePolicy())
+                .storageSpec(agentDefinition.getStorageSpec())
+                .fixedWorkingDirectory(agentDefinition.getFixedWorkingDirectory())
                 .build();
     }
 }

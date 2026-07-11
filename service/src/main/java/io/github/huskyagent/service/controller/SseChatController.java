@@ -3,7 +3,7 @@ package io.github.huskyagent.service.controller;
 import io.github.huskyagent.application.ChatResult;
 import io.github.huskyagent.application.channel.ChannelInboundQueue;
 import io.github.huskyagent.application.channel.ChannelRuntimeQueueKeyFactory;
-import io.github.huskyagent.application.channel.binding.ChannelSceneRouter;
+import io.github.huskyagent.application.channel.binding.ChannelAgentRouter;
 import io.github.huskyagent.application.channel.binding.EffectiveChannelRoute;
 import io.github.huskyagent.application.runtime.RuntimeExecutionRequest;
 import io.github.huskyagent.application.runtime.RuntimeExecutionResult;
@@ -33,7 +33,7 @@ public class SseChatController {
     private final RuntimeExecutionService runtimeExecutionService;
     private final ChannelInboundQueue inboundQueue;
     private final ChannelRuntimeQueueKeyFactory queueKeyFactory;
-    private final ChannelSceneRouter sceneRouter;
+    private final ChannelAgentRouter agentRouter;
     private final Executor agentExecutor;
 
     public SseChatController(ChatbotConfig chatbotConfig,
@@ -41,14 +41,14 @@ public class SseChatController {
                              RuntimeExecutionService runtimeExecutionService,
                              ChannelInboundQueue inboundQueue,
                              ChannelRuntimeQueueKeyFactory queueKeyFactory,
-                             ChannelSceneRouter sceneRouter,
+                             ChannelAgentRouter agentRouter,
                              @Qualifier("agentExecutor") Executor agentExecutor) {
         this.chatbotConfig = chatbotConfig;
         this.sseChannelAdapter = sseChannelAdapter;
         this.runtimeExecutionService = runtimeExecutionService;
         this.inboundQueue = inboundQueue;
         this.queueKeyFactory = queueKeyFactory;
-        this.sceneRouter = sceneRouter;
+        this.agentRouter = agentRouter;
         this.agentExecutor = agentExecutor;
     }
 
@@ -68,7 +68,7 @@ public class SseChatController {
         SseEmitter emitter = new SseEmitter(300_000L);
         SseRuntimeCallbacks callbacks = new SseRuntimeCallbacks(emitter, sseChannelAdapter);
         InboundMessage inbound = buildInbound(request, sessionId, agentId);
-        EffectiveChannelRoute route = sceneRouter.resolve(inbound);
+        EffectiveChannelRoute route = agentRouter.resolve(inbound);
         emitter.onTimeout(() -> log.warn("SSE emitter timeout: requestedSessionId={}", sessionId));
 
         inboundQueue.enqueue(queueKeyFactory.keyFor(inbound, route), () -> {
@@ -125,7 +125,7 @@ public class SseChatController {
                 .requestedSessionId(sessionId)
                 .principal(principal)
                 .channelIdentity(channelIdentity)
-                .sceneId(agentId)
+                .agentId(agentId)
                 .build();
     }
 

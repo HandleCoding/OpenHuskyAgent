@@ -265,7 +265,7 @@ public class SessionRepository {
         }
     }
 
-    public List<SessionEntity> findSessionsByScope(String ownerPrincipalId, String channelType, String sceneId) {
+    public List<SessionEntity> findSessionsByScope(String ownerPrincipalId, String channelType, String agentId) {
         String sql = """
                 SELECT * FROM sessions
                 WHERE owner_principal_id = ? AND channel_type = ? AND scene_id = ? AND status = 'active'
@@ -276,7 +276,7 @@ public class SessionRepository {
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, ownerPrincipalId);
             pstmt.setString(2, channelType);
-            pstmt.setString(3, sceneId);
+            pstmt.setString(3, agentId);
             ResultSet rs = pstmt.executeQuery();
             while (rs.next()) {
                 sessions.add(mapToSessionEntity(rs));
@@ -327,13 +327,13 @@ public class SessionRepository {
 
     /** Update session isolation columns directly */
     public void updateSessionIsolation(String sessionId, String ownerPrincipalId, String channelType,
-                                        String sceneId, String conversationType, String sessionKey) {
-        updateSessionIsolation(sessionId, ownerPrincipalId, channelType, sceneId, conversationType,
+                                        String agentId, String conversationType, String sessionKey) {
+        updateSessionIsolation(sessionId, ownerPrincipalId, channelType, agentId, conversationType,
                 null, null, null, sessionKey);
     }
 
     public void updateSessionIsolation(String sessionId, String ownerPrincipalId, String channelType,
-                                        String sceneId, String conversationType, String sourceChatId,
+                                        String agentId, String conversationType, String sourceChatId,
                                         String sourceThreadId, String sourceSenderId, String sessionKey) {
         String sql = "UPDATE sessions SET owner_principal_id = ?, channel_type = ?, scene_id = ?, " +
                 "conversation_type = ?, source_chat_id = ?, source_thread_id = ?, source_sender_id = ?, " +
@@ -342,7 +342,7 @@ public class SessionRepository {
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, ownerPrincipalId);
             pstmt.setString(2, channelType);
-            pstmt.setString(3, sceneId);
+            pstmt.setString(3, agentId);
             pstmt.setString(4, conversationType);
             pstmt.setString(5, sourceChatId);
             pstmt.setString(6, sourceThreadId);
@@ -355,8 +355,8 @@ public class SessionRepository {
         }
     }
 
-    /** Get session scene ID — used for cross-scene resume validation */
-    public String getSessionScene(String sessionId) {
+    /** Get session scene ID — used for cross-agent resume validation */
+    public String getSessionAgentId(String sessionId) {
         String sql = "SELECT scene_id FROM sessions WHERE id = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -564,7 +564,7 @@ public class SessionRepository {
         entity.setUserId(rs.getString("user_id"));
         entity.setOwnerPrincipalId(rs.getString("owner_principal_id"));
         entity.setChannelType(rs.getString("channel_type"));
-        entity.setSceneId(rs.getString("scene_id"));
+        entity.setAgentId(rs.getString("scene_id"));
         entity.setConversationType(rs.getString("conversation_type"));
         entity.setSourceChatId(rs.getString("source_chat_id"));
         entity.setSourceThreadId(rs.getString("source_thread_id"));

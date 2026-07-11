@@ -1,7 +1,7 @@
 package io.github.huskyagent.domain.prompt;
 
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.Principal;
 import io.github.huskyagent.infra.session.SessionScope;
@@ -24,7 +24,7 @@ public class PromptContext {
     private String userContent;
     private ChannelIdentity channelIdentity;
     private Principal principal;
-    private String sceneId;
+    private String agentId;
 
     public PromptContext(String sessionId, Path workingDirectory) {
         this.sessionId = sessionId;
@@ -61,8 +61,8 @@ public class PromptContext {
         return Optional.ofNullable(principal);
     }
 
-    public Optional<String> getSceneId() {
-        return Optional.ofNullable(sceneId);
+    public Optional<String> getAgentId() {
+        return Optional.ofNullable(agentId);
     }
 
     public RuntimePolicy getRuntimePolicy() {
@@ -82,12 +82,12 @@ public class PromptContext {
         return promptFiles != null ? promptFiles : List.of();
     }
 
-    public SceneConfig.PromptFilePolicy getPromptFilePolicy() {
-        SceneConfig.PromptFilePolicy promptFilePolicy = getRuntimePolicy().getPromptFilePolicy();
-        return promptFilePolicy != null ? promptFilePolicy : SceneConfig.PromptFilePolicy.APPEND;
+    public AgentDefinition.PromptFilePolicy getPromptFilePolicy() {
+        AgentDefinition.PromptFilePolicy promptFilePolicy = getRuntimePolicy().getPromptFilePolicy();
+        return promptFilePolicy != null ? promptFilePolicy : AgentDefinition.PromptFilePolicy.APPEND;
     }
 
-    public SceneConfig.BackendPolicy getBackendPolicy() {
+    public AgentDefinition.BackendPolicy getBackendPolicy() {
         return getRuntimePolicy().getBackendPolicy();
     }
 
@@ -133,8 +133,8 @@ public class PromptContext {
         return this;
     }
 
-    public PromptContext sceneId(String sceneId) {
-        this.sceneId = sceneId;
+    public PromptContext agentId(String agentId) {
+        this.agentId = agentId;
         return this;
     }
 
@@ -147,7 +147,7 @@ public class PromptContext {
                 .sessionScope(sessionScope)
                 .channelIdentity(channelIdentity)
                 .principal(principal)
-                .sceneId(sceneId);
+                .agentId(agentId);
         return copy;
     }
 
@@ -160,7 +160,7 @@ public class PromptContext {
                 .sessionScope(sessionScope)
                 .channelIdentity(identity != null ? identity : this.channelIdentity)
                 .principal(principal != null ? principal : this.principal)
-                .sceneId(sceneId);
+                .agentId(agentId);
         return copy;
     }
 

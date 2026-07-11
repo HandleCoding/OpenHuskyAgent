@@ -5,8 +5,8 @@ import io.github.huskyagent.application.runtime.RuntimeBackendCapabilityResolver
 import io.github.huskyagent.domain.capability.CapabilityView;
 import io.github.huskyagent.domain.context.ContextManager;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
-import io.github.huskyagent.domain.scene.SceneResolver;
+import io.github.huskyagent.domain.agent.AgentDefinition;
+import io.github.huskyagent.domain.agent.AgentResolver;
 import io.github.huskyagent.domain.session.SessionManager;
 import io.github.huskyagent.infra.session.CheckpointStore;
 import io.github.huskyagent.infra.session.CheckpointStoreFactory;
@@ -44,7 +44,7 @@ class SessionOperationsServiceTest {
         SessionContext.setScope(scope);
         when(checkpointStoreFactory.forSessionScope(scope)).thenReturn(store);
         SessionOperationsService service = service(sessionManager, checkpointStoreFactory,
-                mock(SessionRepository.class), mock(SceneResolver.class), mock(RuntimePolicyResolver.class));
+                mock(SessionRepository.class), mock(AgentResolver.class), mock(RuntimePolicyResolver.class));
 
         service.rewindTo("session-1", 10L);
 
@@ -59,20 +59,20 @@ class SessionOperationsServiceTest {
         CheckpointStore store = mock(CheckpointStore.class);
         when(checkpointStoreFactory.forSessionScope(any(SessionScope.class))).thenReturn(store);
         SessionRepository sessionRepository = mock(SessionRepository.class);
-        when(sessionRepository.getSessionScene("session-1")).thenReturn("remote-scene");
-        SceneConfig scene = new SceneConfig();
-        SceneResolver sceneResolver = mock(SceneResolver.class);
-        when(sceneResolver.resolve("remote-scene")).thenReturn(scene);
+        when(sessionRepository.getSessionAgentId("session-1")).thenReturn("remote-scene");
+        AgentDefinition scene = new AgentDefinition();
+        AgentResolver agentResolver = mock(AgentResolver.class);
+        when(agentResolver.resolve("remote-scene")).thenReturn(scene);
         RuntimePolicyResolver runtimePolicyResolver = mock(RuntimePolicyResolver.class);
         when(runtimePolicyResolver.resolve(eq(scene), eq(List.of()))).thenReturn(remotePolicy());
         SessionOperationsService service = service(sessionManager, checkpointStoreFactory,
-                sessionRepository, sceneResolver, runtimePolicyResolver);
+                sessionRepository, agentResolver, runtimePolicyResolver);
 
         service.rewindTo("session-1", 10L);
 
         verify(checkpointStoreFactory).forSessionScope(org.mockito.ArgumentMatchers.argThat(scope ->
                 "session-1".equals(scope.getSessionId())
-                        && "remote-scene".equals(scope.getSceneId())
+                        && "remote-scene".equals(scope.getAgentId())
                         && "s3".equals(scope.getWorkspaceType())
                         && "postgres".equals(scope.getCheckpointType())));
         verify(store).deleteCheckpointsAfter("session-1", "checkpoint-10");
@@ -85,14 +85,14 @@ class SessionOperationsServiceTest {
         when(checkpointStoreFactory.forSessionScope(any(SessionScope.class)))
                 .thenThrow(new IllegalArgumentException("Unsupported checkpoint store type: postgres"));
         SessionRepository sessionRepository = mock(SessionRepository.class);
-        when(sessionRepository.getSessionScene("session-1")).thenReturn("remote-scene");
-        SceneConfig scene = new SceneConfig();
-        SceneResolver sceneResolver = mock(SceneResolver.class);
-        when(sceneResolver.resolve("remote-scene")).thenReturn(scene);
+        when(sessionRepository.getSessionAgentId("session-1")).thenReturn("remote-scene");
+        AgentDefinition scene = new AgentDefinition();
+        AgentResolver agentResolver = mock(AgentResolver.class);
+        when(agentResolver.resolve("remote-scene")).thenReturn(scene);
         RuntimePolicyResolver runtimePolicyResolver = mock(RuntimePolicyResolver.class);
         when(runtimePolicyResolver.resolve(eq(scene), eq(List.of()))).thenReturn(remotePolicy());
         SessionOperationsService service = service(sessionManager, checkpointStoreFactory,
-                sessionRepository, sceneResolver, runtimePolicyResolver);
+                sessionRepository, agentResolver, runtimePolicyResolver);
 
         assertThrows(IllegalArgumentException.class, () -> service.rewindTo("session-1", 10L));
 
@@ -102,7 +102,7 @@ class SessionOperationsServiceTest {
     private SessionOperationsService service(SessionManager sessionManager,
                                              CheckpointStoreFactory checkpointStoreFactory,
                                              SessionRepository sessionRepository,
-                                             SceneResolver sceneResolver,
+                                             AgentResolver agentResolver,
                                              RuntimePolicyResolver runtimePolicyResolver) {
         ToolRegistry toolRegistry = mock(ToolRegistry.class);
         when(toolRegistry.getAllEnabled()).thenReturn(List.of());
@@ -111,7 +111,7 @@ class SessionOperationsServiceTest {
                 checkpointStoreFactory,
                 mock(ContextManager.class),
                 sessionRepository,
-                sceneResolver,
+                agentResolver,
                 runtimePolicyResolver,
                 new RuntimeBackendCapabilityResolver(new ExecutionBackendProperties()),
                 toolRegistry);
@@ -125,13 +125,13 @@ class SessionOperationsServiceTest {
     }
 
     private RuntimePolicy remotePolicy() {
-        SceneConfig.StorageSpec storageSpec = new SceneConfig.StorageSpec();
+        AgentDefinition.StorageSpec storageSpec = new AgentDefinition.StorageSpec();
         storageSpec.setWorkspaceType("s3");
         storageSpec.setCheckpointType("postgres");
         return RuntimePolicy.builder()
-                .sceneId("remote-scene")
+                .agentId("remote-scene")
                 .capabilityView(CapabilityView.builder().build())
-                .storagePolicy(SceneConfig.StoragePolicy.REMOTE)
+                .storagePolicy(AgentDefinition.StoragePolicy.REMOTE)
                 .storageSpec(storageSpec)
                 .build();
     }

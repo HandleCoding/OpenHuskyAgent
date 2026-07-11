@@ -12,7 +12,7 @@ public class DefaultSessionKeyStrategy implements SessionKeyStrategy {
         StringJoiner joiner = new StringJoiner("|");
         add(joiner, "principal", scope.getPrincipalId());
         add(joiner, "channel", scope.getChannelType());
-        add(joiner, "scene", scope.getSceneId());
+        add(joiner, "agent", scope.getAgentId());
         add(joiner, "conversation", scope.getConversationType());
         add(joiner, "account", scope.getPlatformAccountId());
         add(joiner, "chat", scope.getChatId());

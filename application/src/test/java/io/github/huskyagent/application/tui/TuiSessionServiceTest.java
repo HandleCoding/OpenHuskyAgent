@@ -10,7 +10,7 @@ import io.github.huskyagent.application.session.RuntimeScope;
 import io.github.huskyagent.application.session.SessionResolver;
 import io.github.huskyagent.domain.capability.CapabilityView;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.ChannelType;
 import io.github.huskyagent.infra.channel.ConversationType;
@@ -202,10 +202,10 @@ class TuiSessionServiceTest {
     }
 
     private static RuntimeScope scope(String sessionId) {
-        SceneConfig scene = new SceneConfig();
-        scene.setSceneId("assistant");
+        AgentDefinition scene = new AgentDefinition();
+        scene.setAgentId("assistant");
         RuntimePolicy runtimePolicy = RuntimePolicy.builder()
-                .sceneId("assistant")
+                .agentId("assistant")
                 .capabilityView(CapabilityView.builder().build())
                 .build();
         return RuntimeScope.builder()
@@ -279,7 +279,7 @@ class TuiSessionServiceTest {
         }
 
         @Override
-        public RuntimeScope createSession(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
+        public RuntimeScope createSession(Principal principal, ChannelIdentity channelIdentity, String agentId) {
             String sessionId = sessionIds.get(Math.min(createCalls, sessionIds.size() - 1));
             createCalls++;
             return scope(sessionId);

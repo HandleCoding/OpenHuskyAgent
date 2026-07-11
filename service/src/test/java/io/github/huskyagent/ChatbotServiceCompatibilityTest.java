@@ -59,7 +59,7 @@ class ChatbotServiceCompatibilityTest extends AbstractIntegrationTest {
         RuntimeScope scope = sessionResolver.createSession(principal, channelIdentity, "chatbot");
 
         assertDoesNotThrow(scope::requireCompleteForExecution);
-        assertEquals("chatbot", scope.getRuntimePolicy().getSceneId());
+        assertEquals("chatbot", scope.getRuntimePolicy().getAgentId());
         assertNotNull(scope.getRuntimePolicy());
         assertNull(SessionContext.getScope(), "SessionResolver should not bind execution context");
     }

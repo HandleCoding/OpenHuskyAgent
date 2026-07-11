@@ -2,7 +2,7 @@ package io.github.huskyagent.domain.prompt.section;
 
 import io.github.huskyagent.domain.prompt.AbstractPromptSection;
 import io.github.huskyagent.domain.prompt.PromptContext;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -52,7 +52,7 @@ public class RuntimeSection extends AbstractPromptSection {
         sb.append("- **Time**: ").append(now.format(DateTimeFormatter.ofPattern("HH:mm:ss"))).append("\n");
         sb.append("- **Timezone**: ").append(timeZone.getId()).append("\n");
 
-        boolean isDocker = context.getBackendPolicy() == SceneConfig.BackendPolicy.DOCKER;
+        boolean isDocker = context.getBackendPolicy() == AgentDefinition.BackendPolicy.DOCKER;
 
         if (isDocker) {
             sb.append("- **OS**: Linux (Docker container)\n");
@@ -97,7 +97,7 @@ public class RuntimeSection extends AbstractPromptSection {
         if (runtimeWorkdir != null && !runtimeWorkdir.isBlank()) {
             return runtimeWorkdir;
         }
-        SceneConfig.BackendSpec spec = context.getRuntimePolicy().getBackendSpec();
+        AgentDefinition.BackendSpec spec = context.getRuntimePolicy().getBackendSpec();
         if (spec != null && spec.getDockerWorkdir() != null && !spec.getDockerWorkdir().isBlank()) {
             return spec.getDockerWorkdir();
         }

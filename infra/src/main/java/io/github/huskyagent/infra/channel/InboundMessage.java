@@ -13,7 +13,7 @@ public class InboundMessage {
     String text;
     Principal principal;
     ChannelIdentity channelIdentity;
-    String sceneId;
+    String agentId;
     String requestedSessionId;
     List<InboundContentPart> contentParts;
     ReplyTarget replyTarget;

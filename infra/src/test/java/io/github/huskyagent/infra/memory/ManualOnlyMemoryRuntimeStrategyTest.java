@@ -137,7 +137,7 @@ class ManualOnlyMemoryRuntimeStrategyTest {
                 .sessionId("session")
                 .principalId("principal")
                 .channelType("http")
-                .sceneId("scene")
+                .agentId("scene")
                 .memoryPolicy(memoryPolicy)
                 .memoryStrategyId("manual-only")
                 .memoryWriteAllowed(writeAllowed)

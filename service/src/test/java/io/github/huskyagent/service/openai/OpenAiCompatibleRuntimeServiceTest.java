@@ -4,12 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.huskyagent.application.ChatResult;
 import io.github.huskyagent.application.channel.ChannelInboundQueue;
 import io.github.huskyagent.application.channel.ChannelRuntimeQueueKeyFactory;
-import io.github.huskyagent.application.channel.binding.ChannelSceneRouter;
+import io.github.huskyagent.application.channel.binding.ChannelAgentRouter;
 import io.github.huskyagent.application.channel.binding.EffectiveChannelRoute;
 import io.github.huskyagent.application.runtime.RuntimeExecutionRequest;
 import io.github.huskyagent.application.runtime.RuntimeExecutionResult;
 import io.github.huskyagent.application.runtime.RuntimeExecutionService;
-import io.github.huskyagent.application.scene.ConfigSceneResolver;
+import io.github.huskyagent.application.agent.ConfigAgentResolver;
 import io.github.huskyagent.domain.event.ChannelEvent;
 import io.github.huskyagent.domain.event.ChannelEventBus;
 import io.github.huskyagent.domain.event.ChannelSubscriber;
@@ -49,7 +49,7 @@ class OpenAiCompatibleRuntimeServiceTest {
 
         RuntimeExecutionRequest captured = runtime.captured.get();
         assertNotNull(captured);
-        assertEquals("assistant", captured.getInbound().getSceneId());
+        assertEquals("assistant", captured.getInbound().getAgentId());
         assertEquals(ChannelType.HTTP, captured.getInbound().getChannelIdentity().getChannelType());
         assertEquals("openai-compatible", captured.getInbound().getChannelIdentity().getPlatformAccountId());
         assertFalse(captured.isForceNewSession());
@@ -170,16 +170,16 @@ class OpenAiCompatibleRuntimeServiceTest {
     private OpenAiCompatibleRuntimeService newService(RecordingRuntimeExecutionService runtime, OpenAiChannelAdapter channelAdapter,
                                                       ChannelRuntimeQueueKeyFactory queueKeyFactory) {
         OpenAiCompatibleProperties properties = new OpenAiCompatibleProperties();
-        ConfigSceneResolver sceneResolver = new ConfigSceneResolver();
-        LinkedHashMap<String, ConfigSceneResolver.SceneProperties> configs = new LinkedHashMap<>();
-        configs.put("assistant", new ConfigSceneResolver.SceneProperties());
-        sceneResolver.setConfigs(configs);
-        OpenAiModelCatalog modelCatalog = new OpenAiModelCatalog(sceneResolver, properties);
+        ConfigAgentResolver agentResolver = new ConfigAgentResolver();
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> configs = new LinkedHashMap<>();
+        configs.put("assistant", new ConfigAgentResolver.AgentProperties());
+        agentResolver.setConfigs(configs);
+        OpenAiModelCatalog modelCatalog = new OpenAiModelCatalog(agentResolver, properties);
         return new OpenAiCompatibleRuntimeService(
                 runtime,
                 new ChannelInboundQueue(),
                 queueKeyFactory,
-                new EchoSceneRouter(),
+                new EchoAgentRouter(),
                 properties,
                 modelCatalog,
                 new OpenAiPromptMapper(),
@@ -278,14 +278,14 @@ class OpenAiCompatibleRuntimeServiceTest {
         }
     }
 
-    private static class EchoSceneRouter extends ChannelSceneRouter {
-        EchoSceneRouter() {
+    private static class EchoAgentRouter extends ChannelAgentRouter {
+        EchoAgentRouter() {
             super(null, null);
         }
 
         @Override
         public EffectiveChannelRoute resolve(InboundMessage inbound) {
-            return new EffectiveChannelRoute(inbound.getSceneId(), null, EffectiveChannelRoute.Source.EXPLICIT);
+            return new EffectiveChannelRoute(inbound.getAgentId(), null, EffectiveChannelRoute.Source.EXPLICIT);
         }
     }
 

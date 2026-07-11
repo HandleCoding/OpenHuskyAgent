@@ -233,7 +233,7 @@ public class SessionMemoryProvider implements ScopedMemoryProvider {
         return switch (scope.getBoundary()) {
             case CURRENT_SESSION -> "m.session_id = ?";
             case SAME_PRINCIPAL -> "s.owner_principal_id = ? AND s.channel_type = ?";
-            case SAME_PRINCIPAL_AND_SCENE -> "s.owner_principal_id = ? AND s.channel_type = ? AND s.scene_id = ?";
+            case SAME_PRINCIPAL_AND_AGENT -> "s.owner_principal_id = ? AND s.channel_type = ? AND s.scene_id = ?";
         };
     }
 
@@ -244,10 +244,10 @@ public class SessionMemoryProvider implements ScopedMemoryProvider {
                 pstmt.setString(index++, scope.getPrincipalId());
                 pstmt.setString(index++, scope.getChannelType());
             }
-            case SAME_PRINCIPAL_AND_SCENE -> {
+            case SAME_PRINCIPAL_AND_AGENT -> {
                 pstmt.setString(index++, scope.getPrincipalId());
                 pstmt.setString(index++, scope.getChannelType());
-                pstmt.setString(index++, scope.getSceneId());
+                pstmt.setString(index++, scope.getAgentId());
             }
         }
         return index;

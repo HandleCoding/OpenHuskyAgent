@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 @Value
 @Builder
 public class CapabilityView {
-    String sceneId;
+    String agentId;
     List<ToolDefinition> visibleTools;
     Set<String> visibleToolNames;
     Set<Toolset> visibleToolsets;
@@ -24,7 +24,7 @@ public class CapabilityView {
 
     public String fingerprint() {
         return String.join("|",
-                sceneId != null ? sceneId : "",
+                agentId != null ? agentId : "",
                 namesFingerprint(visibleToolNames),
                 toolsetsFingerprint(visibleToolsets),
                 namesFingerprint(visibleSkillNames),

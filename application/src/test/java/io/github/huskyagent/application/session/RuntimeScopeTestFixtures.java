@@ -3,7 +3,7 @@ package io.github.huskyagent.application.session;
 import io.github.huskyagent.domain.capability.CapabilityView;
 import io.github.huskyagent.domain.memory.policy.MemoryPolicyConfig;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.ChannelType;
 import io.github.huskyagent.infra.channel.ConversationType;
@@ -40,9 +40,9 @@ final class RuntimeScopeTestFixtures {
                 .build();
     }
 
-    static SceneConfig scene() {
-        SceneConfig scene = new SceneConfig();
-        scene.setSceneId("assistant");
+    static AgentDefinition scene() {
+        AgentDefinition scene = new AgentDefinition();
+        scene.setAgentId("assistant");
         scene.setKnowledgeSources(Set.of("docs"));
         return scene;
     }
@@ -51,9 +51,9 @@ final class RuntimeScopeTestFixtures {
         MemoryPolicyConfig memoryPolicy = MemoryPolicyConfig.builder()
                 .enabled(true)
                 .strategyId("custom")
-                .access(SceneConfig.MemoryAccess.READWRITE)
-                .scope(SceneConfig.MemoryScopePolicy.SESSION)
-                .promptMode(SceneConfig.MemoryPromptMode.FULL)
+                .access(AgentDefinition.MemoryAccess.READWRITE)
+                .scope(AgentDefinition.MemoryScopePolicy.SESSION)
+                .promptMode(AgentDefinition.MemoryPromptMode.FULL)
                 .providers(Set.of("builtin"))
                 .allowCrossSessionSearch(true)
                 .build();
@@ -61,7 +61,7 @@ final class RuntimeScopeTestFixtures {
                 .visibleSkillNames(Set.of("review"))
                 .build();
         return RuntimePolicy.builder()
-                .sceneId("assistant")
+                .agentId("assistant")
                 .memoryPolicy(memoryPolicy)
                 .capabilityView(capabilityView)
                 .knowledgeSources(Set.of("docs"))

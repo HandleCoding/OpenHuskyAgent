@@ -6,7 +6,7 @@ import io.github.huskyagent.domain.memory.policy.MemoryPolicyConfig;
 import io.github.huskyagent.domain.prompt.section.*;
 import io.github.huskyagent.infra.knowledge.KnowledgeManager;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.memory.MemoryManager;
 import io.github.huskyagent.infra.session.SessionScope;
 import io.github.huskyagent.infra.skill.SkillManager;
@@ -83,10 +83,10 @@ class PromptBuilderTest {
 
     @Test
     void dockerRuntimeSectionUsesRuntimeWorkingDirectoryFromSessionScope() {
-        SceneConfig.BackendSpec spec = new SceneConfig.BackendSpec();
+        AgentDefinition.BackendSpec spec = new AgentDefinition.BackendSpec();
         spec.setDockerWorkdir("/image-default");
         RuntimePolicy policy = RuntimePolicy.builder()
-                .backendPolicy(SceneConfig.BackendPolicy.DOCKER)
+                .backendPolicy(AgentDefinition.BackendPolicy.DOCKER)
                 .backendSpec(spec)
                 .capabilityView(CapabilityView.builder()
                         .visibleTools(List.of())

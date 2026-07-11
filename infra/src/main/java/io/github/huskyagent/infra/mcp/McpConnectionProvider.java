@@ -8,7 +8,7 @@ public interface McpConnectionProvider {
 
     ServerLoadResult loadAllServers();
 
-    default Map<String, McpServerConfig> serversForScene(String sceneId) {
+    default Map<String, McpServerConfig> serversForAgent(String agentId) {
         ServerLoadResult result = loadEnabledServers();
         if (!result.success()) {
             throw new IllegalStateException("Failed to load MCP server config: " + result.errorMessage());

@@ -15,12 +15,12 @@ public class ChannelCommandService {
 
     private final SessionResolver sessionResolver;
 
-    public OutboundMessage execute(ChannelCommand command, InboundMessage inbound, String sceneId) {
+    public OutboundMessage execute(ChannelCommand command, InboundMessage inbound, String agentId) {
         String name = command.name();
         return switch (name) {
-            case "new", "newsession", "new-session" -> newSession(inbound, sceneId);
+            case "new", "newsession", "new-session" -> newSession(inbound, agentId);
             case "stop" -> reply(inbound, null, "Stop is handled by the runtime bypass path.");
-            case "session", "session-info" -> currentSession(inbound, sceneId);
+            case "session", "session-info" -> currentSession(inbound, agentId);
             case "help" -> help(inbound);
             default -> unknown(command, inbound);
         };
@@ -33,20 +33,20 @@ public class ChannelCommandService {
         };
     }
 
-    private OutboundMessage newSession(InboundMessage inbound, String sceneId) {
+    private OutboundMessage newSession(InboundMessage inbound, String agentId) {
         RuntimeScope scope = sessionResolver.createSession(
                 inbound.getPrincipal(),
                 inbound.getChannelIdentity(),
-                sceneId
+                agentId
         );
         return reply(inbound, scope.getSessionId(), "Created new session: " + scope.getSessionId());
     }
 
-    private OutboundMessage currentSession(InboundMessage inbound, String sceneId) {
+    private OutboundMessage currentSession(InboundMessage inbound, String agentId) {
         Optional<String> sessionId = sessionResolver.findActiveSessionId(
                 inbound.getPrincipal(),
                 inbound.getChannelIdentity(),
-                sceneId
+                agentId
         );
         String text = sessionId
                 .map(id -> "Current session: " + id)

@@ -1,7 +1,7 @@
-package io.github.huskyagent.application.scene;
+package io.github.huskyagent.application.agent;
 
-import io.github.huskyagent.domain.scene.SceneConfig;
-import io.github.huskyagent.domain.scene.SceneResolver;
+import io.github.huskyagent.domain.agent.AgentDefinition;
+import io.github.huskyagent.domain.agent.AgentResolver;
 import io.github.huskyagent.infra.tool.Toolset;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -19,11 +19,11 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @Data
 @Component
-public class ConfigSceneResolver implements SceneResolver, EnvironmentAware, InitializingBean {
+public class ConfigAgentResolver implements AgentResolver, EnvironmentAware, InitializingBean {
 
-    private Map<String, SceneProperties> agents = new LinkedHashMap<>();
+    private Map<String, AgentProperties> agents = new LinkedHashMap<>();
 
-    private final ConcurrentHashMap<String, SceneConfig> resolved = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, AgentDefinition> resolved = new ConcurrentHashMap<>();
     private Environment environment;
 
     @Override
@@ -36,21 +36,21 @@ public class ConfigSceneResolver implements SceneResolver, EnvironmentAware, Ini
         if (environment == null) {
             return;
         }
-        Map<String, SceneProperties> bound = bindAgents(environment);
+        Map<String, AgentProperties> bound = bindAgents(environment);
         if (!bound.isEmpty()) {
             setAgents(bound);
         }
     }
 
-    public SceneConfig resolve(String sceneId) {
-        String effectiveSceneId = sceneId != null && !sceneId.isBlank() ? sceneId : null;
-        if (effectiveSceneId == null || effectiveSceneId.isBlank() || !agents.containsKey(effectiveSceneId)) {
-            throw new IllegalArgumentException("Unknown agent: " + effectiveSceneId);
+    public AgentDefinition resolve(String agentId) {
+        String effectiveAgentId = agentId != null && !agentId.isBlank() ? agentId : null;
+        if (effectiveAgentId == null || effectiveAgentId.isBlank() || !agents.containsKey(effectiveAgentId)) {
+            throw new IllegalArgumentException("Unknown agent: " + effectiveAgentId);
         }
-        return resolved.computeIfAbsent(effectiveSceneId, this::buildSceneConfig);
+        return resolved.computeIfAbsent(effectiveAgentId, this::buildAgentDefinition);
     }
 
-    public SceneConfig resolveDefault() {
+    public AgentDefinition resolveDefault() {
         return resolve("assistant");
     }
 
@@ -58,23 +58,23 @@ public class ConfigSceneResolver implements SceneResolver, EnvironmentAware, Ini
         return agents != null ? Set.copyOf(agents.keySet()) : Set.of();
     }
 
-    public void setAgents(Map<String, SceneProperties> agents) {
+    public void setAgents(Map<String, AgentProperties> agents) {
         this.agents = agents != null ? new LinkedHashMap<>(agents) : new LinkedHashMap<>();
         this.resolved.clear();
     }
 
-    public Map<String, SceneProperties> getConfigs() {
+    public Map<String, AgentProperties> getConfigs() {
         return getAgents();
     }
 
-    public void setConfigs(Map<String, SceneProperties> configs) {
+    public void setConfigs(Map<String, AgentProperties> configs) {
         setAgents(configs);
     }
 
-    private SceneConfig buildSceneConfig(String sceneId) {
-        SceneProperties props = agents.get(sceneId);
-        SceneConfig config = new SceneConfig();
-        config.setSceneId(sceneId);
+    private AgentDefinition buildAgentDefinition(String agentId) {
+        AgentProperties props = agents.get(agentId);
+        AgentDefinition config = new AgentDefinition();
+        config.setAgentId(agentId);
 
         if (props != null) {
             config.setSystemPrompt(props.getSystemPrompt());
@@ -106,15 +106,15 @@ public class ConfigSceneResolver implements SceneResolver, EnvironmentAware, Ini
         }
 
         log.info("Resolved agent configuration: agentId={}, toolsets={}, allowedTools={}, denied={}, approval={}, backend={}, workDir={}",
-                sceneId, config.getAllowedToolsets(), config.getAllowedTools(), config.getDeniedTools(),
+                agentId, config.getAllowedToolsets(), config.getAllowedTools(), config.getDeniedTools(),
                 config.getApprovalPolicy(), config.getBackendPolicy(), config.getWorkingDirectoryPolicy());
         return config;
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, SceneProperties> bindAgents(Environment environment) {
-        ResolvableType type = ResolvableType.forClassWithGenerics(Map.class, String.class, SceneProperties.class);
-        return (Map<String, SceneProperties>) Binder.get(environment)
+    private Map<String, AgentProperties> bindAgents(Environment environment) {
+        ResolvableType type = ResolvableType.forClassWithGenerics(Map.class, String.class, AgentProperties.class);
+        return (Map<String, AgentProperties>) Binder.get(environment)
                 .bind("agents", Bindable.of(type))
                 .orElseGet(LinkedHashMap::new);
     }
@@ -140,54 +140,54 @@ public class ConfigSceneResolver implements SceneResolver, EnvironmentAware, Ini
         return primary != null ? primary : fallback;
     }
 
-    private SceneConfig.ApprovalPolicy toApprovalPolicy(String value) {
-        if (value == null) return SceneConfig.ApprovalPolicy.REQUIRED;
+    private AgentDefinition.ApprovalPolicy toApprovalPolicy(String value) {
+        if (value == null) return AgentDefinition.ApprovalPolicy.REQUIRED;
         return switch (value.toLowerCase()) {
-            case "none" -> SceneConfig.ApprovalPolicy.NONE;
-            case "auto-approve-safe" -> SceneConfig.ApprovalPolicy.AUTO_APPROVE_SAFE;
-            default -> SceneConfig.ApprovalPolicy.REQUIRED;
+            case "none" -> AgentDefinition.ApprovalPolicy.NONE;
+            case "auto-approve-safe" -> AgentDefinition.ApprovalPolicy.AUTO_APPROVE_SAFE;
+            default -> AgentDefinition.ApprovalPolicy.REQUIRED;
         };
     }
 
-    private SceneConfig.BackendPolicy toBackendPolicy(String value) {
-        if (value == null) return SceneConfig.BackendPolicy.LOCAL;
+    private AgentDefinition.BackendPolicy toBackendPolicy(String value) {
+        if (value == null) return AgentDefinition.BackendPolicy.LOCAL;
         return switch (value.toLowerCase()) {
-            case "docker" -> SceneConfig.BackendPolicy.DOCKER;
-            case "ssh" -> SceneConfig.BackendPolicy.SSH;
-            default -> SceneConfig.BackendPolicy.LOCAL;
+            case "docker" -> AgentDefinition.BackendPolicy.DOCKER;
+            case "ssh" -> AgentDefinition.BackendPolicy.SSH;
+            default -> AgentDefinition.BackendPolicy.LOCAL;
         };
     }
 
-    private SceneConfig.StoragePolicy toStoragePolicy(String value) {
-        if (value == null) return SceneConfig.StoragePolicy.LOCAL;
+    private AgentDefinition.StoragePolicy toStoragePolicy(String value) {
+        if (value == null) return AgentDefinition.StoragePolicy.LOCAL;
         return switch (value.toLowerCase()) {
-            case "remote" -> SceneConfig.StoragePolicy.REMOTE;
-            default -> SceneConfig.StoragePolicy.LOCAL;
+            case "remote" -> AgentDefinition.StoragePolicy.REMOTE;
+            default -> AgentDefinition.StoragePolicy.LOCAL;
         };
     }
 
-    private SceneConfig.WorkingDirectoryPolicy toWorkingDirPolicy(String value) {
-        if (value == null) return SceneConfig.WorkingDirectoryPolicy.INHERIT;
+    private AgentDefinition.WorkingDirectoryPolicy toWorkingDirPolicy(String value) {
+        if (value == null) return AgentDefinition.WorkingDirectoryPolicy.INHERIT;
         return switch (value.toLowerCase()) {
-            case "fixed" -> SceneConfig.WorkingDirectoryPolicy.FIXED;
-            default -> SceneConfig.WorkingDirectoryPolicy.INHERIT;
+            case "fixed" -> AgentDefinition.WorkingDirectoryPolicy.FIXED;
+            default -> AgentDefinition.WorkingDirectoryPolicy.INHERIT;
         };
     }
 
-    private SceneConfig.LegacyMemoryPolicy toMemoryPolicy(String value) {
-        if (value == null) return SceneConfig.LegacyMemoryPolicy.SESSION;
+    private AgentDefinition.LegacyMemoryPolicy toMemoryPolicy(String value) {
+        if (value == null) return AgentDefinition.LegacyMemoryPolicy.SESSION;
         return switch (value.toLowerCase()) {
-            case "disabled" -> SceneConfig.LegacyMemoryPolicy.DISABLED;
-            case "readonly", "read-only" -> SceneConfig.LegacyMemoryPolicy.READONLY;
-            case "user-profile", "user_profile" -> SceneConfig.LegacyMemoryPolicy.USER_PROFILE;
-            case "principal" -> SceneConfig.LegacyMemoryPolicy.PRINCIPAL;
-            case "scene" -> SceneConfig.LegacyMemoryPolicy.SCENE;
-            default -> SceneConfig.LegacyMemoryPolicy.SESSION;
+            case "disabled" -> AgentDefinition.LegacyMemoryPolicy.DISABLED;
+            case "readonly", "read-only" -> AgentDefinition.LegacyMemoryPolicy.READONLY;
+            case "user-profile", "user_profile" -> AgentDefinition.LegacyMemoryPolicy.USER_PROFILE;
+            case "principal" -> AgentDefinition.LegacyMemoryPolicy.PRINCIPAL;
+            case "scene", "agent" -> AgentDefinition.LegacyMemoryPolicy.AGENT;
+            default -> AgentDefinition.LegacyMemoryPolicy.SESSION;
         };
     }
 
-    private SceneConfig.ContextPolicySpec toContextPolicySpec(ContextProperties props, SceneConfig.ContextPolicySpec defaults) {
-        SceneConfig.ContextPolicySpec spec = defaults != null ? defaults : new SceneConfig.ContextPolicySpec();
+    private AgentDefinition.ContextPolicySpec toContextPolicySpec(ContextProperties props, AgentDefinition.ContextPolicySpec defaults) {
+        AgentDefinition.ContextPolicySpec spec = defaults != null ? defaults : new AgentDefinition.ContextPolicySpec();
         if (props.getEnabled() != null) spec.setEnabled(props.getEnabled());
         if (props.getMode() != null) spec.setMode(props.getMode());
         if (props.getStrategy() != null) spec.setStrategy(props.getStrategy());
@@ -202,8 +202,8 @@ public class ConfigSceneResolver implements SceneResolver, EnvironmentAware, Ini
         return spec;
     }
 
-    private SceneConfig.MemoryPolicySpec toMemoryPolicySpec(MemoryProperties props, SceneConfig.MemoryPolicySpec defaults) {
-        SceneConfig.MemoryPolicySpec spec = defaults != null ? defaults : new SceneConfig.MemoryPolicySpec();
+    private AgentDefinition.MemoryPolicySpec toMemoryPolicySpec(MemoryProperties props, AgentDefinition.MemoryPolicySpec defaults) {
+        AgentDefinition.MemoryPolicySpec spec = defaults != null ? defaults : new AgentDefinition.MemoryPolicySpec();
         if (props.getEnabled() != null) spec.setEnabled(props.getEnabled());
         if (props.getStrategy() != null) spec.setStrategy(props.getStrategy());
         if (props.getAccess() != null) spec.setAccess(toMemoryAccess(props.getAccess()));
@@ -214,62 +214,62 @@ public class ConfigSceneResolver implements SceneResolver, EnvironmentAware, Ini
         return spec;
     }
 
-    private SceneConfig.MemoryAccess toMemoryAccess(String value) {
+    private AgentDefinition.MemoryAccess toMemoryAccess(String value) {
         return switch (value.toLowerCase()) {
-            case "disabled", "none" -> SceneConfig.MemoryAccess.DISABLED;
-            case "readonly", "read-only" -> SceneConfig.MemoryAccess.READONLY;
-            default -> SceneConfig.MemoryAccess.READWRITE;
+            case "disabled", "none" -> AgentDefinition.MemoryAccess.DISABLED;
+            case "readonly", "read-only" -> AgentDefinition.MemoryAccess.READONLY;
+            default -> AgentDefinition.MemoryAccess.READWRITE;
         };
     }
 
-    private SceneConfig.MemoryScopePolicy toMemoryScope(String value) {
+    private AgentDefinition.MemoryScopePolicy toMemoryScope(String value) {
         return switch (value.toLowerCase()) {
-            case "principal" -> SceneConfig.MemoryScopePolicy.PRINCIPAL;
-            case "scene" -> SceneConfig.MemoryScopePolicy.SCENE;
-            case "user-profile", "user_profile" -> SceneConfig.MemoryScopePolicy.USER_PROFILE;
-            default -> SceneConfig.MemoryScopePolicy.SESSION;
+            case "principal" -> AgentDefinition.MemoryScopePolicy.PRINCIPAL;
+            case "scene", "agent" -> AgentDefinition.MemoryScopePolicy.AGENT;
+            case "user-profile", "user_profile" -> AgentDefinition.MemoryScopePolicy.USER_PROFILE;
+            default -> AgentDefinition.MemoryScopePolicy.SESSION;
         };
     }
 
-    private SceneConfig.MemoryPromptMode toMemoryPromptMode(String value) {
+    private AgentDefinition.MemoryPromptMode toMemoryPromptMode(String value) {
         return switch (value.toLowerCase()) {
-            case "none" -> SceneConfig.MemoryPromptMode.NONE;
-            case "full" -> SceneConfig.MemoryPromptMode.FULL;
-            case "profile-only", "profile_only" -> SceneConfig.MemoryPromptMode.PROFILE_ONLY;
-            default -> SceneConfig.MemoryPromptMode.SUMMARY;
+            case "none" -> AgentDefinition.MemoryPromptMode.NONE;
+            case "full" -> AgentDefinition.MemoryPromptMode.FULL;
+            case "profile-only", "profile_only" -> AgentDefinition.MemoryPromptMode.PROFILE_ONLY;
+            default -> AgentDefinition.MemoryPromptMode.SUMMARY;
         };
     }
 
-    private SceneConfig.PromptFilePolicy toPromptFilePolicy(String value) {
-        if (value == null) return SceneConfig.PromptFilePolicy.APPEND;
+    private AgentDefinition.PromptFilePolicy toPromptFilePolicy(String value) {
+        if (value == null) return AgentDefinition.PromptFilePolicy.APPEND;
         return switch (value.toLowerCase()) {
-            case "override" -> SceneConfig.PromptFilePolicy.OVERRIDE;
-            default -> SceneConfig.PromptFilePolicy.APPEND;
+            case "override" -> AgentDefinition.PromptFilePolicy.OVERRIDE;
+            default -> AgentDefinition.PromptFilePolicy.APPEND;
         };
     }
 
-    private SceneConfig.AuditSpec toAuditSpec(SceneProperties props) {
-        SceneConfig.AuditSpec spec = new SceneConfig.AuditSpec();
+    private AgentDefinition.AuditSpec toAuditSpec(AgentProperties props) {
+        AgentDefinition.AuditSpec spec = new AgentDefinition.AuditSpec();
         if (props.getAuditEnabled() != null) spec.setEnabled(props.getAuditEnabled());
         spec.setTags(toSet(props.getAuditTags()));
         return spec;
     }
 
-    private SceneConfig.RateLimitSpec toRateLimitSpec(SceneProperties props) {
-        SceneConfig.RateLimitSpec spec = new SceneConfig.RateLimitSpec();
+    private AgentDefinition.RateLimitSpec toRateLimitSpec(AgentProperties props) {
+        AgentDefinition.RateLimitSpec spec = new AgentDefinition.RateLimitSpec();
         if (props.getRateLimitEnabled() != null) spec.setEnabled(props.getRateLimitEnabled());
         spec.setRequestsPerMinute(props.getRateLimitRequestsPerMinute());
         spec.setBurst(props.getRateLimitBurst());
         return spec;
     }
 
-    private SceneConfig.BackendSpec toBackendSpec(SceneProperties props) {
+    private AgentDefinition.BackendSpec toBackendSpec(AgentProperties props) {
         if (props.getDockerImage() == null && props.getDockerMemory() == null
                 && props.getDockerCpus() == null && props.getDockerWorkdir() == null
                 && props.getDockerPersistFilesystem() == null && props.getSshHost() == null) {
             return null;
         }
-        SceneConfig.BackendSpec spec = new SceneConfig.BackendSpec();
+        AgentDefinition.BackendSpec spec = new AgentDefinition.BackendSpec();
         spec.setDockerImage(props.getDockerImage());
         spec.setDockerMemory(props.getDockerMemory());
         spec.setDockerCpus(props.getDockerCpus());
@@ -282,7 +282,7 @@ public class ConfigSceneResolver implements SceneResolver, EnvironmentAware, Ini
         return spec;
     }
 
-    private SceneConfig.StorageSpec toStorageSpec(SceneProperties props) {
+    private AgentDefinition.StorageSpec toStorageSpec(AgentProperties props) {
         if (props.getStorageSpec() == null) {
             return null;
         }
@@ -293,7 +293,7 @@ public class ConfigSceneResolver implements SceneResolver, EnvironmentAware, Ini
                 && source.getCheckpointUrl() == null && source.getCheckpointTable() == null) {
             return null;
         }
-        SceneConfig.StorageSpec spec = new SceneConfig.StorageSpec();
+        AgentDefinition.StorageSpec spec = new AgentDefinition.StorageSpec();
         spec.setWorkspaceType(source.getWorkspaceType());
         spec.setWorkspaceEndpoint(source.getWorkspaceEndpoint());
         spec.setWorkspaceBucket(source.getWorkspaceBucket());
@@ -306,7 +306,7 @@ public class ConfigSceneResolver implements SceneResolver, EnvironmentAware, Ini
     }
 
     @Data
-    public static class SceneProperties {
+    public static class AgentProperties {
         private String systemPrompt;
         private List<String> toolsets;
         private Set<String> allowedTools;

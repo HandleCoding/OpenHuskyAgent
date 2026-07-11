@@ -157,7 +157,7 @@ class FeishuInstanceEventHandlerTest {
                         .chatId("oc_chat")
                         .senderId("ou_user")
                         .build())
-                .sceneId("feishu-qa")
+                .agentId("feishu-qa")
                 .build();
     }
 

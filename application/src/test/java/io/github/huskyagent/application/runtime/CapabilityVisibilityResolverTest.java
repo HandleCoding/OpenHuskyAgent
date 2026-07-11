@@ -2,7 +2,7 @@ package io.github.huskyagent.application.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.huskyagent.domain.capability.CapabilityView;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.execute.ExecutionBackendProperties;
 import io.github.huskyagent.infra.memory.BuiltinMemoryProvider;
 import io.github.huskyagent.infra.memory.SessionMemoryProvider;
@@ -41,8 +41,8 @@ class CapabilityVisibilityResolverTest {
         return new CapabilityVisibilityResolver(skillManager);
     }
 
-    private CapabilityView resolve(CapabilityVisibilityResolver resolver, SceneConfig scene, ToolDefinition... tools) {
-        return resolver.resolve(scene, tools.length > 0 ? List.of(tools) : candidateTools);
+    private CapabilityView resolve(CapabilityVisibilityResolver resolver, AgentDefinition agent, ToolDefinition... tools) {
+        return resolver.resolve(agent, tools.length > 0 ? List.of(tools) : candidateTools);
     }
 
     private ToolDefinition tool(String name, Toolset toolset) {
@@ -75,9 +75,9 @@ class CapabilityVisibilityResolverTest {
         return new CapabilityVisibilityResolver(new SkillManager(), provider);
     }
 
-    private SceneConfig scene() {
-        SceneConfig s = new SceneConfig();
-        s.setSceneId("test");
+    private AgentDefinition agent() {
+        AgentDefinition s = new AgentDefinition();
+        s.setAgentId("test");
         return s;
     }
 
@@ -86,7 +86,7 @@ class CapabilityVisibilityResolverTest {
     @Test
     void coreToolsetReturnsOnlyCoreTools() {
         CapabilityVisibilityResolver r = resolver(tool("core1", Toolset.CORE), tool("terminal1", Toolset.TERMINAL));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.CORE));
 
         CapabilityView view = resolve(r, s);
@@ -98,7 +98,7 @@ class CapabilityVisibilityResolverTest {
     @Test
     void emptyAllowedToolsetsReturnsAll() {
         CapabilityVisibilityResolver r = resolver(tool("a", Toolset.CORE), tool("b", Toolset.TERMINAL));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(null);
 
         CapabilityView view = resolve(r, s);
@@ -110,7 +110,7 @@ class CapabilityVisibilityResolverTest {
     void multipleToolsetsReturnsBoth() {
         CapabilityVisibilityResolver r = resolver(
                 tool("c", Toolset.CORE), tool("s", Toolset.SEARCH), tool("t", Toolset.TERMINAL));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.CORE, Toolset.SEARCH));
 
         CapabilityView view = resolve(r, s);
@@ -125,7 +125,7 @@ class CapabilityVisibilityResolverTest {
     @Test
     void allowedToolsFiltersToWhitelist() {
         CapabilityVisibilityResolver r = resolver(tool("tool_a", Toolset.CORE), tool("tool_b", Toolset.CORE));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.CORE));
         s.setAllowedTools(Set.of("tool_a"));
 
@@ -138,7 +138,7 @@ class CapabilityVisibilityResolverTest {
     @Test
     void deniedToolsExcludesBlacklist() {
         CapabilityVisibilityResolver r = resolver(tool("tool_a", Toolset.CORE), tool("tool_b", Toolset.CORE));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.CORE));
         s.setDeniedTools(Set.of("tool_b"));
 
@@ -151,7 +151,7 @@ class CapabilityVisibilityResolverTest {
     @Test
     void combinedAllowedAndDenied() {
         CapabilityVisibilityResolver r = resolver(tool("a", Toolset.CORE), tool("b", Toolset.CORE));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedTools(Set.of("a", "b"));
         s.setDeniedTools(Set.of("b"));
 
@@ -167,7 +167,7 @@ class CapabilityVisibilityResolverTest {
     void mcpAllowedServersFilters() {
         CapabilityVisibilityResolver r = resolver(
                 mcpTool("server1", "do_thing"), mcpTool("server2", "other_thing"));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedMcpServers(Set.of("server1"));
 
         CapabilityView view = resolve(r, s);
@@ -180,7 +180,7 @@ class CapabilityVisibilityResolverTest {
     void mcpDeniedServersFilters() {
         CapabilityVisibilityResolver r = resolver(
                 mcpTool("server1", "do_thing"), mcpTool("server2", "other_thing"));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setDeniedMcpServers(Set.of("server2"));
 
         CapabilityView view = resolve(r, s);
@@ -192,7 +192,7 @@ class CapabilityVisibilityResolverTest {
     @Test
     void nonMcpToolIgnoresMcpFilter() {
         CapabilityVisibilityResolver r = resolver(tool("core_tool", Toolset.CORE), mcpTool("server1", "mcp_tool"));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedMcpServers(Set.of("server2")); // server1 not allowed
 
         CapabilityView view = resolve(r, s);
@@ -206,8 +206,8 @@ class CapabilityVisibilityResolverTest {
         CapabilityVisibilityResolver r = resolver(
                 tool("read_file", Toolset.CORE),
                 tool("terminal", Toolset.TERMINAL));
-        SceneConfig s = scene();
-        s.setBackendPolicy(SceneConfig.BackendPolicy.SSH);
+        AgentDefinition s = agent();
+        s.setBackendPolicy(AgentDefinition.BackendPolicy.SSH);
 
         CapabilityView view = resolve(r, s);
 
@@ -218,10 +218,10 @@ class CapabilityVisibilityResolverTest {
     @Test
     void dockerPersistentBackendKeepsFileTools() {
         CapabilityVisibilityResolver r = resolver(tool("write_file", Toolset.CORE));
-        SceneConfig s = scene();
-        SceneConfig.BackendSpec spec = new SceneConfig.BackendSpec();
+        AgentDefinition s = agent();
+        AgentDefinition.BackendSpec spec = new AgentDefinition.BackendSpec();
         spec.setDockerPersistFilesystem(true);
-        s.setBackendPolicy(SceneConfig.BackendPolicy.DOCKER);
+        s.setBackendPolicy(AgentDefinition.BackendPolicy.DOCKER);
         s.setBackendSpec(spec);
 
         CapabilityView view = resolve(r, s);
@@ -237,8 +237,8 @@ class CapabilityVisibilityResolverTest {
                 new SkillManager(),
                 null,
                 backendProperties);
-        SceneConfig s = scene();
-        s.setBackendPolicy(SceneConfig.BackendPolicy.DOCKER);
+        AgentDefinition s = agent();
+        s.setBackendPolicy(AgentDefinition.BackendPolicy.DOCKER);
 
         CapabilityView view = resolve(r, s, tool("read_file", Toolset.CORE));
 
@@ -251,8 +251,8 @@ class CapabilityVisibilityResolverTest {
         CapabilityVisibilityResolver r = resolverWithMcpConnector(connector,
                 mcpTool("stdio", "read"),
                 mcpTool("url", "read"));
-        SceneConfig s = scene();
-        s.setBackendPolicy(SceneConfig.BackendPolicy.DOCKER);
+        AgentDefinition s = agent();
+        s.setBackendPolicy(AgentDefinition.BackendPolicy.DOCKER);
 
         CapabilityView view = resolve(r, s);
 
@@ -264,8 +264,8 @@ class CapabilityVisibilityResolverTest {
     void nonLocalBackendHidesStdioMcpToolsWithSanitizedServerName() {
         McpServerConnector connector = new FakeMcpServerConnector(Set.of("docs-server"));
         CapabilityVisibilityResolver r = resolverWithMcpConnector(connector, mcpTool("docs-server", "read"));
-        SceneConfig s = scene();
-        s.setBackendPolicy(SceneConfig.BackendPolicy.SSH);
+        AgentDefinition s = agent();
+        s.setBackendPolicy(AgentDefinition.BackendPolicy.SSH);
 
         CapabilityView view = resolve(r, s);
 
@@ -276,8 +276,8 @@ class CapabilityVisibilityResolverTest {
     void localBackendKeepsStdioMcpTools() {
         McpServerConnector connector = new FakeMcpServerConnector(Set.of("stdio"));
         CapabilityVisibilityResolver r = resolverWithMcpConnector(connector, mcpTool("stdio", "read"));
-        SceneConfig s = scene();
-        s.setBackendPolicy(SceneConfig.BackendPolicy.LOCAL);
+        AgentDefinition s = agent();
+        s.setBackendPolicy(AgentDefinition.BackendPolicy.LOCAL);
 
         CapabilityView view = resolve(r, s);
 
@@ -306,8 +306,8 @@ class CapabilityVisibilityResolverTest {
         CapabilityVisibilityResolver r = resolverWithMcpConnector(connector,
                 mcpTool("docs", "lookup"),
                 mcpTool("docs-api", "read"));
-        SceneConfig s = scene();
-        s.setBackendPolicy(SceneConfig.BackendPolicy.DOCKER);
+        AgentDefinition s = agent();
+        s.setBackendPolicy(AgentDefinition.BackendPolicy.DOCKER);
 
         CapabilityView view = resolve(r, s);
 
@@ -365,8 +365,8 @@ class CapabilityVisibilityResolverTest {
     @Test
     void approvalNoneStripsApprovalFlag() {
         CapabilityVisibilityResolver r = resolver(approvalTool("dangerous", Toolset.TERMINAL));
-        SceneConfig s = scene();
-        s.setApprovalPolicy(SceneConfig.ApprovalPolicy.NONE);
+        AgentDefinition s = agent();
+        s.setApprovalPolicy(AgentDefinition.ApprovalPolicy.NONE);
 
         CapabilityView view = resolve(r, s);
 
@@ -379,8 +379,8 @@ class CapabilityVisibilityResolverTest {
     @Test
     void approvalRequiredPreservesFlag() {
         CapabilityVisibilityResolver r = resolver(approvalTool("dangerous", Toolset.TERMINAL));
-        SceneConfig s = scene();
-        s.setApprovalPolicy(SceneConfig.ApprovalPolicy.REQUIRED);
+        AgentDefinition s = agent();
+        s.setApprovalPolicy(AgentDefinition.ApprovalPolicy.REQUIRED);
 
         CapabilityView view = resolve(r, s);
 
@@ -391,15 +391,15 @@ class CapabilityVisibilityResolverTest {
     }
 
     @Test
-    void chatbotLikeSceneWithApprovalNoneDoesNotExposeTerminalTools() {
+    void chatbotLikeAgentWithApprovalNoneDoesNotExposeTerminalTools() {
         CapabilityVisibilityResolver r = resolver(
                 tool("web_search", Toolset.WEB),
                 approvalTool("terminal", Toolset.TERMINAL),
                 tool("process", Toolset.TERMINAL));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.CORE, Toolset.SKILLS, Toolset.SEARCH, Toolset.WEB, Toolset.KNOWLEDGE, Toolset.MCP));
         s.setDeniedTools(Set.of("terminal", "process"));
-        s.setApprovalPolicy(SceneConfig.ApprovalPolicy.NONE);
+        s.setApprovalPolicy(AgentDefinition.ApprovalPolicy.NONE);
 
         CapabilityView view = resolve(r, s);
 
@@ -417,7 +417,7 @@ class CapabilityVisibilityResolverTest {
                 Skill.ofSimple("skill_a", "desc_a", Set.of(), Set.of(), "content_a"),
                 Skill.ofSimple("skill_b", "desc_b", Set.of(), Set.of(), "content_b")));
         CapabilityVisibilityResolver r = resolver(sm);
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setSkillIds(Set.of("skill_a"));
 
         CapabilityView view = resolve(r, s);
@@ -433,7 +433,7 @@ class CapabilityVisibilityResolverTest {
                 Skill.ofSimple("skill_a", "desc", Set.of(), Set.of(), "content"),
                 Skill.ofSimple("skill_b", "desc", Set.of(), Set.of(), "content")));
         CapabilityVisibilityResolver r = resolver(sm);
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         // skillIds null or empty → all active skills
 
         CapabilityView view = resolve(r, s);
@@ -447,7 +447,7 @@ class CapabilityVisibilityResolverTest {
         // skill_terminal requires TERMINAL toolset
         sm.setSkills(List.of(Skill.ofSimple("skill_terminal", "desc", Set.of(Toolset.TERMINAL), Set.of(), "content")));
         CapabilityVisibilityResolver r = resolver(sm, tool("core1", Toolset.CORE));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.CORE)); // no TERMINAL
 
         CapabilityView view = resolve(r, s);
@@ -462,9 +462,9 @@ class CapabilityVisibilityResolverTest {
     void differentToolsetsProduceDifferentFingerprint() {
         CapabilityVisibilityResolver r = resolver(
                 tool("a", Toolset.CORE), tool("b", Toolset.SEARCH));
-        SceneConfig s1 = scene();
+        AgentDefinition s1 = agent();
         s1.setAllowedToolsets(Set.of(Toolset.CORE));
-        SceneConfig s2 = scene();
+        AgentDefinition s2 = agent();
         s2.setAllowedToolsets(Set.of(Toolset.CORE, Toolset.SEARCH));
 
         assertNotEquals(resolve(r, s1).fingerprint(), resolve(r, s2).fingerprint());
@@ -473,9 +473,9 @@ class CapabilityVisibilityResolverTest {
     @Test
     void differentDeniedToolsProduceDifferentFingerprint() {
         CapabilityVisibilityResolver r = resolver(tool("a", Toolset.CORE), tool("b", Toolset.CORE));
-        SceneConfig s1 = scene();
+        AgentDefinition s1 = agent();
         s1.setAllowedToolsets(Set.of(Toolset.CORE));
-        SceneConfig s2 = scene();
+        AgentDefinition s2 = agent();
         s2.setAllowedToolsets(Set.of(Toolset.CORE));
         s2.setDeniedTools(Set.of("b"));
 
@@ -485,9 +485,9 @@ class CapabilityVisibilityResolverTest {
     @Test
     void sameConfigProducesSameFingerprint() {
         CapabilityVisibilityResolver r = resolver(tool("a", Toolset.CORE));
-        SceneConfig s1 = scene();
+        AgentDefinition s1 = agent();
         s1.setAllowedToolsets(Set.of(Toolset.CORE));
-        SceneConfig s2 = scene();
+        AgentDefinition s2 = agent();
         s2.setAllowedToolsets(Set.of(Toolset.CORE));
 
         assertEquals(resolve(r, s1).fingerprint(), resolve(r, s2).fingerprint());
@@ -501,9 +501,9 @@ class CapabilityVisibilityResolverTest {
                 tool("memory_read", Toolset.MEMORY),
                 tool("session_search", Toolset.MEMORY),
                 tool("core_tool", Toolset.CORE));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.CORE, Toolset.MEMORY));
-        SceneConfig.MemoryPolicySpec mem = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition.MemoryPolicySpec mem = new AgentDefinition.MemoryPolicySpec();
         mem.setEnabled(false);
         s.setMemoryPolicyConfig(mem);
 
@@ -520,11 +520,11 @@ class CapabilityVisibilityResolverTest {
                 tool("memory_read", Toolset.MEMORY),
                 tool("session_search", Toolset.MEMORY),
                 tool("core_tool", Toolset.CORE));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.CORE, Toolset.MEMORY));
-        SceneConfig.MemoryPolicySpec mem = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition.MemoryPolicySpec mem = new AgentDefinition.MemoryPolicySpec();
         mem.setEnabled(true);
-        mem.setAccess(SceneConfig.MemoryAccess.DISABLED);
+        mem.setAccess(AgentDefinition.MemoryAccess.DISABLED);
         s.setMemoryPolicyConfig(mem);
 
         CapabilityView view = resolve(r, s);
@@ -540,9 +540,9 @@ class CapabilityVisibilityResolverTest {
                 tool("memory_read", Toolset.MEMORY),
                 tool("user_write", Toolset.MEMORY),
                 tool("session_search", Toolset.MEMORY));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.MEMORY));
-        SceneConfig.MemoryPolicySpec mem = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition.MemoryPolicySpec mem = new AgentDefinition.MemoryPolicySpec();
         mem.setEnabled(true);
         mem.setProviders(Set.of(SessionMemoryProvider.NAME));
         s.setMemoryPolicyConfig(mem);
@@ -559,9 +559,9 @@ class CapabilityVisibilityResolverTest {
         CapabilityVisibilityResolver r = resolver(
                 tool("memory_read", Toolset.MEMORY),
                 tool("session_search", Toolset.MEMORY));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.MEMORY));
-        SceneConfig.MemoryPolicySpec mem = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition.MemoryPolicySpec mem = new AgentDefinition.MemoryPolicySpec();
         mem.setEnabled(true);
         mem.setProviders(Set.of(BuiltinMemoryProvider.NAME));
         s.setMemoryPolicyConfig(mem);
@@ -577,9 +577,9 @@ class CapabilityVisibilityResolverTest {
         CapabilityVisibilityResolver r = resolver(
                 tool("memory_read", Toolset.MEMORY),
                 tool("session_search", Toolset.MEMORY));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.MEMORY));
-        SceneConfig.MemoryPolicySpec mem = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition.MemoryPolicySpec mem = new AgentDefinition.MemoryPolicySpec();
         mem.setEnabled(true);
         mem.setProviders(Set.of()); // empty = no restriction
         s.setMemoryPolicyConfig(mem);
@@ -594,9 +594,9 @@ class CapabilityVisibilityResolverTest {
         CapabilityVisibilityResolver r = resolver(
                 tool("core_tool", Toolset.CORE),
                 tool("memory_read", Toolset.MEMORY));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.CORE, Toolset.MEMORY));
-        SceneConfig.MemoryPolicySpec mem = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition.MemoryPolicySpec mem = new AgentDefinition.MemoryPolicySpec();
         mem.setEnabled(false);
         s.setMemoryPolicyConfig(mem);
 
@@ -611,7 +611,7 @@ class CapabilityVisibilityResolverTest {
         CapabilityVisibilityResolver r = resolver(
                 tool("core_tool", Toolset.CORE),
                 tool("memory_read", Toolset.MEMORY));
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.CORE)); // MEMORY not in allowed toolsets
 
         CapabilityView view = resolve(r, s);
@@ -622,13 +622,13 @@ class CapabilityVisibilityResolverTest {
     }
 
     @Test
-    void resolveSubAgentFiltersByParentAndScenePolicies() {
+    void resolveSubAgentFiltersByParentAndAgentPolicies() {
         ToolDefinition core = tool("core_tool", Toolset.CORE);
         ToolDefinition web = tool("web_tool", Toolset.WEB);
         ToolDefinition terminal = tool("terminal", Toolset.TERMINAL);
         ToolDefinition delegate = tool("delegate_task", Toolset.DELEGATE);
         CapabilityVisibilityResolver r = resolver(core, web, terminal, delegate);
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.CORE, Toolset.WEB, Toolset.DELEGATE));
         s.setDeniedTools(Set.of("web_tool"));
 
@@ -647,10 +647,10 @@ class CapabilityVisibilityResolverTest {
         ToolDefinition deniedMcp = mcpTool("server2", "secret");
         ToolDefinition memoryRead = tool("memory_read", Toolset.MEMORY);
         CapabilityVisibilityResolver r = resolver(allowedMcp, deniedMcp, memoryRead);
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.MCP, Toolset.MEMORY));
         s.setAllowedMcpServers(Set.of("server1"));
-        SceneConfig.MemoryPolicySpec mem = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition.MemoryPolicySpec mem = new AgentDefinition.MemoryPolicySpec();
         mem.setEnabled(false);
         s.setMemoryPolicyConfig(mem);
 
@@ -665,7 +665,7 @@ class CapabilityVisibilityResolverTest {
     void resolveSubAgentStripsApprovalAndInheritsPromptSections() {
         ToolDefinition dangerous = approvalTool("dangerous", Toolset.TERMINAL);
         CapabilityVisibilityResolver r = resolver(dangerous);
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.TERMINAL));
         CapabilityView parent = CapabilityView.builder()
                 .visibleTools(List.of(dangerous))
@@ -695,7 +695,7 @@ class CapabilityVisibilityResolverTest {
         ToolDefinition core = tool("core_tool", Toolset.CORE);
         ToolDefinition web = tool("web_tool", Toolset.WEB);
         CapabilityVisibilityResolver r = resolver(sm, core, web);
-        SceneConfig s = scene();
+        AgentDefinition s = agent();
         s.setAllowedToolsets(Set.of(Toolset.CORE, Toolset.WEB));
         CapabilityView parent = CapabilityView.builder()
                 .visibleTools(List.of(core, web))
@@ -715,7 +715,7 @@ class CapabilityVisibilityResolverTest {
     private CapabilityView parentView(ToolDefinition... tools) {
         List<ToolDefinition> toolList = List.of(tools);
         return CapabilityView.builder()
-                .sceneId("parent")
+                .agentId("parent")
                 .visibleTools(toolList)
                 .visibleToolNames(toolList.stream().map(ToolDefinition::name).collect(java.util.stream.Collectors.toSet()))
                 .visibleToolsets(toolList.stream().map(ToolDefinition::toolset).collect(java.util.stream.Collectors.toSet()))

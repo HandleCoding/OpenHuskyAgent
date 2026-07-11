@@ -45,8 +45,8 @@ public class SessionManager {
         return sessionRepository.findAllSessions();
     }
 
-    public List<SessionEntity> listSessionsByScope(String ownerPrincipalId, String channelType, String sceneId) {
-        return sessionRepository.findSessionsByScope(ownerPrincipalId, channelType, sceneId);
+    public List<SessionEntity> listSessionsByScope(String ownerPrincipalId, String channelType, String agentId) {
+        return sessionRepository.findSessionsByScope(ownerPrincipalId, channelType, agentId);
     }
 
     public int countMessages(String sessionId) {

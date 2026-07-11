@@ -1,4 +1,4 @@
-package io.github.huskyagent.application.scene;
+package io.github.huskyagent.application.agent;
 
 import org.junit.jupiter.api.Test;
 
@@ -8,13 +8,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class ConfigSceneResolverTest {
+class ConfigAgentResolverTest {
 
     @Test
     void unknownAgentFailsClosed() {
-        ConfigSceneResolver resolver = new ConfigSceneResolver();
-        LinkedHashMap<String, ConfigSceneResolver.SceneProperties> agents = new LinkedHashMap<>();
-        agents.put("assistant", new ConfigSceneResolver.SceneProperties());
+        ConfigAgentResolver resolver = new ConfigAgentResolver();
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();
+        agents.put("assistant", new ConfigAgentResolver.AgentProperties());
         resolver.setAgents(agents);
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> resolver.resolve("missing"));
@@ -24,9 +24,9 @@ class ConfigSceneResolverTest {
 
     @Test
     void blankAgentFailsClosed() {
-        ConfigSceneResolver resolver = new ConfigSceneResolver();
-        LinkedHashMap<String, ConfigSceneResolver.SceneProperties> agents = new LinkedHashMap<>();
-        agents.put("assistant", new ConfigSceneResolver.SceneProperties());
+        ConfigAgentResolver resolver = new ConfigAgentResolver();
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();
+        agents.put("assistant", new ConfigAgentResolver.AgentProperties());
         resolver.setAgents(agents);
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> resolver.resolve(" "));
@@ -36,20 +36,20 @@ class ConfigSceneResolverTest {
 
     @Test
     void explicitAgentResolves() {
-        ConfigSceneResolver resolver = new ConfigSceneResolver();
-        LinkedHashMap<String, ConfigSceneResolver.SceneProperties> agents = new LinkedHashMap<>();
-        agents.put("assistant", new ConfigSceneResolver.SceneProperties());
+        ConfigAgentResolver resolver = new ConfigAgentResolver();
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();
+        agents.put("assistant", new ConfigAgentResolver.AgentProperties());
         resolver.setAgents(agents);
 
-        assertEquals("assistant", resolver.resolve("assistant").getSceneId());
+        assertEquals("assistant", resolver.resolve("assistant").getAgentId());
     }
 
     @Test
     void dockerPersistFilesystemOnlyCreatesBackendSpec() {
-        ConfigSceneResolver resolver = new ConfigSceneResolver();
-        ConfigSceneResolver.SceneProperties props = new ConfigSceneResolver.SceneProperties();
+        ConfigAgentResolver resolver = new ConfigAgentResolver();
+        ConfigAgentResolver.AgentProperties props = new ConfigAgentResolver.AgentProperties();
         props.setDockerPersistFilesystem(true);
-        LinkedHashMap<String, ConfigSceneResolver.SceneProperties> agents = new LinkedHashMap<>();
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();
         agents.put("assistant", props);
         resolver.setAgents(agents);
 
@@ -60,10 +60,10 @@ class ConfigSceneResolverTest {
 
     @Test
     void dockerSpecPreservesMissingPersistOverrideAsNull() {
-        ConfigSceneResolver resolver = new ConfigSceneResolver();
-        ConfigSceneResolver.SceneProperties props = new ConfigSceneResolver.SceneProperties();
+        ConfigAgentResolver resolver = new ConfigAgentResolver();
+        ConfigAgentResolver.AgentProperties props = new ConfigAgentResolver.AgentProperties();
         props.setDockerImage("node:22");
-        LinkedHashMap<String, ConfigSceneResolver.SceneProperties> agents = new LinkedHashMap<>();
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();
         agents.put("assistant", props);
         resolver.setAgents(agents);
 

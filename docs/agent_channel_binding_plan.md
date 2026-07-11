@@ -53,13 +53,13 @@ Inbound channel identity
   -> channelType:instanceId / platform account id
   -> agent-channel-bindings
   -> agent id
-  -> internal SceneConfig
+  -> internal AgentDefinition
   -> RuntimePolicy
   -> RuntimeScope
   -> ReAct graph
 ```
 
-Internally, Java types such as `SceneConfig` and `SceneResolver` may still exist as implementation details. Public configuration and user-facing docs should use Agent terminology.
+Internally, Java types such as `AgentDefinition` and `AgentResolver` may still exist as implementation details. Public configuration and user-facing docs should use Agent terminology.
 
 ## Channel Identity Lookup
 

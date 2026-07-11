@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import java.util.Set;
 
 /**
- * Unregisters session meta on SESSION_END so the factory no longer holds SceneConfig references.
+ * Unregisters session meta on SESSION_END so the factory no longer holds AgentDefinition references.
  * The backend (e.g. Docker container) is kept alive and cleaned up by the idle TTL reaper,
  * allowing it to survive across multiple conversation turns of the same session.
  */

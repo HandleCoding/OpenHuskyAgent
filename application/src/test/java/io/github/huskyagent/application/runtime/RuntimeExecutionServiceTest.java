@@ -5,7 +5,7 @@ import io.github.huskyagent.application.ChatResult;
 import io.github.huskyagent.application.channel.ChannelCommand;
 import io.github.huskyagent.application.channel.ChannelCommandParser;
 import io.github.huskyagent.application.channel.ChannelCommandService;
-import io.github.huskyagent.application.channel.binding.ChannelSceneRouter;
+import io.github.huskyagent.application.channel.binding.ChannelAgentRouter;
 import io.github.huskyagent.application.channel.binding.EffectiveChannelRoute;
 import io.github.huskyagent.application.channel.runtime.SessionRoute;
 import io.github.huskyagent.application.channel.runtime.SessionRouteRegistry;
@@ -15,7 +15,7 @@ import io.github.huskyagent.application.session.SessionResolver;
 import io.github.huskyagent.domain.capability.CapabilityView;
 import io.github.huskyagent.domain.memory.policy.MemoryPolicyConfig;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.ChannelType;
 import io.github.huskyagent.infra.channel.ConversationType;
@@ -48,7 +48,7 @@ class RuntimeExecutionServiceTest {
                 inbound -> Optional.of(new ChannelCommand("help", "", "/help")),
                 commandService,
                 new FakeRouteRegistry(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext()
         );
 
@@ -73,7 +73,7 @@ class RuntimeExecutionServiceTest {
                 inbound -> Optional.empty(),
                 new FakeCommandService(null),
                 routeRegistry,
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext()
         );
 
@@ -102,7 +102,7 @@ class RuntimeExecutionServiceTest {
                 inbound -> Optional.empty(),
                 new FakeCommandService(null),
                 new FakeRouteRegistry(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext()
         );
 
@@ -123,7 +123,7 @@ class RuntimeExecutionServiceTest {
                 inbound -> Optional.empty(),
                 new FakeCommandService(null),
                 new FakeRouteRegistry(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext()
         );
 
@@ -145,7 +145,7 @@ class RuntimeExecutionServiceTest {
                 inbound -> Optional.empty(),
                 new FakeCommandService(null),
                 new FakeRouteRegistry(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext()
         );
 
@@ -169,7 +169,7 @@ class RuntimeExecutionServiceTest {
                 inbound -> Optional.empty(),
                 new FakeCommandService(null),
                 new FakeRouteRegistry(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext()
         );
 
@@ -193,7 +193,7 @@ class RuntimeExecutionServiceTest {
                 inbound -> Optional.empty(),
                 new FakeCommandService(null),
                 new FakeRouteRegistry(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext()
         );
 
@@ -218,7 +218,7 @@ class RuntimeExecutionServiceTest {
                 inbound -> Optional.empty(),
                 new FakeCommandService(null),
                 new FakeRouteRegistry(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext()
         );
 
@@ -240,7 +240,7 @@ class RuntimeExecutionServiceTest {
                 inbound -> Optional.empty(),
                 new FakeCommandService(null),
                 new FakeRouteRegistry(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext()
         );
 
@@ -265,7 +265,7 @@ class RuntimeExecutionServiceTest {
                 inbound -> Optional.empty(),
                 new FakeCommandService(null),
                 new FakeRouteRegistry(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext()
         );
         AgentInput explicitInput = AgentInput.structuredMessages(List.of(new UserMessage("structured hello")), null);
@@ -293,7 +293,7 @@ class RuntimeExecutionServiceTest {
                         .text("command ok")
                         .build()),
                 new FakeRouteRegistry(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext()
         );
 
@@ -319,7 +319,7 @@ class RuntimeExecutionServiceTest {
                 inbound -> Optional.empty(),
                 new FakeCommandService(null),
                 new FakeRouteRegistry(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext(),
                 coordinator
         );
@@ -346,7 +346,7 @@ class RuntimeExecutionServiceTest {
                 inbound -> Optional.empty(),
                 new FakeCommandService(null),
                 new FakeRouteRegistry(),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 new ScopedRuntimeContext(),
                 coordinator
         );
@@ -363,19 +363,19 @@ class RuntimeExecutionServiceTest {
     }
 
     private static RuntimeScope completeScope() {
-        SceneConfig scene = new SceneConfig();
-        scene.setSceneId("assistant");
+        AgentDefinition scene = new AgentDefinition();
+        scene.setAgentId("assistant");
         MemoryPolicyConfig memoryPolicy = MemoryPolicyConfig.builder()
                 .enabled(true)
                 .strategyId("custom")
-                .access(SceneConfig.MemoryAccess.READWRITE)
-                .scope(SceneConfig.MemoryScopePolicy.SESSION)
-                .promptMode(SceneConfig.MemoryPromptMode.FULL)
+                .access(AgentDefinition.MemoryAccess.READWRITE)
+                .scope(AgentDefinition.MemoryScopePolicy.SESSION)
+                .promptMode(AgentDefinition.MemoryPromptMode.FULL)
                 .providers(Set.of("builtin"))
                 .allowCrossSessionSearch(true)
                 .build();
         RuntimePolicy runtimePolicy = RuntimePolicy.builder()
-                .sceneId("assistant")
+                .agentId("assistant")
                 .memoryPolicy(memoryPolicy)
                 .capabilityView(CapabilityView.builder().build())
                 .knowledgeSources(Set.of())
@@ -494,7 +494,7 @@ class RuntimeExecutionServiceTest {
         }
 
         @Override
-        public RuntimeScope resolveOrCreateSession(Principal principal, ChannelIdentity channelIdentity, String sceneId, String requestedSessionId) {
+        public RuntimeScope resolveOrCreateSession(Principal principal, ChannelIdentity channelIdentity, String agentId, String requestedSessionId) {
             resolveCalls++;
             lastRequestedSessionId = requestedSessionId;
             if (failWithSecurityException) {
@@ -504,13 +504,13 @@ class RuntimeExecutionServiceTest {
         }
 
         @Override
-        public RuntimeScope createSession(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
+        public RuntimeScope createSession(Principal principal, ChannelIdentity channelIdentity, String agentId) {
             createCalls++;
             return scope;
         }
 
         @Override
-        public RuntimeScope createEphemeralScope(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
+        public RuntimeScope createEphemeralScope(Principal principal, ChannelIdentity channelIdentity, String agentId) {
             ephemeralCalls++;
             return scope;
         }
@@ -521,14 +521,14 @@ class RuntimeExecutionServiceTest {
         }
     }
 
-    private static class FakeSceneRouter extends ChannelSceneRouter {
-        FakeSceneRouter() {
+    private static class FakeAgentRouter extends ChannelAgentRouter {
+        FakeAgentRouter() {
             super(null, null);
         }
 
         @Override
         public EffectiveChannelRoute resolve(InboundMessage inbound) {
-            return new EffectiveChannelRoute("assistant", null, EffectiveChannelRoute.Source.SCENE_DEFAULT);
+            return new EffectiveChannelRoute("assistant", null, EffectiveChannelRoute.Source.AGENT_DEFAULT);
         }
     }
 
@@ -546,7 +546,7 @@ class RuntimeExecutionServiceTest {
         }
 
         @Override
-        public OutboundMessage execute(ChannelCommand command, InboundMessage inbound, String sceneId) {
+        public OutboundMessage execute(ChannelCommand command, InboundMessage inbound, String agentId) {
             return reply;
         }
     }

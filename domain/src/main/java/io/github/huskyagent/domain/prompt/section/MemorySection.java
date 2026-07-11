@@ -2,7 +2,7 @@ package io.github.huskyagent.domain.prompt.section;
 
 import io.github.huskyagent.domain.prompt.AbstractPromptSection;
 import io.github.huskyagent.domain.prompt.PromptContext;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.memory.MemoryManager;
 
 public class MemorySection extends AbstractPromptSection {
@@ -33,7 +33,7 @@ public class MemorySection extends AbstractPromptSection {
     @Override
     public String build(PromptContext context) {
         if (!context.getRuntimePolicy().getMemoryPolicy().isEnabled()
-                || context.getRuntimePolicy().getMemoryPolicy().getPromptMode() == SceneConfig.MemoryPromptMode.NONE) {
+                || context.getRuntimePolicy().getMemoryPolicy().getPromptMode() == AgentDefinition.MemoryPromptMode.NONE) {
             return "";
         }
 

@@ -3,7 +3,7 @@ package io.github.huskyagent.application.runtime;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.huskyagent.domain.context.ContextManagementStrategyResolver;
 import io.github.huskyagent.domain.context.strategy.NoopContextManagementStrategy;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.context.ContextConfig;
 import io.github.huskyagent.infra.knowledge.KnowledgeConfig;
 import io.github.huskyagent.infra.knowledge.KnowledgeManager;
@@ -33,12 +33,12 @@ class RuntimePolicyResolverTest {
     @Test
     void resolvesContextAndMemoryStrategyPolicy() {
         RuntimePolicyResolver resolver = resolverWithProviders(BuiltinMemoryProvider.NAME, SessionMemoryProvider.NAME);
-        SceneConfig scene = baseScene();
-        scene.getContextPolicy().setStrategy("none");
-        scene.getMemoryPolicyConfig().setStrategy("default");
-        scene.getMemoryPolicyConfig().setProviders(Set.of(SessionMemoryProvider.NAME));
+        AgentDefinition agent = baseAgent();
+        agent.getContextPolicy().setStrategy("none");
+        agent.getMemoryPolicyConfig().setStrategy("default");
+        agent.getMemoryPolicyConfig().setProviders(Set.of(SessionMemoryProvider.NAME));
 
-        var policy = resolve(resolver, scene);
+        var policy = resolve(resolver, agent);
 
         assertEquals("none", policy.getContextPolicy().getStrategyId());
         assertEquals("default", policy.getMemoryPolicy().getStrategyId());
@@ -48,27 +48,27 @@ class RuntimePolicyResolverTest {
     @Test
     void rejectsUnknownContextStrategy() {
         RuntimePolicyResolver resolver = resolverWithProviders(BuiltinMemoryProvider.NAME);
-        SceneConfig scene = baseScene();
-        scene.getContextPolicy().setStrategy("missing");
+        AgentDefinition agent = baseAgent();
+        agent.getContextPolicy().setStrategy("missing");
 
-        assertThrows(IllegalArgumentException.class, () -> resolve(resolver, scene));
+        assertThrows(IllegalArgumentException.class, () -> resolve(resolver, agent));
     }
 
     @Test
     void rejectsUnknownMemoryProvider() {
         RuntimePolicyResolver resolver = resolverWithProviders(BuiltinMemoryProvider.NAME);
-        SceneConfig scene = baseScene();
-        scene.getMemoryPolicyConfig().setProviders(Set.of("missing"));
+        AgentDefinition agent = baseAgent();
+        agent.getMemoryPolicyConfig().setProviders(Set.of("missing"));
 
-        assertThrows(IllegalArgumentException.class, () -> resolve(resolver, scene));
+        assertThrows(IllegalArgumentException.class, () -> resolve(resolver, agent));
     }
 
     @Test
     void fingerprintChangesWhenStrategyChanges() {
         RuntimePolicyResolver resolver = resolverWithProviders(BuiltinMemoryProvider.NAME);
-        SceneConfig left = baseScene();
+        AgentDefinition left = baseAgent();
         left.getContextPolicy().setStrategy("default");
-        SceneConfig right = baseScene();
+        AgentDefinition right = baseAgent();
         right.getContextPolicy().setStrategy("none");
 
         assertNotEquals(resolve(resolver, left).fingerprint(), resolve(resolver, right).fingerprint());
@@ -81,7 +81,7 @@ class RuntimePolicyResolverTest {
         contextConfig.setModelContextLengths(Map.of("large-model", 200000));
         RuntimePolicyResolver resolver = resolverWithContextConfig(contextConfig, "large-model");
 
-        var policy = resolve(resolver, baseScene());
+        var policy = resolve(resolver, baseAgent());
 
         assertEquals(200000, policy.getContextPolicy().getContextLength());
     }
@@ -93,7 +93,7 @@ class RuntimePolicyResolverTest {
         contextConfig.setModelContextLengths(Map.of("large-model", 200000));
         RuntimePolicyResolver resolver = resolverWithContextConfig(contextConfig, "unknown-model");
 
-        var policy = resolve(resolver, baseScene());
+        var policy = resolve(resolver, baseAgent());
 
         assertEquals(128000, policy.getContextPolicy().getContextLength());
     }
@@ -104,10 +104,10 @@ class RuntimePolicyResolverTest {
         contextConfig.setContextLength(128000);
         contextConfig.setModelContextLengths(Map.of("large-model", 200000));
         RuntimePolicyResolver resolver = resolverWithContextConfig(contextConfig, "large-model");
-        SceneConfig scene = baseScene();
-        scene.getContextPolicy().setContextLength(64000);
+        AgentDefinition agent = baseAgent();
+        agent.getContextPolicy().setContextLength(64000);
 
-        var policy = resolve(resolver, scene);
+        var policy = resolve(resolver, agent);
 
         assertEquals(64000, policy.getContextPolicy().getContextLength());
     }
@@ -121,13 +121,13 @@ class RuntimePolicyResolverTest {
         RuntimePolicyResolver resolver = resolverWithProvidersAndTools(
                 List.of(memoryRead, coreOther), BuiltinMemoryProvider.NAME, SessionMemoryProvider.NAME);
 
-        SceneConfig scene = baseScene();
-        scene.setAllowedToolsets(Set.of(Toolset.CORE, Toolset.MEMORY));
-        SceneConfig.MemoryPolicySpec mem = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition agent = baseAgent();
+        agent.setAllowedToolsets(Set.of(Toolset.CORE, Toolset.MEMORY));
+        AgentDefinition.MemoryPolicySpec mem = new AgentDefinition.MemoryPolicySpec();
         mem.setEnabled(false);
-        scene.setMemoryPolicyConfig(mem);
+        agent.setMemoryPolicyConfig(mem);
 
-        var policy = resolve(resolver, scene);
+        var policy = resolve(resolver, agent);
 
         assertFalse(policy.getCapabilityView().getVisibleToolNames().contains("memory_read"),
                 "memory_read should be hidden when memory disabled");
@@ -142,14 +142,14 @@ class RuntimePolicyResolverTest {
         RuntimePolicyResolver resolver = resolverWithProvidersAndTools(
                 List.of(memoryRead, sessionSearch), BuiltinMemoryProvider.NAME, SessionMemoryProvider.NAME);
 
-        SceneConfig scene = baseScene();
-        scene.setAllowedToolsets(Set.of(Toolset.MEMORY));
-        SceneConfig.MemoryPolicySpec mem = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition agent = baseAgent();
+        agent.setAllowedToolsets(Set.of(Toolset.MEMORY));
+        AgentDefinition.MemoryPolicySpec mem = new AgentDefinition.MemoryPolicySpec();
         mem.setEnabled(true);
         mem.setProviders(Set.of(SessionMemoryProvider.NAME));
-        scene.setMemoryPolicyConfig(mem);
+        agent.setMemoryPolicyConfig(mem);
 
-        var policy = resolve(resolver, scene);
+        var policy = resolve(resolver, agent);
 
         assertFalse(policy.getCapabilityView().getVisibleToolNames().contains("memory_read"),
                 "builtin tool should be hidden when builtin provider not in whitelist");
@@ -160,13 +160,13 @@ class RuntimePolicyResolverTest {
     @Test
     void fingerprintChangesWhenMemoryEnabledChanges() {
         RuntimePolicyResolver resolver = resolverWithProviders(BuiltinMemoryProvider.NAME);
-        SceneConfig enabled = baseScene();
-        SceneConfig.MemoryPolicySpec memOn = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition enabled = baseAgent();
+        AgentDefinition.MemoryPolicySpec memOn = new AgentDefinition.MemoryPolicySpec();
         memOn.setEnabled(true);
         enabled.setMemoryPolicyConfig(memOn);
 
-        SceneConfig disabled = baseScene();
-        SceneConfig.MemoryPolicySpec memOff = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition disabled = baseAgent();
+        AgentDefinition.MemoryPolicySpec memOff = new AgentDefinition.MemoryPolicySpec();
         memOff.setEnabled(false);
         disabled.setMemoryPolicyConfig(memOff);
 
@@ -176,13 +176,13 @@ class RuntimePolicyResolverTest {
     @Test
     void fingerprintChangesWhenProviderWhitelistChanges() {
         RuntimePolicyResolver resolver = resolverWithProviders(BuiltinMemoryProvider.NAME, SessionMemoryProvider.NAME);
-        SceneConfig withBuiltin = baseScene();
-        SceneConfig.MemoryPolicySpec m1 = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition withBuiltin = baseAgent();
+        AgentDefinition.MemoryPolicySpec m1 = new AgentDefinition.MemoryPolicySpec();
         m1.setProviders(Set.of(BuiltinMemoryProvider.NAME));
         withBuiltin.setMemoryPolicyConfig(m1);
 
-        SceneConfig withBoth = baseScene();
-        SceneConfig.MemoryPolicySpec m2 = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition withBoth = baseAgent();
+        AgentDefinition.MemoryPolicySpec m2 = new AgentDefinition.MemoryPolicySpec();
         m2.setProviders(Set.of(BuiltinMemoryProvider.NAME, SessionMemoryProvider.NAME));
         withBoth.setMemoryPolicyConfig(m2);
 
@@ -192,32 +192,32 @@ class RuntimePolicyResolverTest {
     @Test
     void carriesSceneExecutionFieldsIntoRuntimePolicy() {
         RuntimePolicyResolver resolver = resolverWithProviders(BuiltinMemoryProvider.NAME);
-        SceneConfig scene = baseScene();
-        SceneConfig.BackendSpec backendSpec = new SceneConfig.BackendSpec();
+        AgentDefinition agent = baseAgent();
+        AgentDefinition.BackendSpec backendSpec = new AgentDefinition.BackendSpec();
         backendSpec.setDockerImage("ubuntu:24.04");
         backendSpec.setDockerMemory("512m");
         backendSpec.setDockerCpus("1");
         backendSpec.setDockerPersistFilesystem(true);
         backendSpec.setDockerWorkdir("/workspace");
-        SceneConfig.StorageSpec storageSpec = new SceneConfig.StorageSpec();
+        AgentDefinition.StorageSpec storageSpec = new AgentDefinition.StorageSpec();
         storageSpec.setWorkspaceType("s3");
         storageSpec.setCheckpointType("postgres");
 
-        scene.setSystemPrompt("Scene prompt");
-        scene.setPromptFiles(List.of("CLAUDE.md", "AGENTS.md"));
-        scene.setPromptFilePolicy(SceneConfig.PromptFilePolicy.OVERRIDE);
-        scene.setBackendSpec(backendSpec);
-        scene.setStoragePolicy(SceneConfig.StoragePolicy.REMOTE);
-        scene.setStorageSpec(storageSpec);
-        scene.setFixedWorkingDirectory("/tmp/husky");
+        agent.setSystemPrompt("Scene prompt");
+        agent.setPromptFiles(List.of("CLAUDE.md", "AGENTS.md"));
+        agent.setPromptFilePolicy(AgentDefinition.PromptFilePolicy.OVERRIDE);
+        agent.setBackendSpec(backendSpec);
+        agent.setStoragePolicy(AgentDefinition.StoragePolicy.REMOTE);
+        agent.setStorageSpec(storageSpec);
+        agent.setFixedWorkingDirectory("/tmp/husky");
 
-        var policy = resolve(resolver, scene);
+        var policy = resolve(resolver, agent);
 
         assertEquals("Scene prompt", policy.getSystemPrompt());
         assertEquals(List.of("CLAUDE.md", "AGENTS.md"), policy.getPromptFiles());
-        assertEquals(SceneConfig.PromptFilePolicy.OVERRIDE, policy.getPromptFilePolicy());
+        assertEquals(AgentDefinition.PromptFilePolicy.OVERRIDE, policy.getPromptFilePolicy());
         assertSame(backendSpec, policy.getBackendSpec());
-        assertEquals(SceneConfig.StoragePolicy.REMOTE, policy.getStoragePolicy());
+        assertEquals(AgentDefinition.StoragePolicy.REMOTE, policy.getStoragePolicy());
         assertSame(storageSpec, policy.getStorageSpec());
         assertEquals("/tmp/husky", policy.getFixedWorkingDirectory());
     }
@@ -225,12 +225,12 @@ class RuntimePolicyResolverTest {
     @Test
     void localStorageDoesNotChangeFingerprint() {
         RuntimePolicyResolver resolver = resolverWithProviders(BuiltinMemoryProvider.NAME);
-        SceneConfig base = baseScene();
-        SceneConfig local = baseScene();
-        SceneConfig.StorageSpec storageSpec = new SceneConfig.StorageSpec();
+        AgentDefinition base = baseAgent();
+        AgentDefinition local = baseAgent();
+        AgentDefinition.StorageSpec storageSpec = new AgentDefinition.StorageSpec();
         storageSpec.setWorkspaceType("s3");
         storageSpec.setCheckpointType("postgres");
-        local.setStoragePolicy(SceneConfig.StoragePolicy.LOCAL);
+        local.setStoragePolicy(AgentDefinition.StoragePolicy.LOCAL);
         local.setStorageSpec(storageSpec);
 
         var policy = resolve(resolver, local);
@@ -243,16 +243,16 @@ class RuntimePolicyResolverTest {
     @Test
     void remoteStorageNormalizesEffectiveTypesAndFingerprint() {
         RuntimePolicyResolver resolver = resolverWithProviders(BuiltinMemoryProvider.NAME);
-        SceneConfig left = baseScene();
-        left.setStoragePolicy(SceneConfig.StoragePolicy.REMOTE);
-        SceneConfig.StorageSpec leftSpec = new SceneConfig.StorageSpec();
+        AgentDefinition left = baseAgent();
+        left.setStoragePolicy(AgentDefinition.StoragePolicy.REMOTE);
+        AgentDefinition.StorageSpec leftSpec = new AgentDefinition.StorageSpec();
         leftSpec.setWorkspaceType(" S3 ");
         leftSpec.setCheckpointType(" POSTGRES ");
         left.setStorageSpec(leftSpec);
 
-        SceneConfig right = baseScene();
-        right.setStoragePolicy(SceneConfig.StoragePolicy.REMOTE);
-        SceneConfig.StorageSpec rightSpec = new SceneConfig.StorageSpec();
+        AgentDefinition right = baseAgent();
+        right.setStoragePolicy(AgentDefinition.StoragePolicy.REMOTE);
+        AgentDefinition.StorageSpec rightSpec = new AgentDefinition.StorageSpec();
         rightSpec.setWorkspaceType("s3");
         rightSpec.setCheckpointType("postgres");
         right.setStorageSpec(rightSpec);
@@ -267,11 +267,11 @@ class RuntimePolicyResolverTest {
     @Test
     void remoteStorageBlankTypesDefaultToLocal() {
         RuntimePolicyResolver resolver = resolverWithProviders(BuiltinMemoryProvider.NAME);
-        SceneConfig scene = baseScene();
-        scene.setStoragePolicy(SceneConfig.StoragePolicy.REMOTE);
-        scene.setStorageSpec(new SceneConfig.StorageSpec());
+        AgentDefinition agent = baseAgent();
+        agent.setStoragePolicy(AgentDefinition.StoragePolicy.REMOTE);
+        agent.setStorageSpec(new AgentDefinition.StorageSpec());
 
-        var policy = resolve(resolver, scene);
+        var policy = resolve(resolver, agent);
 
         assertEquals("local", policy.effectiveWorkspaceType());
         assertEquals("local", policy.effectiveCheckpointType());
@@ -280,16 +280,16 @@ class RuntimePolicyResolverTest {
     @Test
     void fingerprintChangesWhenRemoteStorageSpecChanges() {
         RuntimePolicyResolver resolver = resolverWithProviders(BuiltinMemoryProvider.NAME);
-        SceneConfig left = baseScene();
-        left.setStoragePolicy(SceneConfig.StoragePolicy.REMOTE);
-        SceneConfig.StorageSpec leftSpec = new SceneConfig.StorageSpec();
+        AgentDefinition left = baseAgent();
+        left.setStoragePolicy(AgentDefinition.StoragePolicy.REMOTE);
+        AgentDefinition.StorageSpec leftSpec = new AgentDefinition.StorageSpec();
         leftSpec.setWorkspaceType("s3");
         leftSpec.setCheckpointType("postgres");
         left.setStorageSpec(leftSpec);
 
-        SceneConfig right = baseScene();
-        right.setStoragePolicy(SceneConfig.StoragePolicy.REMOTE);
-        SceneConfig.StorageSpec rightSpec = new SceneConfig.StorageSpec();
+        AgentDefinition right = baseAgent();
+        right.setStoragePolicy(AgentDefinition.StoragePolicy.REMOTE);
+        AgentDefinition.StorageSpec rightSpec = new AgentDefinition.StorageSpec();
         rightSpec.setWorkspaceType("gcs");
         rightSpec.setCheckpointType("redis");
         right.setStorageSpec(rightSpec);
@@ -300,19 +300,19 @@ class RuntimePolicyResolverTest {
     @Test
     void fingerprintChangesWhenPromptExecutionFieldsChange() {
         RuntimePolicyResolver resolver = resolverWithProviders(BuiltinMemoryProvider.NAME);
-        SceneConfig left = baseScene();
+        AgentDefinition left = baseAgent();
         left.setSystemPrompt("left prompt");
         left.setPromptFiles(List.of("CLAUDE.md"));
 
-        SceneConfig right = baseScene();
+        AgentDefinition right = baseAgent();
         right.setSystemPrompt("right prompt");
         right.setPromptFiles(List.of("AGENTS.md"));
 
         assertNotEquals(resolve(resolver, left).fingerprint(), resolve(resolver, right).fingerprint());
     }
 
-    private io.github.huskyagent.domain.runtime.RuntimePolicy resolve(RuntimePolicyResolver resolver, SceneConfig scene, ToolDefinition... tools) {
-        return resolver.resolve(scene, tools.length > 0 ? List.of(tools) : candidateTools);
+    private io.github.huskyagent.domain.runtime.RuntimePolicy resolve(RuntimePolicyResolver resolver, AgentDefinition agent, ToolDefinition... tools) {
+        return resolver.resolve(agent, tools.length > 0 ? List.of(tools) : candidateTools);
     }
 
     private RuntimePolicyResolver resolverWithProvidersAndTools(List<ToolDefinition> tools, String... providerIds) {
@@ -420,10 +420,10 @@ class RuntimePolicyResolverTest {
         };
     }
 
-    private SceneConfig baseScene() {
-        SceneConfig scene = new SceneConfig();
-        scene.setSceneId("test");
-        scene.setAllowedToolsets(Set.of(Toolset.CORE));
-        return scene;
+    private AgentDefinition baseAgent() {
+        AgentDefinition agent = new AgentDefinition();
+        agent.setAgentId("test");
+        agent.setAllowedToolsets(Set.of(Toolset.CORE));
+        return agent;
     }
 }

@@ -18,18 +18,18 @@ class MemoryScopeResolverTest {
         assertEquals("SESSION", scope.getMemoryPolicy());
         assertNull(scope.getCurrentSessionId());
         assertNull(scope.getPrincipalId());
-        assertNull(scope.getSceneId());
+        assertNull(scope.getAgentId());
     }
 
     @Test
     void currentRequestAlwaysUsesCurrentSession() {
-        for (String policy : new String[]{"SESSION", "READONLY", "PRINCIPAL", "USER_PROFILE", "SCENE"}) {
+        for (String policy : new String[]{"SESSION", "READONLY", "PRINCIPAL", "USER_PROFILE", "AGENT"}) {
             MemoryScope scope = resolver.resolve(scope(policy), "current");
 
             assertEquals(MemoryScope.SearchBoundary.CURRENT_SESSION, scope.getBoundary(), policy);
             assertEquals("session-1", scope.getCurrentSessionId());
             assertEquals("principal-1", scope.getPrincipalId());
-            assertEquals("scene-1", scope.getSceneId());
+            assertEquals("scene-1", scope.getAgentId());
             assertEquals(policy, scope.getMemoryPolicy());
         }
     }
@@ -44,8 +44,8 @@ class MemoryScopeResolverTest {
                 resolver.resolve(scope("PRINCIPAL"), "all").getBoundary());
         assertEquals(MemoryScope.SearchBoundary.SAME_PRINCIPAL,
                 resolver.resolve(scope("USER_PROFILE"), "all").getBoundary());
-        assertEquals(MemoryScope.SearchBoundary.SAME_PRINCIPAL_AND_SCENE,
-                resolver.resolve(scope("SCENE"), "all").getBoundary());
+        assertEquals(MemoryScope.SearchBoundary.SAME_PRINCIPAL_AND_AGENT,
+                resolver.resolve(scope("AGENT"), "all").getBoundary());
     }
 
     @Test
@@ -61,7 +61,7 @@ class MemoryScopeResolverTest {
                 .sessionId("session-1")
                 .principalId("principal-1")
                 .channelType("http")
-                .sceneId("scene-1")
+                .agentId("scene-1")
                 .memoryPolicy(policy)
                 .memoryStrategyId("default")
                 .build();

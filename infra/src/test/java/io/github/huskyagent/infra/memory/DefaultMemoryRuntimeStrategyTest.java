@@ -57,7 +57,7 @@ class DefaultMemoryRuntimeStrategyTest {
                 .sessionId("session")
                 .principalId("principal")
                 .channelType("http")
-                .sceneId("scene")
+                .agentId("scene")
                 .memoryPolicy(memoryPolicy)
                 .memoryStrategyId("default")
                 .memoryWriteAllowed(writeAllowed)

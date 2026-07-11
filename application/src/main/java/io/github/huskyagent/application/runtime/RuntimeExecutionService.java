@@ -5,7 +5,7 @@ import io.github.huskyagent.application.ChatResult;
 import io.github.huskyagent.application.channel.ChannelCommand;
 import io.github.huskyagent.application.channel.ChannelCommandParser;
 import io.github.huskyagent.application.channel.ChannelCommandService;
-import io.github.huskyagent.application.channel.binding.ChannelSceneRouter;
+import io.github.huskyagent.application.channel.binding.ChannelAgentRouter;
 import io.github.huskyagent.application.channel.binding.EffectiveChannelRoute;
 import io.github.huskyagent.application.channel.runtime.SessionRoute;
 import io.github.huskyagent.application.channel.runtime.SessionRouteRegistry;
@@ -28,7 +28,7 @@ public class RuntimeExecutionService {
     private final ChannelCommandParser commandParser;
     private final ChannelCommandService commandService;
     private final SessionRouteRegistry routeRegistry;
-    private final ChannelSceneRouter sceneRouter;
+    private final ChannelAgentRouter agentRouter;
     private final ScopedRuntimeContext scopedRuntimeContext;
     private final SessionRunCoordinator runCoordinator;
 
@@ -38,7 +38,7 @@ public class RuntimeExecutionService {
                                    ChannelCommandParser commandParser,
                                    ChannelCommandService commandService,
                                    SessionRouteRegistry routeRegistry,
-                                   ChannelSceneRouter sceneRouter,
+                                   ChannelAgentRouter agentRouter,
                                    ScopedRuntimeContext scopedRuntimeContext,
                                    SessionRunCoordinator runCoordinator) {
         this.sessionResolver = sessionResolver;
@@ -46,7 +46,7 @@ public class RuntimeExecutionService {
         this.commandParser = commandParser;
         this.commandService = commandService;
         this.routeRegistry = routeRegistry;
-        this.sceneRouter = sceneRouter;
+        this.agentRouter = agentRouter;
         this.scopedRuntimeContext = scopedRuntimeContext;
         this.runCoordinator = runCoordinator;
     }
@@ -56,10 +56,10 @@ public class RuntimeExecutionService {
                                    ChannelCommandParser commandParser,
                                    ChannelCommandService commandService,
                                    SessionRouteRegistry routeRegistry,
-                                   ChannelSceneRouter sceneRouter,
+                                   ChannelAgentRouter agentRouter,
                                    ScopedRuntimeContext scopedRuntimeContext) {
         this(sessionResolver, agentRuntimeExecutor, commandParser, commandService, routeRegistry,
-                sceneRouter, scopedRuntimeContext, new SessionRunCoordinator());
+                agentRouter, scopedRuntimeContext, new SessionRunCoordinator());
     }
 
     public StopResult interruptSession(String sessionId, String reason) {
@@ -91,19 +91,19 @@ public class RuntimeExecutionService {
 
         EffectiveChannelRoute effectiveRoute = request.getEffectiveRoute() != null
                 ? request.getEffectiveRoute()
-                : sceneRouter.resolve(inbound);
+                : agentRouter.resolve(inbound);
         Optional<ChannelCommand> command = request.commandParsingEnabledOrDefault()
                 && inbound.getText() != null && !inbound.getText().isBlank()
                 ? commandParser.parse(inbound)
                 : Optional.empty();
         if (command.isPresent() && commandService.supports(command.get())) {
-            return RuntimeExecutionResult.commandHandled(commandService.execute(command.get(), inbound, effectiveRoute.sceneId()));
+            return RuntimeExecutionResult.commandHandled(commandService.execute(command.get(), inbound, effectiveRoute.agentId()));
         }
 
         RuntimeCallbacks callbacks = request.callbacksOrNoop();
         RuntimeScope scope;
         try {
-            scope = resolveScope(request, inbound, effectiveRoute.sceneId());
+            scope = resolveScope(request, inbound, effectiveRoute.agentId());
         } catch (SecurityException e) {
             return RuntimeExecutionResult.rejected(ChatResult.failure(e.getMessage(), ChatResult.ErrorCode.SESSION_ERROR));
         }
@@ -113,9 +113,9 @@ public class RuntimeExecutionService {
         }
         scope.requireCompleteForExecution();
 
-        log.debug("Resolved runtime scene: channel={}, platformAccountId={}, sceneId={}, source={}, bindingId={}",
+        log.debug("Resolved runtime scene: channel={}, platformAccountId={}, agentId={}, source={}, bindingId={}",
                 inbound.getChannelIdentity().getChannelType(), inbound.getChannelIdentity().getPlatformAccountId(),
-                effectiveRoute.sceneId(), effectiveRoute.source(), effectiveRoute.bindingId());
+                effectiveRoute.agentId(), effectiveRoute.source(), effectiveRoute.bindingId());
 
         SessionRoute route = buildRoute(scope, inbound);
         RunHandle runHandle = request.getRunHandle() != null
@@ -179,18 +179,18 @@ public class RuntimeExecutionService {
         return inbound;
     }
 
-    private RuntimeScope resolveScope(RuntimeExecutionRequest request, InboundMessage inbound, String sceneId) {
+    private RuntimeScope resolveScope(RuntimeExecutionRequest request, InboundMessage inbound, String agentId) {
         String requestedSessionId = request.requestedSessionIdOrInbound();
         if (request.isStateless() && (requestedSessionId == null || requestedSessionId.isBlank())) {
-            return sessionResolver.createEphemeralScope(inbound.getPrincipal(), inbound.getChannelIdentity(), sceneId);
+            return sessionResolver.createEphemeralScope(inbound.getPrincipal(), inbound.getChannelIdentity(), agentId);
         }
         if (request.isForceNewSession() && (requestedSessionId == null || requestedSessionId.isBlank())) {
-            return sessionResolver.createSession(inbound.getPrincipal(), inbound.getChannelIdentity(), sceneId);
+            return sessionResolver.createSession(inbound.getPrincipal(), inbound.getChannelIdentity(), agentId);
         }
         return sessionResolver.resolveOrCreateSession(
                 inbound.getPrincipal(),
                 inbound.getChannelIdentity(),
-                sceneId,
+                agentId,
                 requestedSessionId
         );
     }

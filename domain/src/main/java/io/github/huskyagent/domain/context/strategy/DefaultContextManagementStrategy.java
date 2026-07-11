@@ -50,8 +50,8 @@ public class DefaultContextManagementStrategy implements ContextManagementStrate
             return ContextManagementResult.unchanged(request.persistedMessages(), id(), "below-threshold");
         }
 
-        log.info("Preparing context: session={}, scene={}, strategy={}, messages={}, tokens={}",
-                request.sessionId(), request.sceneId(), id(), request.persistedMessages().size(), request.currentTokens());
+        log.info("Preparing context: session={}, agent={}, strategy={}, messages={}, tokens={}",
+                request.sessionId(), request.agentId(), id(), request.persistedMessages().size(), request.currentTokens());
 
         List<Message> pruned = pruneStrategy.prune(request.persistedMessages(),
                 PruneConfig.of(policy.getProtectFirstN(), policy.getTailTokenBudget()));

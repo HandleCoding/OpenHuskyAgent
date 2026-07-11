@@ -6,7 +6,7 @@ import io.github.huskyagent.application.runtime.RuntimePolicyResolver;
 import io.github.huskyagent.domain.context.ContextManagementStrategyResolver;
 import io.github.huskyagent.domain.context.strategy.NoopContextManagementStrategy;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.channel.ChannelIdentity;
 import io.github.huskyagent.infra.channel.ChannelType;
 import io.github.huskyagent.infra.channel.ConversationType;
@@ -126,9 +126,9 @@ class GraphCacheKeyTest {
     @Test
     void runtimeScopeWithWorkingDirectoryPreservesRuntimePolicyAndIdentity() {
         RuntimePolicy policy = RuntimePolicy.builder()
-                .sceneId("assistant")
+                .agentId("assistant")
                 .build();
-        SceneConfig scene = scene("assistant");
+        AgentDefinition scene = scene("assistant");
         Principal principal = Principal.builder()
                 .id("local:default")
                 .channelType(ChannelType.TUI)
@@ -163,11 +163,11 @@ class GraphCacheKeyTest {
         RuntimePolicyResolver resolver = buildResolver(memoryRead, coreTool);
 
         // policy 1: MEMORY toolset allowed → memory_read visible
-        SceneConfig s1 = scene("test");
+        AgentDefinition s1 = scene("test");
         s1.setAllowedToolsets(Set.of(Toolset.CORE, Toolset.MEMORY));
 
         // policy 2: only CORE → memory_read invisible
-        SceneConfig s2 = scene("test");
+        AgentDefinition s2 = scene("test");
         s2.setAllowedToolsets(Set.of(Toolset.CORE));
 
         RuntimePolicy p1 = resolver.resolve(s1, List.of(memoryRead, coreTool));
@@ -187,15 +187,15 @@ class GraphCacheKeyTest {
         RuntimePolicyResolver resolver = buildResolver(
                 tool("memory_read", Toolset.MEMORY));
 
-        SceneConfig memOn = scene("test");
+        AgentDefinition memOn = scene("test");
         memOn.setAllowedToolsets(Set.of(Toolset.MEMORY));
-        SceneConfig.MemoryPolicySpec specOn = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition.MemoryPolicySpec specOn = new AgentDefinition.MemoryPolicySpec();
         specOn.setEnabled(true);
         memOn.setMemoryPolicyConfig(specOn);
 
-        SceneConfig memOff = scene("test");
+        AgentDefinition memOff = scene("test");
         memOff.setAllowedToolsets(Set.of(Toolset.MEMORY));
-        SceneConfig.MemoryPolicySpec specOff = new SceneConfig.MemoryPolicySpec();
+        AgentDefinition.MemoryPolicySpec specOff = new AgentDefinition.MemoryPolicySpec();
         specOff.setEnabled(false);
         memOff.setMemoryPolicyConfig(specOff);
 
@@ -215,9 +215,9 @@ class GraphCacheKeyTest {
         return ToolDefinition.of(name, name, toolset, MAPPER.createObjectNode(), args -> null);
     }
 
-    private SceneConfig scene(String sceneId) {
-        SceneConfig s = new SceneConfig();
-        s.setSceneId(sceneId);
+    private AgentDefinition scene(String agentId) {
+        AgentDefinition s = new AgentDefinition();
+        s.setAgentId(agentId);
         return s;
     }
 

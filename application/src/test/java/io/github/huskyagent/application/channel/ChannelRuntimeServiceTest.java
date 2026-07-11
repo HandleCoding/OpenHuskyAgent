@@ -1,7 +1,7 @@
 package io.github.huskyagent.application.channel;
 
 import io.github.huskyagent.application.ChatResult;
-import io.github.huskyagent.application.channel.binding.ChannelSceneRouter;
+import io.github.huskyagent.application.channel.binding.ChannelAgentRouter;
 import io.github.huskyagent.application.channel.binding.EffectiveChannelRoute;
 import io.github.huskyagent.application.runtime.RuntimeExecutionRequest;
 import io.github.huskyagent.application.runtime.RuntimeExecutionResult;
@@ -10,7 +10,7 @@ import io.github.huskyagent.application.session.RuntimeScope;
 import io.github.huskyagent.application.session.SessionResolver;
 import io.github.huskyagent.domain.capability.CapabilityView;
 import io.github.huskyagent.domain.runtime.RuntimePolicy;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.channel.ApprovalDecision;
 import io.github.huskyagent.infra.channel.ApprovalPrompt;
 import io.github.huskyagent.infra.channel.ChannelAuthContext;
@@ -53,7 +53,7 @@ class ChannelRuntimeServiceTest {
                 runtimeExecutionService,
                 new ChannelInboundQueue(),
                 new FakeQueueKeyFactory("key"),
-                new FakeSceneRouter());
+                new FakeAgentRouter());
         RecordingAdapter adapter = new RecordingAdapter();
 
         ChatResult result = service.handleInbound(inbound(), adapter);
@@ -71,7 +71,7 @@ class ChannelRuntimeServiceTest {
                 runtimeExecutionService,
                 new ChannelInboundQueue(),
                 new FakeQueueKeyFactory("key"),
-                new FakeSceneRouter());
+                new FakeAgentRouter());
         RecordingAdapter adapter = new RecordingAdapter();
 
         ChatResult result = service.handleInbound(inbound(), adapter);
@@ -87,7 +87,7 @@ class ChannelRuntimeServiceTest {
                 runtimeExecutionService,
                 new ChannelInboundQueue(),
                 new FakeQueueKeyFactory("same"),
-                new FakeSceneRouter());
+                new FakeAgentRouter());
         RecordingAdapter adapter = new RecordingAdapter();
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
@@ -113,7 +113,7 @@ class ChannelRuntimeServiceTest {
                 runtimeExecutionService,
                 new ChannelInboundQueue(),
                 keyFactory,
-                new FakeSceneRouter());
+                new FakeAgentRouter());
         RecordingAdapter adapter = new RecordingAdapter();
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
@@ -235,7 +235,7 @@ class ChannelRuntimeServiceTest {
                 runtimeExecutionService,
                 new ChannelInboundQueue(),
                 new FakeQueueKeyFactory(queueKey),
-                new FakeSceneRouter(),
+                new FakeAgentRouter(),
                 inbound -> Optional.of(new ChannelCommand(inbound.getText().substring(1), "", inbound.getText())),
                 new BypassCommandPolicy(),
                 sessionResolver);
@@ -256,14 +256,14 @@ class ChannelRuntimeServiceTest {
                 .build();
     }
 
-    private static class FakeSceneRouter extends ChannelSceneRouter {
-        FakeSceneRouter() {
+    private static class FakeAgentRouter extends ChannelAgentRouter {
+        FakeAgentRouter() {
             super(null, null);
         }
 
         @Override
         public EffectiveChannelRoute resolve(InboundMessage inbound) {
-            return new EffectiveChannelRoute("assistant", null, EffectiveChannelRoute.Source.SCENE_DEFAULT);
+            return new EffectiveChannelRoute("assistant", null, EffectiveChannelRoute.Source.AGENT_DEFAULT);
         }
     }
 
@@ -373,19 +373,19 @@ class ChannelRuntimeServiceTest {
         }
 
         @Override
-        public Optional<String> findActiveSessionId(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
+        public Optional<String> findActiveSessionId(Principal principal, ChannelIdentity channelIdentity, String agentId) {
             return Optional.ofNullable(activeSessionId);
         }
 
         @Override
-        public RuntimeScope createSession(Principal principal, ChannelIdentity channelIdentity, String sceneId) {
+        public RuntimeScope createSession(Principal principal, ChannelIdentity channelIdentity, String agentId) {
             createCalls++;
             return RuntimeScope.builder()
                     .sessionId(newSessionId)
                     .principal(principal)
                     .channelIdentity(channelIdentity)
                     .runtimePolicy(RuntimePolicy.builder()
-                            .sceneId("assistant")
+                            .agentId("assistant")
                             .capabilityView(CapabilityView.builder().build())
                             .knowledgeSources(Set.of())
                             .build())

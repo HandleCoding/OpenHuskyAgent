@@ -3,7 +3,7 @@ package io.github.huskyagent.domain.runtime;
 import io.github.huskyagent.domain.capability.CapabilityView;
 import io.github.huskyagent.domain.context.policy.ContextPolicy;
 import io.github.huskyagent.domain.memory.policy.MemoryPolicyConfig;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import lombok.Builder;
 import lombok.Value;
 
@@ -15,27 +15,27 @@ import java.util.stream.Collectors;
 @Value
 @Builder
 public class RuntimePolicy {
-    String sceneId;
+    String agentId;
     CapabilityView capabilityView;
     ContextPolicy contextPolicy;
     MemoryPolicyConfig memoryPolicy;
-    SceneConfig.ApprovalPolicy approvalPolicy;
-    SceneConfig.BackendPolicy backendPolicy;
-    SceneConfig.WorkingDirectoryPolicy workingDirectoryPolicy;
-    SceneConfig.AuditSpec auditSpec;
-    SceneConfig.RateLimitSpec rateLimitSpec;
+    AgentDefinition.ApprovalPolicy approvalPolicy;
+    AgentDefinition.BackendPolicy backendPolicy;
+    AgentDefinition.WorkingDirectoryPolicy workingDirectoryPolicy;
+    AgentDefinition.AuditSpec auditSpec;
+    AgentDefinition.RateLimitSpec rateLimitSpec;
     Set<String> knowledgeSources;
     String systemPrompt;
     List<String> promptFiles;
-    SceneConfig.PromptFilePolicy promptFilePolicy;
-    SceneConfig.BackendSpec backendSpec;
-    SceneConfig.StoragePolicy storagePolicy;
-    SceneConfig.StorageSpec storageSpec;
+    AgentDefinition.PromptFilePolicy promptFilePolicy;
+    AgentDefinition.BackendSpec backendSpec;
+    AgentDefinition.StoragePolicy storagePolicy;
+    AgentDefinition.StorageSpec storageSpec;
     String fixedWorkingDirectory;
 
     public String fingerprint() {
         String base = String.join("|",
-                sceneId != null ? sceneId : "",
+                agentId != null ? agentId : "",
                 capabilityView != null ? capabilityView.fingerprint() : "",
                 contextPolicy != null ? contextPolicy.fingerprint() : "",
                 memoryPolicy != null ? memoryPolicy.fingerprint() : "",
@@ -53,7 +53,7 @@ public class RuntimePolicy {
     }
 
     public boolean isRemoteStorage() {
-        return storagePolicy == SceneConfig.StoragePolicy.REMOTE;
+        return storagePolicy == AgentDefinition.StoragePolicy.REMOTE;
     }
 
     public String effectiveWorkspaceType() {
@@ -77,7 +77,7 @@ public class RuntimePolicy {
         return names.stream().sorted().collect(Collectors.joining(","));
     }
 
-    private String backendSpecFingerprint(SceneConfig.BackendSpec spec) {
+    private String backendSpecFingerprint(AgentDefinition.BackendSpec spec) {
         if (spec == null) {
             return "";
         }
@@ -93,7 +93,7 @@ public class RuntimePolicy {
                 value(spec.getSshIdentityFile()));
     }
 
-    private String storageSpecFingerprint(SceneConfig.StorageSpec spec) {
+    private String storageSpecFingerprint(AgentDefinition.StorageSpec spec) {
         if (spec == null) {
             return "";
         }

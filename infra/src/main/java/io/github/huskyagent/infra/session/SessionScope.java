@@ -11,7 +11,7 @@ public class SessionScope {
     String sessionId;
     String principalId;
     String channelType;
-    String sceneId;
+    String agentId;
     String workingDirectory;
     String memoryPolicy;
     String memoryStrategyId;

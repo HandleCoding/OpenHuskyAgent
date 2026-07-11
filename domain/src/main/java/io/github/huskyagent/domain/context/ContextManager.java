@@ -34,17 +34,17 @@ public class ContextManager {
         return loadMessagesForContext(sessionId, null, null);
     }
 
-    public List<Message> loadMessagesForContext(String sessionId, RuntimePolicy runtimePolicy, String sceneId) {
+    public List<Message> loadMessagesForContext(String sessionId, RuntimePolicy runtimePolicy, String agentId) {
         List<Message> history = sessionManager.loadMessages(sessionId);
-        return prepareContext(sessionId, runtimePolicy, sceneId, history);
+        return prepareContext(sessionId, runtimePolicy, agentId, history);
     }
 
-    public List<Message> prepareActiveContext(String sessionId, RuntimePolicy runtimePolicy, String sceneId,
+    public List<Message> prepareActiveContext(String sessionId, RuntimePolicy runtimePolicy, String agentId,
                                               List<Message> activeMessages) {
-        return prepareContext(sessionId, runtimePolicy, sceneId, activeMessages);
+        return prepareContext(sessionId, runtimePolicy, agentId, activeMessages);
     }
 
-    private List<Message> prepareContext(String sessionId, RuntimePolicy runtimePolicy, String sceneId,
+    private List<Message> prepareContext(String sessionId, RuntimePolicy runtimePolicy, String agentId,
                                          List<Message> messages) {
         if (messages == null || messages.isEmpty()) {
             log.debug("No context messages for session: {}", sessionId);
@@ -59,16 +59,16 @@ public class ContextManager {
         if (runtimePolicy != null) {
             ContextPolicy policy = runtimePolicy.getContextPolicy();
             if (!policy.isEnabled()) {
-                log.info("[context] budget check: session={}, scene={}, enabled=false, messages={}, estimatedTokens={}, triggerTokens={}",
-                        sessionId, sceneId, messages.size(), estimatedTokens, triggerTokens);
+                log.info("[context] budget check: session={}, agent={}, enabled=false, messages={}, estimatedTokens={}, triggerTokens={}",
+                        sessionId, agentId, messages.size(), estimatedTokens, triggerTokens);
                 return messages;
             }
-            log.info("[context] budget check: session={}, scene={}, strategy={}, messages={}, estimatedTokens={}, triggerTokens={}, contextLength={}, thresholdTokens={}",
-                    sessionId, sceneId, policy.getStrategyId(), messages.size(), estimatedTokens, triggerTokens,
+            log.info("[context] budget check: session={}, agent={}, strategy={}, messages={}, estimatedTokens={}, triggerTokens={}, contextLength={}, thresholdTokens={}",
+                    sessionId, agentId, policy.getStrategyId(), messages.size(), estimatedTokens, triggerTokens,
                     policy.getContextLength(), thresholdTokens(policy));
             ContextManagementRequest request = new ContextManagementRequest(
                     sessionId,
-                    sceneId,
+                    agentId,
                     policy,
                     messages,
                     triggerTokens,
@@ -77,8 +77,8 @@ public class ContextManager {
             ContextManagementResult result = strategyResolver
                     .resolve(policy.getStrategyId())
                     .prepare(request);
-            log.info("[context] strategy result: session={}, scene={}, strategy={}, reason={}, changed={}, messages={} -> {}",
-                    sessionId, sceneId, policy.getStrategyId(), result.reason(), result.changed(),
+            log.info("[context] strategy result: session={}, agent={}, strategy={}, reason={}, changed={}, messages={} -> {}",
+                    sessionId, agentId, policy.getStrategyId(), result.reason(), result.changed(),
                     messages.size(), result.messages().size());
             if (result.changed()) {
                 fireCompressionHook(sessionId, messages, result.messages(), estimatedTokens);

@@ -53,7 +53,7 @@ class FeishuInstanceAdapterTest {
         assertEquals("cli_test", inbound.getChannelIdentity().getPlatformAccountId());
         assertEquals("oc_chat", inbound.getChannelIdentity().getChatId());
         assertEquals("om_1", inbound.getReplyTarget().getMessageId());
-        assertNull(inbound.getSceneId());
+        assertNull(inbound.getAgentId());
     }
 
     @Test

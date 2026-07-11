@@ -5,7 +5,7 @@ import lombok.Value;
 
 /**
  * Immutable config snapshot for creating one ExecutionBackend instance.
- * Derived from SceneConfig + ExecutionBackendProperties.
+ * Derived from AgentDefinition + ExecutionBackendProperties.
  */
 @Value
 @Builder

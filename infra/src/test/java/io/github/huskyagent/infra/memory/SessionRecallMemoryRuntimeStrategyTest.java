@@ -146,7 +146,7 @@ class SessionRecallMemoryRuntimeStrategyTest {
                 .sessionId("session")
                 .principalId("principal")
                 .channelType("http")
-                .sceneId("scene")
+                .agentId("scene")
                 .memoryPolicy(memoryPolicy)
                 .memoryStrategyId("session-recall")
                 .memoryWriteAllowed(writeAllowed)

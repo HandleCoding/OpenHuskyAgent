@@ -1,6 +1,6 @@
 package io.github.huskyagent.service.openai;
 
-import io.github.huskyagent.application.scene.ConfigSceneResolver;
+import io.github.huskyagent.application.agent.ConfigAgentResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -13,10 +13,10 @@ import java.util.Set;
 @RequiredArgsConstructor
 class OpenAiModelCatalog {
 
-    private final ConfigSceneResolver sceneResolver;
+    private final ConfigAgentResolver agentResolver;
     private final OpenAiCompatibleProperties properties;
 
-    String resolveSceneId(String model) {
+    String resolveAgentId(String model) {
         if (model == null || model.isBlank()) {
             throw new OpenAiProtocolException("model is required", "model", "missing_model");
         }
@@ -37,8 +37,8 @@ class OpenAiModelCatalog {
 
     private Set<String> availableAgentIds() {
         Set<String> ids = new LinkedHashSet<>();
-        if (sceneResolver.getAgents() != null) {
-            ids.addAll(sceneResolver.getAgents().keySet());
+        if (agentResolver.getAgents() != null) {
+            ids.addAll(agentResolver.getAgents().keySet());
         }
         return ids;
     }

@@ -8,7 +8,7 @@ public record ChannelInstanceBinding(
         String bindingId,
         ChannelType channelType,
         String platformAccountId,
-        String sceneId,
+        String agentId,
         boolean enabled,
         String displayName,
         Map<String, String> metadata

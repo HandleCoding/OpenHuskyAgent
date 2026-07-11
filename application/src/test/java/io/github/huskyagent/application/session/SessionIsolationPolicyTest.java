@@ -24,7 +24,7 @@ class SessionIsolationPolicyTest {
     void defaultKeySeparatesSceneAndThread() {
         DefaultSessionKeyStrategy strategy = new DefaultSessionKeyStrategy();
         IsolationScope base = baseScopeBuilder().build();
-        IsolationScope otherScene = baseScopeBuilder().sceneId("chatbot").build();
+        IsolationScope otherScene = baseScopeBuilder().agentId("chatbot").build();
         IsolationScope otherThread = baseScopeBuilder().threadId("thread-2").build();
 
         assertNotEquals(strategy.buildKey(base), strategy.buildKey(otherScene));
@@ -53,7 +53,7 @@ class SessionIsolationPolicyTest {
                 .chatId("chat-1")
                 .threadId("thread-1")
                 .senderId("sender")
-                .sceneId("assistant");
+                .agentId("assistant");
     }
 
     private SessionEntity entity(String owner, String channel, String scene, String chat, String thread) {
@@ -62,7 +62,7 @@ class SessionIsolationPolicyTest {
         entity.setUserId(owner);
         entity.setOwnerPrincipalId(owner);
         entity.setChannelType(channel);
-        entity.setSceneId(scene);
+        entity.setAgentId(scene);
         entity.setSourceChatId(chat);
         entity.setSourceThreadId(thread);
         return entity;

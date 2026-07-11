@@ -1,4 +1,4 @@
-package io.github.huskyagent.domain.scene;
+package io.github.huskyagent.domain.agent;
 
 import io.github.huskyagent.infra.tool.Toolset;
 import lombok.Data;
@@ -7,13 +7,13 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Scene is the runtime shape of an assistant product: prompt, capabilities, memory,
- * context, approval, backend, and working-directory policy.
+ * Agent definition: prompt, capabilities, memory, context, approval, backend,
+ * and working-directory policy for one configured agent.
  */
 @Data
-public class SceneConfig {
+public class AgentDefinition {
 
-    private String sceneId;
+    private String agentId;
     private String systemPrompt;
 
     private Set<Toolset> allowedToolsets = Set.of(Toolset.values());
@@ -52,7 +52,7 @@ public class SceneConfig {
         return switch (spec.getScope()) {
             case USER_PROFILE -> LegacyMemoryPolicy.USER_PROFILE;
             case PRINCIPAL -> LegacyMemoryPolicy.PRINCIPAL;
-            case SCENE -> LegacyMemoryPolicy.SCENE;
+            case AGENT -> LegacyMemoryPolicy.AGENT;
             default -> LegacyMemoryPolicy.SESSION;
         };
     }
@@ -81,10 +81,10 @@ public class SceneConfig {
                 spec.setAccess(MemoryAccess.READWRITE);
                 spec.setScope(MemoryScopePolicy.PRINCIPAL);
             }
-            case SCENE -> {
+            case AGENT -> {
                 spec.setEnabled(true);
                 spec.setAccess(MemoryAccess.READWRITE);
-                spec.setScope(MemoryScopePolicy.SCENE);
+                spec.setScope(MemoryScopePolicy.AGENT);
             }
             default -> {
                 spec.setEnabled(true);
@@ -136,7 +136,7 @@ public class SceneConfig {
     public enum MemoryScopePolicy {
         SESSION,
         PRINCIPAL,
-        SCENE,
+        AGENT,
         USER_PROFILE
     }
 
@@ -146,7 +146,7 @@ public class SceneConfig {
         SESSION,
         USER_PROFILE,
         PRINCIPAL,
-        SCENE
+        AGENT
     }
 
     public enum MemoryPromptMode {

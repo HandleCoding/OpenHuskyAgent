@@ -118,7 +118,7 @@ class MemoryManagerScopeTest {
                 .sessionId("session-1")
                 .principalId("principal-1")
                 .channelType("http")
-                .sceneId("scene-1")
+                .agentId("scene-1")
                 .memoryPolicy("SESSION")
                 .memoryStrategyId(strategyId)
                 .memoryProviderIds(providerIds)

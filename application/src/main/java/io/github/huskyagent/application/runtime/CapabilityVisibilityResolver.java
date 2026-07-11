@@ -1,7 +1,7 @@
 package io.github.huskyagent.application.runtime;
 
 import io.github.huskyagent.domain.capability.CapabilityView;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.infra.memory.BuiltinMemoryProvider;
 import io.github.huskyagent.infra.memory.SessionMemoryProvider;
 import io.github.huskyagent.infra.execute.ExecutionBackendProperties;
@@ -64,10 +64,10 @@ public class CapabilityVisibilityResolver {
         this.backendCapabilities = new RuntimeBackendCapabilityResolver(new ExecutionBackendProperties());
     }
 
-    public CapabilityView resolve(SceneConfig sceneConfig, List<ToolDefinition> candidateTools) {
-        List<ToolDefinition> tools = filterTools(sceneConfig, candidateTools != null ? candidateTools : List.of());
+    public CapabilityView resolve(AgentDefinition agentDefinition, List<ToolDefinition> candidateTools) {
+        List<ToolDefinition> tools = filterTools(agentDefinition, candidateTools != null ? candidateTools : List.of());
 
-        boolean stripApproval = sceneConfig.getApprovalPolicy() == SceneConfig.ApprovalPolicy.NONE;
+        boolean stripApproval = agentDefinition.getApprovalPolicy() == AgentDefinition.ApprovalPolicy.NONE;
         if (stripApproval) {
             tools = tools.stream()
                     .map(this::withoutApproval)
@@ -76,26 +76,26 @@ public class CapabilityVisibilityResolver {
 
         Set<Toolset> visibleToolsets = tools.stream().map(ToolDefinition::toolset).collect(Collectors.toUnmodifiableSet());
         List<Skill> skills = skillManager.getActiveSkills(visibleToolsets);
-        if (sceneConfig.getSkillIds() != null && !sceneConfig.getSkillIds().isEmpty()) {
+        if (agentDefinition.getSkillIds() != null && !agentDefinition.getSkillIds().isEmpty()) {
             skills = skills.stream()
-                    .filter(skill -> sceneConfig.getSkillIds().contains(skill.name()))
+                    .filter(skill -> agentDefinition.getSkillIds().contains(skill.name()))
                     .toList();
         }
 
         return buildView(
-                sceneConfig,
+                agentDefinition,
                 tools,
                 visibleToolsets,
                 skills,
-                sceneConfig.getPromptSections() != null ? Set.copyOf(sceneConfig.getPromptSections()) : Set.of(),
+                agentDefinition.getPromptSections() != null ? Set.copyOf(agentDefinition.getPromptSections()) : Set.of(),
                 stripApproval);
     }
 
-    public CapabilityView resolveSubAgent(SceneConfig sceneConfig, CapabilityView parentView) {
+    public CapabilityView resolveSubAgent(AgentDefinition agentDefinition, CapabilityView parentView) {
         List<ToolDefinition> tools = parentView != null && parentView.getVisibleTools() != null
                 ? parentView.getVisibleTools()
                 : List.of();
-        tools = filterTools(sceneConfig, tools).stream()
+        tools = filterTools(agentDefinition, tools).stream()
                 .filter(tool -> tool.toolset() != Toolset.DELEGATE)
                 .map(this::withoutApproval)
                 .toList();
@@ -108,9 +108,9 @@ public class CapabilityVisibilityResolver {
         skills = skills.stream()
                 .filter(skill -> parentSkillNames.contains(skill.name()))
                 .toList();
-        if (sceneConfig.getSkillIds() != null && !sceneConfig.getSkillIds().isEmpty()) {
+        if (agentDefinition.getSkillIds() != null && !agentDefinition.getSkillIds().isEmpty()) {
             skills = skills.stream()
-                    .filter(skill -> sceneConfig.getSkillIds().contains(skill.name()))
+                    .filter(skill -> agentDefinition.getSkillIds().contains(skill.name()))
                     .toList();
         }
 
@@ -118,38 +118,38 @@ public class CapabilityVisibilityResolver {
                 ? Set.copyOf(parentView.getVisiblePromptSections())
                 : Set.of();
 
-        return buildView(sceneConfig, tools, visibleToolsets, skills, promptSections, true);
+        return buildView(agentDefinition, tools, visibleToolsets, skills, promptSections, true);
     }
 
-    private List<ToolDefinition> filterTools(SceneConfig sceneConfig, List<ToolDefinition> initialTools) {
-        Set<Toolset> allowedToolsets = sceneConfig.getAllowedToolsets();
+    private List<ToolDefinition> filterTools(AgentDefinition agentDefinition, List<ToolDefinition> initialTools) {
+        Set<Toolset> allowedToolsets = agentDefinition.getAllowedToolsets();
         List<ToolDefinition> tools = initialTools;
         if (allowedToolsets != null && !allowedToolsets.isEmpty()) {
             tools = tools.stream()
                     .filter(tool -> allowedToolsets.contains(tool.toolset()))
                     .toList();
         }
-        if (sceneConfig.getAllowedTools() != null && !sceneConfig.getAllowedTools().isEmpty()) {
+        if (agentDefinition.getAllowedTools() != null && !agentDefinition.getAllowedTools().isEmpty()) {
             tools = tools.stream()
-                    .filter(tool -> sceneConfig.getAllowedTools().contains(tool.name()))
+                    .filter(tool -> agentDefinition.getAllowedTools().contains(tool.name()))
                     .toList();
         }
         tools = tools.stream()
-                .filter(tool -> isAllowedMcpTool(tool, sceneConfig.getAllowedMcpServers(), sceneConfig.getDeniedMcpServers()))
-                .filter(tool -> isAllowedInBackend(tool, sceneConfig))
+                .filter(tool -> isAllowedMcpTool(tool, agentDefinition.getAllowedMcpServers(), agentDefinition.getDeniedMcpServers()))
+                .filter(tool -> isAllowedInBackend(tool, agentDefinition))
                 .toList();
-        if (sceneConfig.getDeniedTools() != null && !sceneConfig.getDeniedTools().isEmpty()) {
+        if (agentDefinition.getDeniedTools() != null && !agentDefinition.getDeniedTools().isEmpty()) {
             tools = tools.stream()
-                    .filter(tool -> !sceneConfig.getDeniedTools().contains(tool.name()))
+                    .filter(tool -> !agentDefinition.getDeniedTools().contains(tool.name()))
                     .toList();
         }
-        return filterByMemoryPolicy(tools, sceneConfig.getMemoryPolicyConfig());
+        return filterByMemoryPolicy(tools, agentDefinition.getMemoryPolicyConfig());
     }
 
-    private CapabilityView buildView(SceneConfig sceneConfig, List<ToolDefinition> tools, Set<Toolset> visibleToolsets,
+    private CapabilityView buildView(AgentDefinition agentDefinition, List<ToolDefinition> tools, Set<Toolset> visibleToolsets,
                                      List<Skill> skills, Set<String> promptSections, boolean stripApproval) {
         return CapabilityView.builder()
-                .sceneId(sceneConfig.getSceneId())
+                .agentId(agentDefinition.getAgentId())
                 .visibleTools(List.copyOf(tools))
                 .visibleToolNames(tools.stream().map(ToolDefinition::name).collect(Collectors.toUnmodifiableSet()))
                 .visibleToolsets(visibleToolsets)
@@ -160,11 +160,11 @@ public class CapabilityVisibilityResolver {
                 .build();
     }
 
-    private List<ToolDefinition> filterByMemoryPolicy(List<ToolDefinition> tools, SceneConfig.MemoryPolicySpec memorySpec) {
+    private List<ToolDefinition> filterByMemoryPolicy(List<ToolDefinition> tools, AgentDefinition.MemoryPolicySpec memorySpec) {
         if (memorySpec == null) {
             return tools;
         }
-        if (!memorySpec.isEnabled() || memorySpec.getAccess() == SceneConfig.MemoryAccess.DISABLED) {
+        if (!memorySpec.isEnabled() || memorySpec.getAccess() == AgentDefinition.MemoryAccess.DISABLED) {
             return tools.stream().filter(t -> t.toolset() != Toolset.MEMORY).toList();
         }
         Set<String> providers = memorySpec.getProviders();
@@ -202,11 +202,11 @@ public class CapabilityVisibilityResolver {
         return allowedServers == null || allowedServers.isEmpty() || allowedServers.contains(server);
     }
 
-    private boolean isAllowedInBackend(ToolDefinition tool, SceneConfig sceneConfig) {
+    private boolean isAllowedInBackend(ToolDefinition tool, AgentDefinition agentDefinition) {
         if (FILE_TOOL_NAMES.contains(tool.name())) {
-            return backendCapabilities.filesystemAvailable(sceneConfig);
+            return backendCapabilities.filesystemAvailable(agentDefinition);
         }
-        if (tool.toolset() == Toolset.MCP && !isLocalBackend(sceneConfig)) {
+        if (tool.toolset() == Toolset.MCP && !isLocalBackend(agentDefinition)) {
             McpServerConnector connector = mcpServerConnectorProvider != null ? mcpServerConnectorProvider.getIfAvailable() : null;
             return connector != null
                     && connector.serverNameForTool(tool.name()).isPresent()
@@ -223,8 +223,8 @@ public class CapabilityVisibilityResolver {
         return McpToolNames.serverName(toolName);
     }
 
-    private boolean isLocalBackend(SceneConfig sceneConfig) {
-        SceneConfig.BackendPolicy backendPolicy = sceneConfig.getBackendPolicy();
-        return backendPolicy == null || backendPolicy == SceneConfig.BackendPolicy.LOCAL;
+    private boolean isLocalBackend(AgentDefinition agentDefinition) {
+        AgentDefinition.BackendPolicy backendPolicy = agentDefinition.getBackendPolicy();
+        return backendPolicy == null || backendPolicy == AgentDefinition.BackendPolicy.LOCAL;
     }
 }

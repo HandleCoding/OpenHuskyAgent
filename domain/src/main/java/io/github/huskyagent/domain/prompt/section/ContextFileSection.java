@@ -3,7 +3,7 @@ package io.github.huskyagent.domain.prompt.section;
 import io.github.huskyagent.domain.prompt.AbstractPromptSection;
 import io.github.huskyagent.domain.prompt.PromptContext;
 import io.github.huskyagent.domain.prompt.ContextFileLoader;
-import io.github.huskyagent.domain.scene.SceneConfig;
+import io.github.huskyagent.domain.agent.AgentDefinition;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -39,7 +39,7 @@ public class ContextFileSection extends AbstractPromptSection {
         }
 
         List<ContextFileLoader.LoadedFile> loadedFiles = new ArrayList<>();
-        boolean overrideDefaults = context.getPromptFilePolicy() == SceneConfig.PromptFilePolicy.OVERRIDE;
+        boolean overrideDefaults = context.getPromptFilePolicy() == AgentDefinition.PromptFilePolicy.OVERRIDE;
         if (!overrideDefaults) {
             loadedFiles.addAll(fileLoader.loadContextFiles(workingDir));
         }
