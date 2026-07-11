@@ -276,6 +276,8 @@ chatbot:
 #   empty []  = none (fail-closed)
 #   ["*"]     = all registered / all toolsets
 # denied-* empty = no extra denials
+# Concrete ids (skills, knowledge sources, MCP servers, memory providers, toolsets,
+# LLM provider, rate-limit, fixed workdir) are fail-closed validated at startup.
 agents:
   assistant:
     system-prompt: ""

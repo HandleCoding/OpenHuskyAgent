@@ -17,6 +17,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConfigAgentResolverTest {
 
     @Test
+    void unknownToolsetFailsClosedOnResolve() {
+        ConfigAgentResolver resolver = new ConfigAgentResolver();
+        ConfigAgentResolver.AgentProperties props = new ConfigAgentResolver.AgentProperties();
+        props.setToolsets(List.of("CORE", "NOT_A_REAL_TOOLSET"));
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();
+        agents.put("assistant", props);
+        resolver.setAgents(agents);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> resolver.resolve("assistant"));
+        assertTrue(error.getMessage().contains("Unknown toolset"));
+        assertTrue(error.getMessage().contains("NOT_A_REAL_TOOLSET"));
+    }
+
+    @Test
     void unknownAgentFailsClosed() {
         ConfigAgentResolver resolver = new ConfigAgentResolver();
         LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();

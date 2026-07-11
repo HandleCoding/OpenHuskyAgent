@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Locale;
 
 @Slf4j
 @Data
@@ -136,12 +137,22 @@ public class ConfigAgentResolver implements AgentResolver, EnvironmentAware, Ini
             }
         }
         Set<Toolset> result = new HashSet<>();
+        List<String> unknown = new ArrayList<>();
         for (String name : names) {
-            try {
-                result.add(Toolset.valueOf(name.toUpperCase().replace("-", "_")));
-            } catch (IllegalArgumentException e) {
-                log.warn("Unknown Toolset name: {}", name);
+            if (name == null || name.isBlank()) {
+                continue;
             }
+            try {
+                result.add(Toolset.valueOf(name.trim().toUpperCase(Locale.ROOT).replace('-', '_')));
+            } catch (IllegalArgumentException e) {
+                unknown.add(name.trim());
+            }
+        }
+        if (!unknown.isEmpty()) {
+            throw new IllegalArgumentException("Unknown toolset(s): " + String.join(", ", unknown)
+                    + ". Valid values: " + Arrays.stream(Toolset.values())
+                    .map(Enum::name)
+                    .collect(java.util.stream.Collectors.joining(", ")));
         }
         return result;
     }
