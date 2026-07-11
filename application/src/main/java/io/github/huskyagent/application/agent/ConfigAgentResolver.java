@@ -100,6 +100,7 @@ public class ConfigAgentResolver implements AgentResolver, EnvironmentAware, Ini
             config.setPromptFilePolicy(toPromptFilePolicy(props.getPromptFilePolicy()));
             config.setAuditSpec(toAuditSpec(props));
             config.setRateLimitSpec(toRateLimitSpec(props));
+            config.setDelegationSpec(toDelegationSpec(props.getDelegation()));
             config.setSkillIds(toSet(props.getSkills()));
             config.setBackendSpec(toBackendSpec(props));
             config.setStoragePolicy(toStoragePolicy(props.getStorage()));
@@ -296,6 +297,26 @@ public class ConfigAgentResolver implements AgentResolver, EnvironmentAware, Ini
         return spec;
     }
 
+    private AgentDefinition.DelegationSpec toDelegationSpec(DelegationProperties props) {
+        AgentDefinition.DelegationSpec spec = new AgentDefinition.DelegationSpec();
+        if (props == null) {
+            return spec;
+        }
+        spec.setEnabled(props.getEnabled());
+        spec.setMaxIterations(props.getMaxIterations());
+        spec.setMaxConcurrentChildren(props.getMaxConcurrentChildren());
+        spec.setMaxSpawnDepth(props.getMaxSpawnDepth());
+        spec.setChildTimeoutSeconds(props.getChildTimeoutSeconds());
+        if (props.getBlockedToolsets() != null) {
+            spec.setBlockedToolsets(List.copyOf(props.getBlockedToolsets()));
+        }
+        if (props.getDefaultToolsets() != null) {
+            spec.setDefaultToolsets(List.copyOf(props.getDefaultToolsets()));
+        }
+        spec.setModel(props.getModel());
+        return spec;
+    }
+
     private void validateRateLimitSpec(AgentDefinition.RateLimitSpec spec) {
         if (spec == null || !spec.isEnabled()) {
             return;
@@ -467,6 +488,10 @@ public class ConfigAgentResolver implements AgentResolver, EnvironmentAware, Ini
         private Boolean rateLimitEnabled;
         private Integer rateLimitRequestsPerMinute;
         private Integer rateLimitBurst;
+        /**
+         * Optional anonymous subagent overrides for this agent ({@code agents.*.delegation}).
+         */
+        private DelegationProperties delegation;
         private Set<String> skills;
         private String dockerImage;
         private String dockerMemory;
@@ -515,5 +540,17 @@ public class ConfigAgentResolver implements AgentResolver, EnvironmentAware, Ini
         private Set<String> providers;
         private String promptMode;
         private Boolean allowCrossSessionSearch;
+    }
+
+    @Data
+    public static class DelegationProperties {
+        private Boolean enabled;
+        private Integer maxIterations;
+        private Integer maxConcurrentChildren;
+        private Integer maxSpawnDepth;
+        private Long childTimeoutSeconds;
+        private List<String> blockedToolsets;
+        private List<String> defaultToolsets;
+        private String model;
     }
 }

@@ -38,6 +38,39 @@ class SubAgentRunnerRuntimeInheritanceTest {
     }
 
     @Test
+    void childAgentDefinitionInheritsTaskModelSelection() throws Exception {
+        ToolExecutionContext parentContext = parentContext("local", true);
+        io.github.huskyagent.infra.llm.ModelSelection model =
+                io.github.huskyagent.infra.llm.ModelSelection.builder().modelName("child-model").build();
+        SubAgentRunner runner = runner(parentContext, null, model);
+
+        Method method = SubAgentRunner.class.getDeclaredMethod("buildAgentDefinition", String.class);
+        method.setAccessible(true);
+        AgentDefinition agentDefinition = (AgentDefinition) method.invoke(runner, "system");
+
+        assertNotNull(agentDefinition.getModelSelection());
+        assertEquals("child-model", agentDefinition.getModelSelection().getModelName());
+    }
+
+    @Test
+    void applySubAgentLimitsSetsMaxReactLoopsFromTask() throws Exception {
+        SubAgentRunner runner = runner(parentContext("local", true));
+        RuntimePolicy base = RuntimePolicy.builder()
+                .agentId("subagent")
+                .backendPolicy(AgentDefinition.BackendPolicy.LOCAL)
+                .memoryPolicy(memoryPolicy())
+                .capabilityView(io.github.huskyagent.domain.capability.CapabilityView.builder().build())
+                .knowledgeSources(Set.of())
+                .build();
+
+        Method method = SubAgentRunner.class.getDeclaredMethod("applySubAgentLimits", RuntimePolicy.class);
+        method.setAccessible(true);
+        RuntimePolicy limited = (RuntimePolicy) method.invoke(runner, base);
+
+        assertEquals(3, limited.getMaxReactLoops());
+    }
+
+    @Test
     void childSceneInheritsParentDockerRuntimeWorkingDirectory() throws Exception {
         ToolExecutionContext parentContext = parentContext("docker", true, "/app");
         SubAgentRunner runner = runner(parentContext);
@@ -190,15 +223,21 @@ class SubAgentRunnerRuntimeInheritanceTest {
     }
 
     private SubAgentRunner runner(ToolExecutionContext parentContext) {
-        return runner(parentContext, null);
+        return runner(parentContext, null, null);
     }
 
     private SubAgentRunner runner(ToolExecutionContext parentContext, ToolRuntimeEnvironmentFactory runtimeEnvironmentFactory) {
+        return runner(parentContext, runtimeEnvironmentFactory, null);
+    }
+
+    private SubAgentRunner runner(ToolExecutionContext parentContext,
+                                  ToolRuntimeEnvironmentFactory runtimeEnvironmentFactory,
+                                  io.github.huskyagent.infra.llm.ModelSelection modelSelection) {
         return new SubAgentRunner(
                 null,
                 null,
                 new SubAgentConfig(),
-                new SubAgentTask("goal", "", Set.of(Toolset.CORE), 3, 30, Path.of("/tmp/parent"), 0),
+                new SubAgentTask("goal", "", Set.of(Toolset.CORE), 3, 30, Path.of("/tmp/parent"), 0, modelSelection),
                 new SubAgentMessageQueue(),
                 "parent-session",
                 parentContext,

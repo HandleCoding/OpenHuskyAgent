@@ -53,6 +53,12 @@ public class AgentDefinition {
     private MemoryPolicySpec memoryPolicyConfig = new MemoryPolicySpec();
     private AuditSpec auditSpec = new AuditSpec();
     private RateLimitSpec rateLimitSpec = new RateLimitSpec();
+    /**
+     * Optional per-agent overrides for anonymous {@code delegate_task} children.
+     * Merged with global {@code agent.delegation} (stricter wins for limits; blocked toolsets are unioned).
+     * Null / empty fields fall through to the global defaults.
+     */
+    private DelegationSpec delegationSpec = new DelegationSpec();
 
     public LegacyMemoryPolicy getMemoryPolicy() {
         MemoryPolicySpec spec = memoryPolicyConfig != null ? memoryPolicyConfig : new MemoryPolicySpec();
@@ -239,5 +245,31 @@ public class AgentDefinition {
         private boolean enabled = false;
         private Integer requestsPerMinute;
         private Integer burst;
+    }
+
+    /**
+     * Per-agent guards and defaults for anonymous subagent spawn via {@code delegate_task}.
+     * This is not named Agent Teams config; nested fields are optional overrides of
+     * global {@code agent.delegation}.
+     */
+    @Data
+    public static class DelegationSpec {
+        /** Null = inherit global enabled flag. Cannot re-enable if global is disabled. */
+        private Boolean enabled;
+        private Integer maxIterations;
+        private Integer maxConcurrentChildren;
+        private Integer maxSpawnDepth;
+        private Long childTimeoutSeconds;
+        /** Extra blocked toolsets (unioned with global blocked list). */
+        private List<String> blockedToolsets;
+        /**
+         * Default toolsets when the tool call omits {@code required_toolsets}.
+         * Null/empty = all toolsets except blocked.
+         */
+        private List<String> defaultToolsets;
+        /**
+         * Child model name override. Blank/null = inherit parent agent model, then platform default.
+         */
+        private String model;
     }
 }

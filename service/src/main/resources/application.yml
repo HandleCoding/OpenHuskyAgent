@@ -74,16 +74,21 @@ agent:
     enforcement: auto
   checkpoint:
     enabled: true
+  # Global anonymous subagent guards (delegate_task). Per-agent overrides: agents.*.delegation
+  # Merge: enabled AND; numeric ceilings = min (stricter); blocked toolsets = union;
+  # default-toolsets agent overrides global when non-empty; model agent then global then parent inherit.
   delegation:
     enabled: true
     max-iterations: 50
     max-concurrent-children: 3
+    # Anonymous children hard-strip DELEGATE tools; depth > 1 has no effect until that changes.
     max-spawn-depth: 1
     child-timeout-seconds: 600
     blocked-toolsets:
       - DELEGATE
       - MEMORY
-    model: ""
+    # default-toolsets: []   # empty = all except blocked; e.g. [CORE, SEARCH, WEB]
+    model: ""                # blank = inherit parent agent model, else platform default
 
 # Execution backend configuration
 execution:
@@ -293,6 +298,16 @@ agents:
     rate-limit-enabled: false
     # rate-limit-requests-per-minute: 60
     # rate-limit-burst: 20
+    # Optional anonymous subagent overrides (merged with agent.delegation; stricter wins):
+    # delegation:
+    #   enabled: true
+    #   max-iterations: 30
+    #   max-concurrent-children: 2
+    #   max-spawn-depth: 1
+    #   child-timeout-seconds: 300
+    #   blocked-toolsets: [BROWSER]
+    #   default-toolsets: [CORE, SEARCH, WEB]
+    #   model: gpt-4o-mini
   # Chatbot runtime behavior: prompt, tools, approvals, backend, and memory.
   chatbot:
     system-prompt: |

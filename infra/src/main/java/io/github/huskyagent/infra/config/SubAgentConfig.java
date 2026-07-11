@@ -23,5 +23,15 @@ public class SubAgentConfig {
 
     private List<String> blockedToolsets = List.of("DELEGATE", "MEMORY");
 
+    /**
+     * Default toolsets for children when {@code required_toolsets} is omitted.
+     * Empty = all toolsets except {@link #blockedToolsets}.
+     */
+    private List<String> defaultToolsets = List.of();
+
+    /**
+     * Optional child model name. Blank = inherit parent agent model, then platform default.
+     * Overridable per agent via {@code agents.*.delegation.model}.
+     */
     private String model = "";
 }

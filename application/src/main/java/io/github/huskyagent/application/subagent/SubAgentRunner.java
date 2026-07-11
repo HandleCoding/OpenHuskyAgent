@@ -18,6 +18,7 @@ import io.github.huskyagent.domain.agent.AgentDefinition;
 import io.github.huskyagent.domain.session.SessionManager;
 import io.github.huskyagent.infra.config.SubAgentConfig;
 import io.github.huskyagent.infra.ai.DynamicPromptSnapshotCache;
+import io.github.huskyagent.infra.llm.ModelSelection;
 import io.github.huskyagent.infra.session.SessionContext;
 import io.github.huskyagent.infra.session.SessionScope;
 import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
@@ -132,7 +133,8 @@ public class SubAgentRunner {
 
             AgentDefinition agentDefinition = buildAgentDefinition(systemPrompt);
             CapabilityView capabilityView = capabilityVisibilityResolver.resolveSubAgent(agentDefinition, buildParentCapabilityView());
-            RuntimePolicy runtimePolicy = runtimePolicyResolver.assemble(agentDefinition, capabilityView);
+            RuntimePolicy runtimePolicy = applySubAgentLimits(
+                    runtimePolicyResolver.assemble(agentDefinition, capabilityView));
             RuntimeScope childScope = buildChildRuntimeScope(childSessionId, agentDefinition, runtimePolicy);
             ReActAgentState finalState = runWithLegacySessionContext(childScope, () -> {
                 try {
@@ -269,7 +271,18 @@ public class SubAgentRunner {
         agentDefinition.setApprovalPolicy(AgentDefinition.ApprovalPolicy.NONE);
         agentDefinition.getMemoryPolicyConfig().setEnabled(false);
         inheritParentRuntime(agentDefinition);
+        inheritChildModel(agentDefinition);
         return agentDefinition;
+    }
+
+    private RuntimePolicy applySubAgentLimits(RuntimePolicy runtimePolicy) {
+        if (runtimePolicy == null) {
+            return null;
+        }
+        int maxSteps = Math.max(1, task.maxSteps());
+        return runtimePolicy.toBuilder()
+                .maxReactLoops(maxSteps)
+                .build();
     }
 
     private void inheritParentRuntime(AgentDefinition agentDefinition) {
@@ -289,6 +302,17 @@ public class SubAgentRunner {
             }
             case "ssh" -> agentDefinition.setBackendPolicy(AgentDefinition.BackendPolicy.SSH);
             default -> agentDefinition.setBackendPolicy(AgentDefinition.BackendPolicy.LOCAL);
+        }
+    }
+
+    /**
+     * Child model: explicit task override (from agent.delegation.model / agents.*.delegation.model
+     * or inherited parent agent model). Null leaves platform default via RuntimePolicyResolver.
+     */
+    private void inheritChildModel(AgentDefinition agentDefinition) {
+        ModelSelection selection = task.modelSelection();
+        if (selection != null) {
+            agentDefinition.setModelSelection(selection);
         }
     }
 

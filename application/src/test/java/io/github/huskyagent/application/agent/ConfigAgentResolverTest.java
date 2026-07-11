@@ -138,6 +138,32 @@ class ConfigAgentResolverTest {
     }
 
     @Test
+    void delegationPropertiesBindOntoAgentDefinition() {
+        ConfigAgentResolver resolver = new ConfigAgentResolver();
+        ConfigAgentResolver.AgentProperties props = new ConfigAgentResolver.AgentProperties();
+        ConfigAgentResolver.DelegationProperties delegation = new ConfigAgentResolver.DelegationProperties();
+        delegation.setEnabled(true);
+        delegation.setMaxIterations(12);
+        delegation.setMaxConcurrentChildren(2);
+        delegation.setBlockedToolsets(List.of("BROWSER"));
+        delegation.setDefaultToolsets(List.of("CORE", "SEARCH"));
+        delegation.setModel("cheap-model");
+        props.setDelegation(delegation);
+        LinkedHashMap<String, ConfigAgentResolver.AgentProperties> agents = new LinkedHashMap<>();
+        agents.put("assistant", props);
+        resolver.setAgents(agents);
+
+        var agent = resolver.resolve("assistant");
+        assertNotNull(agent.getDelegationSpec());
+        assertEquals(Boolean.TRUE, agent.getDelegationSpec().getEnabled());
+        assertEquals(12, agent.getDelegationSpec().getMaxIterations());
+        assertEquals(2, agent.getDelegationSpec().getMaxConcurrentChildren());
+        assertEquals(List.of("BROWSER"), agent.getDelegationSpec().getBlockedToolsets());
+        assertEquals(List.of("CORE", "SEARCH"), agent.getDelegationSpec().getDefaultToolsets());
+        assertEquals("cheap-model", agent.getDelegationSpec().getModel());
+    }
+
+    @Test
     void rateLimitEnabledWithRpmResolves() {
         ConfigAgentResolver resolver = new ConfigAgentResolver();
         ConfigAgentResolver.AgentProperties props = new ConfigAgentResolver.AgentProperties();

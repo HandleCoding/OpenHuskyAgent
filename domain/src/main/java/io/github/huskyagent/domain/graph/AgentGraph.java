@@ -128,7 +128,8 @@ public class AgentGraph {
                 chatClient,
                 effectiveHookRegistry,
                 promptContext,
-                systemPrompt));
+                systemPrompt,
+                runtimePolicy));
 
         CheckpointStore checkpointStore = checkpointStoreFactory.forCheckpointType(runtimePolicy.effectiveCheckpointType());
         var saver = forceMemoryCheckpoint || !checkpointStore.isPersistent() ? new MemorySaver() : checkpointStore;
@@ -146,6 +147,13 @@ public class AgentGraph {
             return llmClientRegistry.getChatModel(null);
         }
         return chatModel;
+    }
+
+    private int resolveMaxReactLoops(RuntimePolicy runtimePolicy) {
+        if (runtimePolicy != null && runtimePolicy.getMaxReactLoops() != null && runtimePolicy.getMaxReactLoops() > 0) {
+            return runtimePolicy.getMaxReactLoops();
+        }
+        return agentConfig.getGraph().getMaxReactLoops();
     }
 
     private StateGraph<ReActAgentState> buildStateGraph(GraphBuildContext context) throws GraphStateException {
@@ -184,7 +192,8 @@ public class AgentGraph {
         graph.addEdge(START, NODE_MODEL);
 
         // ── model → parallel_executor ─────────────────────────────────────────
-        graph.addConditionalEdges(NODE_MODEL, new ShouldContinueEdge(agentConfig.getGraph().getMaxReactLoops()).build(),
+        int maxReactLoops = resolveMaxReactLoops(context.runtimePolicy());
+        graph.addConditionalEdges(NODE_MODEL, new ShouldContinueEdge(maxReactLoops).build(),
                 EdgeMappings.builder()
                         .to(NODE_PARALLEL_EXECUTOR, LABEL_CONTINUE)
                         .toEND(LABEL_END)
@@ -229,6 +238,7 @@ public class AgentGraph {
     private record GraphBuildContext(ChatClient chatClient,
                                      HookRegistry effectiveHookRegistry,
                                      PromptContext promptContext,
-                                     String systemPrompt) {
+                                     String systemPrompt,
+                                     RuntimePolicy runtimePolicy) {
     }
 }

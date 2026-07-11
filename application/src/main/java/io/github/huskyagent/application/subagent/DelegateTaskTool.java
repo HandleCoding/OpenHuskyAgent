@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.huskyagent.application.runtime.CapabilityVisibilityResolver;
 import io.github.huskyagent.application.runtime.RuntimePolicyResolver;
+import io.github.huskyagent.domain.agent.AgentDefinition;
+import io.github.huskyagent.domain.agent.AgentResolver;
 import io.github.huskyagent.domain.graph.AgentGraph;
 import io.github.huskyagent.domain.hook.HookDataKeys;
 import io.github.huskyagent.domain.hook.HookEvent;
@@ -14,6 +16,8 @@ import io.github.huskyagent.domain.subagent.SubAgentMessage;
 import io.github.huskyagent.domain.subagent.SubAgentMessageQueue;
 import io.github.huskyagent.infra.ai.DynamicPromptSnapshotCache;
 import io.github.huskyagent.infra.config.SubAgentConfig;
+import io.github.huskyagent.infra.llm.ModelSelection;
+import io.github.huskyagent.infra.session.SessionScope;
 import io.github.huskyagent.infra.tool.Toolset;
 import io.github.huskyagent.infra.tool.adapter.ToolCallbackFactory;
 import io.github.huskyagent.infra.tool.adapter.ToolExecutionContext;
@@ -46,6 +50,7 @@ public class DelegateTaskTool implements ToolProvider {
     private final SessionManager sessionManager;
     private final HookRegistry hookRegistry;
     private final SubAgentConfig subAgentConfig;
+    private final AgentResolver agentResolver;
     private final CapabilityVisibilityResolver capabilityVisibilityResolver;
     private final RuntimePolicyResolver runtimePolicyResolver;
     private final DynamicPromptSnapshotCache dynamicPromptSnapshotCache;
@@ -57,6 +62,7 @@ public class DelegateTaskTool implements ToolProvider {
                             SessionManager sessionManager,
                             HookRegistry hookRegistry,
                             SubAgentConfig subAgentConfig,
+                            AgentResolver agentResolver,
                             CapabilityVisibilityResolver capabilityVisibilityResolver,
                             RuntimePolicyResolver runtimePolicyResolver,
                             DynamicPromptSnapshotCache dynamicPromptSnapshotCache,
@@ -66,6 +72,7 @@ public class DelegateTaskTool implements ToolProvider {
         this.sessionManager = sessionManager;
         this.hookRegistry = hookRegistry;
         this.subAgentConfig = subAgentConfig;
+        this.agentResolver = agentResolver;
         this.capabilityVisibilityResolver = capabilityVisibilityResolver;
         this.runtimePolicyResolver = runtimePolicyResolver;
         this.dynamicPromptSnapshotCache = dynamicPromptSnapshotCache;
@@ -81,7 +88,21 @@ public class DelegateTaskTool implements ToolProvider {
                      RuntimePolicyResolver runtimePolicyResolver,
                      DynamicPromptSnapshotCache dynamicPromptSnapshotCache,
                      ToolCallbackFactory toolCallbackFactory) {
-        this(agentGraphProvider, sessionManager, hookRegistry, subAgentConfig,
+        this(agentGraphProvider, sessionManager, hookRegistry, subAgentConfig, null,
+                capabilityVisibilityResolver, runtimePolicyResolver, dynamicPromptSnapshotCache,
+                toolCallbackFactory, null);
+    }
+
+    DelegateTaskTool(ObjectProvider<AgentGraph> agentGraphProvider,
+                     SessionManager sessionManager,
+                     HookRegistry hookRegistry,
+                     SubAgentConfig subAgentConfig,
+                     AgentResolver agentResolver,
+                     CapabilityVisibilityResolver capabilityVisibilityResolver,
+                     RuntimePolicyResolver runtimePolicyResolver,
+                     DynamicPromptSnapshotCache dynamicPromptSnapshotCache,
+                     ToolCallbackFactory toolCallbackFactory) {
+        this(agentGraphProvider, sessionManager, hookRegistry, subAgentConfig, agentResolver,
                 capabilityVisibilityResolver, runtimePolicyResolver, dynamicPromptSnapshotCache,
                 toolCallbackFactory, null);
     }
@@ -171,9 +192,11 @@ public class DelegateTaskTool implements ToolProvider {
     }
 
     private Duration resolveExecutionTimeout(Map<String, Object> args) {
-        long timeoutSeconds = args.get("timeout_seconds") instanceof Number n
-                ? n.longValue()
-                : subAgentConfig.getChildTimeoutSeconds();
+        // Tool-framework timeout has no ToolExecutionContext here; apply global ceiling.
+        // handleDelegateTask applies the full global+agent merge for the actual child run.
+        Long toolTimeout = args.get("timeout_seconds") instanceof Number n ? n.longValue() : null;
+        long timeoutSeconds = EffectiveDelegationPolicy.merge(subAgentConfig, null)
+                .resolveTimeoutSeconds(toolTimeout);
         return Duration.ofSeconds(Math.max(1, timeoutSeconds));
     }
 
@@ -181,6 +204,14 @@ public class DelegateTaskTool implements ToolProvider {
         List<TaskSpec> taskSpecs = parseTaskSpecs(args);
         if (taskSpecs.isEmpty()) {
             return ToolResult.failure("Either 'goal' or 'tasks' must be provided");
+        }
+
+        EffectiveDelegationPolicy policy = resolveEffectivePolicy(executionContext);
+        if (!policy.enabled()) {
+            return ToolResult.failure("Sub-agent delegation is disabled for this agent");
+        }
+        if (parentSpawnDepth(executionContext) >= policy.maxSpawnDepth()) {
+            return ToolResult.failure("Max subagent spawn depth exceeded (" + policy.maxSpawnDepth() + ")");
         }
 
         List<String> requestedToolsets = args.get("required_toolsets") instanceof List<?> rawList
@@ -201,21 +232,21 @@ public class DelegateTaskTool implements ToolProvider {
                         .collect(Collectors.toList())
                 : List.of();
 
-        int maxSteps = args.containsKey("max_steps") && args.get("max_steps") instanceof Number
+        Integer toolMaxSteps = args.containsKey("max_steps") && args.get("max_steps") instanceof Number
                 ? ((Number) args.get("max_steps")).intValue()
-                : subAgentConfig.getMaxIterations();
-
-        long timeoutSeconds = args.containsKey("timeout_seconds") && args.get("timeout_seconds") instanceof Number
+                : null;
+        Long toolTimeoutSeconds = args.containsKey("timeout_seconds") && args.get("timeout_seconds") instanceof Number
                 ? ((Number) args.get("timeout_seconds")).longValue()
-                : subAgentConfig.getChildTimeoutSeconds();
+                : null;
 
-        Set<Toolset> allowedToolsets = resolveAllowedToolsets(requestedToolsets);
+        int maxSteps = policy.resolveMaxSteps(toolMaxSteps);
+        long timeoutSeconds = policy.resolveTimeoutSeconds(toolTimeoutSeconds);
+        Set<Toolset> allowedToolsets = policy.resolveAllowedToolsets(requestedToolsets);
+        ModelSelection childModel = resolveChildModel(policy, executionContext);
 
         String parentSessionId = args.get(ToolCallbackFactory.SESSION_ID_KEY) instanceof String
                 ? (String) args.get(ToolCallbackFactory.SESSION_ID_KEY)
                 : "unknown";
-
-        List<ToolDefinition> visibleTools = executionContext.visibleTools();
 
         Path workingDir = resolveWorkingDirectory(executionContext);
 
@@ -223,7 +254,7 @@ public class DelegateTaskTool implements ToolProvider {
         for (int i = 0; i < taskSpecs.size(); i++) {
             TaskSpec spec = taskSpecs.get(i);
             tasks.add(new SubAgentTask(
-                    spec.goal, spec.context, allowedToolsets, maxSteps, timeoutSeconds, workingDir, i));
+                    spec.goal, spec.context, allowedToolsets, maxSteps, timeoutSeconds, workingDir, i, childModel));
         }
 
         // fire SUBAGENT_START hook
@@ -231,8 +262,9 @@ public class DelegateTaskTool implements ToolProvider {
                 Map.of(HookDataKeys.SUBAGENT_GOAL,
                         tasks.size() == 1 ? tasks.get(0).goal() : tasks.size() + " parallel tasks"));
 
-        log.info("Starting sub-agents: {} tasks, tools={}, timeout={}s",
-                tasks.size(), allowedToolsets, timeoutSeconds);
+        log.info("Starting sub-agents: {} tasks, tools={}, timeout={}s, maxSteps={}, model={}",
+                tasks.size(), allowedToolsets, timeoutSeconds, maxSteps,
+                childModel != null ? childModel.fingerprint() : "inherit/default");
 
         long startTime = System.currentTimeMillis();
 
@@ -240,7 +272,7 @@ public class DelegateTaskTool implements ToolProvider {
         if (tasks.size() == 1) {
             results = executeSingle(tasks.get(0), parentSessionId, timeoutSeconds, executionContext);
         } else {
-            results = executeParallel(tasks, parentSessionId, timeoutSeconds, executionContext);
+            results = executeParallel(tasks, parentSessionId, timeoutSeconds, executionContext, policy);
         }
 
         long totalDurationMs = System.currentTimeMillis() - startTime;
@@ -313,8 +345,9 @@ public class DelegateTaskTool implements ToolProvider {
     }
 
     private List<SubAgentResult> executeParallel(List<SubAgentTask> tasks, String parentSessionId,
-                                                  long timeoutSeconds, ToolExecutionContext executionContext) {
-        int maxConcurrent = Math.min(subAgentConfig.getMaxConcurrentChildren(), tasks.size());
+                                                  long timeoutSeconds, ToolExecutionContext executionContext,
+                                                  EffectiveDelegationPolicy policy) {
+        int maxConcurrent = policy.resolveMaxConcurrent(tasks.size());
         ExecutorService executor = Executors.newFixedThreadPool(maxConcurrent);
 
         List<SubAgentRunner> runners = new ArrayList<>();
@@ -460,29 +493,61 @@ public class DelegateTaskTool implements ToolProvider {
     }
 
 
-    private Set<Toolset> resolveAllowedToolsets(List<String> requested) {
-        Set<Toolset> blocked = subAgentConfig.getBlockedToolsets().stream()
-                .map(name -> {
-                    try { return Toolset.valueOf(name.toUpperCase()); }
-                    catch (IllegalArgumentException e) { return null; }
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+    EffectiveDelegationPolicy resolveEffectivePolicy(ToolExecutionContext executionContext) {
+        return EffectiveDelegationPolicy.merge(subAgentConfig, parentDelegationSpec(executionContext));
+    }
 
-        if (requested == null || requested.isEmpty()) {
-            return Arrays.stream(Toolset.values())
-                    .filter(ts -> !blocked.contains(ts))
-                    .collect(Collectors.toSet());
+    private AgentDefinition.DelegationSpec parentDelegationSpec(ToolExecutionContext executionContext) {
+        String agentId = parentAgentId(executionContext);
+        if (agentId == null || agentResolver == null) {
+            return null;
         }
+        try {
+            AgentDefinition definition = agentResolver.resolve(agentId);
+            return definition != null ? definition.getDelegationSpec() : null;
+        } catch (RuntimeException e) {
+            log.warn("Failed to load agent delegation override for agentId={}; using global only: {}",
+                    agentId, e.getMessage());
+            return null;
+        }
+    }
 
-        return requested.stream()
-                .map(name -> {
-                    try { return Toolset.valueOf(name.toUpperCase()); }
-                    catch (IllegalArgumentException e) { return null; }
-                })
-                .filter(Objects::nonNull)
-                .filter(ts -> !blocked.contains(ts))
-                .collect(Collectors.toSet());
+    private String parentAgentId(ToolExecutionContext executionContext) {
+        SessionScope scope = executionContext != null ? executionContext.sessionScope() : null;
+        String agentId = scope != null ? scope.getAgentId() : null;
+        if (agentId == null || agentId.isBlank() || "subagent".equals(agentId)) {
+            return null;
+        }
+        return agentId;
+    }
+
+    private int parentSpawnDepth(ToolExecutionContext executionContext) {
+        SessionScope scope = executionContext != null ? executionContext.sessionScope() : null;
+        if (scope != null && "subagent".equals(scope.getAgentId())) {
+            // Nested anonymous children: treat as depth 1 (global default max is 1).
+            // Deeper nesting is blocked primarily via DELEGATE toolset exclusion.
+            return 1;
+        }
+        return 0;
+    }
+
+    private ModelSelection resolveChildModel(EffectiveDelegationPolicy policy, ToolExecutionContext executionContext) {
+        ModelSelection override = policy.modelOverride();
+        if (override != null) {
+            return override;
+        }
+        String agentId = parentAgentId(executionContext);
+        if (agentId == null || agentResolver == null) {
+            return null;
+        }
+        try {
+            AgentDefinition definition = agentResolver.resolve(agentId);
+            return definition != null ? definition.getModelSelection() : null;
+        } catch (RuntimeException e) {
+            log.warn("Could not inherit parent model for agentId={}; using platform default: {}",
+                    agentId, e.getMessage());
+            return null;
+        }
     }
 
 

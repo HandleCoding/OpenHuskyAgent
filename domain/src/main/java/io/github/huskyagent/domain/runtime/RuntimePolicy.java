@@ -14,7 +14,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Value
-@Builder
+@Builder(toBuilder = true)
 public class RuntimePolicy {
     String agentId;
     CapabilityView capabilityView;
@@ -37,6 +37,11 @@ public class RuntimePolicy {
      * Effective LLM selection for this run (provider + model + sampling). Always resolved at policy assemble time.
      */
     ModelSelection modelSelection;
+    /**
+     * Optional ReAct loop ceiling for this run. Null means platform {@code agent.graph.max-react-loops}.
+     * Used by anonymous subagents to honor {@code max_steps} / delegation max-iterations.
+     */
+    Integer maxReactLoops;
 
     public String fingerprint() {
         String base = String.join("|",
@@ -51,7 +56,8 @@ public class RuntimePolicy {
                 backendSpecFingerprint(backendSpec),
                 fixedWorkingDirectory != null ? fixedWorkingDirectory : "",
                 modelSelection != null ? modelSelection.fingerprint() : "",
-                String.valueOf(approvalPolicy), String.valueOf(backendPolicy), String.valueOf(workingDirectoryPolicy));
+                String.valueOf(approvalPolicy), String.valueOf(backendPolicy), String.valueOf(workingDirectoryPolicy),
+                maxReactLoops != null ? Integer.toString(maxReactLoops) : "");
         if (!isRemoteStorage()) {
             return base;
         }
