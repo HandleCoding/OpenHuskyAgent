@@ -8,8 +8,7 @@ For install and first run, see the root [README.md](../README.md).
 
 | Surface | Path | When to use |
 |---------|------|-------------|
-| OpenAI-compatible API | `GET /v1/models`, `POST /v1/chat/completions` | Standard SDKs; **recommended** for external apps |
-| Chatbot SSE | `POST /api/chat` | First-party streaming UI / simple backends |
+| Chatbot SSE | `POST /api/chat` | First-party streaming UI / app backends (**primary HTTP API**) |
 | TUI WebSocket | `ws://…/api/tui` | Local operator console |
 | Channel bots | Feishu / Telegram / Slack | End-user messaging products |
 
@@ -27,13 +26,14 @@ Minimal `.env` for API hosting:
 
 ```bash
 OPENAI_API_KEY=...
-OPENAI_BASE_URL=https://api.openai.com   # or any OpenAI-compatible endpoint
+OPENAI_BASE_URL=https://api.openai.com   # or any OpenAI-compatible *LLM* endpoint
 OPENAI_MODEL=gpt-5.4
 AUTH_ENABLED=true
 HUSKY_API_KEYS=generate-a-long-random-key
-OPENAI_COMPATIBLE_ENABLED=true
 HUSKY_PORT=18088
 ```
+
+Note: `OPENAI_*` configures the **outbound LLM** (model provider). The public **inbound** HTTP API is Chatbot SSE below—not an OpenAI wire protocol.
 
 ## Agent / Channel / Binding
 
@@ -73,7 +73,7 @@ agents:
     allowed-mcp-servers: ["*"]
     approval: required
 
-  # Narrow agent for external HTTP / OpenAI-compatible clients
+  # Narrow agent for external HTTP clients
   chatbot:
     system-prompt: |
       You are a helpful product assistant. Prefer search tools over shell access.
@@ -88,11 +88,6 @@ agents:
     rate-limit-enabled: true
     rate-limit-requests-per-minute: 30
     rate-limit-burst: 10
-    # model: gpt-4o-mini
-    # model:
-    #   provider: main
-    #   name: gpt-4o-mini
-    #   temperature: 0.3
 
 agent-channel-bindings:
   assistant:
@@ -116,7 +111,7 @@ agents:
     #   temperature: 0.2
 ```
 
-Providers are configured under `llm.providers.*` (plus the seeded `main` provider from `spring.ai.openai.*`).
+Providers are configured under `llm.providers.*` (plus the seeded `main` provider from `spring.ai.openai.*` / `OPENAI_*`).
 
 ### Rate limits
 
@@ -126,32 +121,12 @@ When `rate-limit-enabled: true`, each inbound user turn consumes a token-bucket 
 
 Global defaults: `agent.delegation.*`. Per-agent overrides: `agents.<id>.delegation.*` (stricter ceilings win; blocked toolsets are unioned). Tool call params (`max_steps`, `timeout_seconds`, `required_toolsets`) are capped by the effective policy.
 
-Named multi-agent teams (`can-delegate-to` registered agents) are **not** required for basic product hosting; anonymous spawn is enough for most orchestration patterns.
-
-## OpenAI-compatible API
-
-| Endpoint | Notes |
-|----------|--------|
-| `GET /v1/models` | Lists configured agent ids as models |
-| `POST /v1/chat/completions` | `model` = agent id (or `model-prefix` + agent id) |
+## Chatbot SSE API (primary HTTP)
 
 ```bash
 export HUSKY_URL=http://localhost:18088
 export HUSKY_KEY=your-api-key
 
-curl -s -H "X-Api-Key: $HUSKY_KEY" "$HUSKY_URL/v1/models"
-
-curl -s -H "X-Api-Key: $HUSKY_KEY" \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"chatbot","messages":[{"role":"user","content":"Ping"}],"stream":false}' \
-  "$HUSKY_URL/v1/chat/completions"
-```
-
-Enable with `OPENAI_COMPATIBLE_ENABLED=true` or `openai-compatible.enabled=true`. Auth shares `HUSKY_API_KEYS` when `AUTH_ENABLED=true`.
-
-### Chatbot SSE (alternative)
-
-```bash
 curl -N \
   -H "X-Api-Key: $HUSKY_KEY" \
   -H 'X-User-Id: app-user-1' \
@@ -161,7 +136,15 @@ curl -N \
   "$HUSKY_URL/api/chat"
 ```
 
-Optional `X-Agent` selects an agent when your deployment routes allow it.
+| Field / header | Required | Purpose |
+|----------------|----------|---------|
+| `message` | yes | User input |
+| `sessionId` | no | Continue a server-issued session (omit on first turn) |
+| `X-Api-Key` | when auth on | Shared with `HUSKY_API_KEYS` |
+| `X-User-Id` | when auth on | Stable end-user identity |
+| `X-Agent` | no | Explicit agent id when routing allows it |
+
+SSE events include `token`, `reasoning`, `message`, `tool_started`, `tool_completed`, `tool_failed`, `done`, and `error`.
 
 ## Production checklist
 
@@ -179,6 +162,4 @@ Optional `X-Agent` selects an agent when your deployment routes allow it.
 ## Related docs
 
 - [README.md](../README.md) — install, channels, architecture
-- [agent_channel_binding_plan.md](agent_channel_binding_plan.md) — config model
-- [agent-platform-roadmap.md](agent-platform-roadmap.md) — upcoming platform work
-- [SECURITY.md](../SECURITY.md) — vulnerability reporting
+- [agent_channel_binding_plan.md](agent_channel_binding_plan.md) — bindings

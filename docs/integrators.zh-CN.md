@@ -8,8 +8,7 @@
 
 | 入口 | 路径 | 适用场景 |
 |------|------|----------|
-| OpenAI 兼容 API | `GET /v1/models`、`POST /v1/chat/completions` | 标准 SDK；**推荐**给外部应用 |
-| Chatbot SSE | `POST /api/chat` | 自建流式 UI / 简单后端 |
+| Chatbot SSE | `POST /api/chat` | 自建流式 UI / 应用后端（**一等 HTTP API**） |
 | TUI WebSocket | `ws://…/api/tui` | 本地操作台 |
 | Channel bots | 飞书 / Telegram / Slack | 终端用户消息产品 |
 
@@ -27,13 +26,14 @@
 
 ```bash
 OPENAI_API_KEY=...
-OPENAI_BASE_URL=https://api.openai.com   # 或任意 OpenAI 兼容端点
+OPENAI_BASE_URL=https://api.openai.com   # 任意 OpenAI 兼容 *出站 LLM* 端点
 OPENAI_MODEL=gpt-5.4
 AUTH_ENABLED=true
 HUSKY_API_KEYS=生成足够长的随机串
-OPENAI_COMPATIBLE_ENABLED=true
 HUSKY_PORT=18088
 ```
+
+说明：`OPENAI_*` 配置的是 **出站调用模型** 的端点；对外 **入站** HTTP 是下面的 Chatbot SSE，不是 OpenAI 协议。
 
 ## Agent / Channel / Binding
 
@@ -73,7 +73,7 @@ agents:
     allowed-mcp-servers: ["*"]
     approval: required
 
-  # 给外部 HTTP / OpenAI 兼容客户端用的收窄 agent
+  # 给外部 HTTP 客户端用的收窄 agent
   chatbot:
     system-prompt: |
       你是产品助手。优先用搜索类工具，不要使用 shell。
@@ -109,7 +109,7 @@ agents:
     #   temperature: 0.2
 ```
 
-Provider 配置在 `llm.providers.*`（`main` 可由 `spring.ai.openai.*` 种子生成）。
+Provider 配置在 `llm.providers.*`（`main` 可由 `spring.ai.openai.*` / `OPENAI_*` 种子生成）。
 
 ### 限流
 
@@ -119,32 +119,12 @@ Provider 配置在 `llm.providers.*`（`main` 可由 `spring.ai.openai.*` 种子
 
 全局默认：`agent.delegation.*`。按 agent 覆盖：`agents.<id>.delegation.*`（数值取更严；blocked toolsets 取并集）。工具参数受有效策略上限约束。
 
-命名 Agent Teams 不是基础托管的前提；多数编排用匿名 spawn 即可。
-
-## OpenAI 兼容 API
-
-| 端点 | 说明 |
-|------|------|
-| `GET /v1/models` | 列出 agent id 作为 model |
-| `POST /v1/chat/completions` | `model` = agent id（或 `model-prefix` + agent id） |
+## Chatbot SSE API（一等 HTTP）
 
 ```bash
 export HUSKY_URL=http://localhost:18088
 export HUSKY_KEY=your-api-key
 
-curl -s -H "X-Api-Key: $HUSKY_KEY" "$HUSKY_URL/v1/models"
-
-curl -s -H "X-Api-Key: $HUSKY_KEY" \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"chatbot","messages":[{"role":"user","content":"Ping"}],"stream":false}' \
-  "$HUSKY_URL/v1/chat/completions"
-```
-
-通过 `OPENAI_COMPATIBLE_ENABLED=true` 开启。`AUTH_ENABLED=true` 时与 `HUSKY_API_KEYS` 共用。
-
-### Chatbot SSE（备选）
-
-```bash
 curl -N \
   -H "X-Api-Key: $HUSKY_KEY" \
   -H 'X-User-Id: app-user-1' \
@@ -154,7 +134,15 @@ curl -N \
   "$HUSKY_URL/api/chat"
 ```
 
-可选 `X-Agent` 在部署允许时指定 agent。
+| 字段 / 头 | 是否必须 | 作用 |
+|-----------|----------|------|
+| `message` | 是 | 用户输入 |
+| `sessionId` | 否 | 续聊服务端 session（首轮省略） |
+| `X-Api-Key` | 鉴权开启时 | 与 `HUSKY_API_KEYS` 一致 |
+| `X-User-Id` | 鉴权开启时 | 稳定终端用户身份 |
+| `X-Agent` | 否 | 部署允许时指定 agent |
+
+SSE 事件包括 `token`、`reasoning`、`message`、`tool_started`、`tool_completed`、`tool_failed`、`done`、`error`。
 
 ## 生产清单
 
@@ -168,10 +156,3 @@ curl -N \
 - [ ] 为 `HUSKY_DATA_DIR` 准备持久盘（SQLite session/checkpoint、memory 文件）。
 - [ ] 配置能干净启动：allowlist 写错会 fail-closed。
 - [ ] 健康检查：`GET /actuator/health` 返回 `UP`。
-
-## 相关文档
-
-- [README.zh-CN.md](../README.zh-CN.md) — 安装、渠道、架构
-- [agent_channel_binding_plan.md](agent_channel_binding_plan.md) — 配置模型
-- [agent-platform-roadmap.md](agent-platform-roadmap.md) — 后续平台工作
-- [SECURITY.md](../SECURITY.md) — 安全漏洞报告

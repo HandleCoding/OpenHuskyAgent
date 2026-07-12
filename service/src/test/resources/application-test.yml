@@ -72,10 +72,6 @@ mcp:
 chatbot:
   enabled: false
 
-# OpenAI-compatible API, disabled in tests unless explicitly enabled
-openai-compatible:
-  enabled: false
-
 # Auth configuration, disabled in tests
 auth:
   enabled: false

@@ -258,15 +258,7 @@ channels:
         send-typing-status: ${SLACK_ASSISTANT_SEND_TYPING_STATUS:false}
         reply-broadcast: ${SLACK_ASSISTANT_REPLY_BROADCAST:false}
 
-# OpenAI-compatible Agent-as-a-Model API; runtime behavior is configured by agents.
-openai-compatible:
-  enabled: ${OPENAI_COMPATIBLE_ENABLED:false}
-  platform-account-id: ${OPENAI_COMPATIBLE_PLATFORM_ACCOUNT_ID:openai-compatible}
-  default-user-id: ${OPENAI_COMPATIBLE_DEFAULT_USER_ID:openai-client}
-  stream-timeout-ms: ${OPENAI_COMPATIBLE_STREAM_TIMEOUT_MS:300000}
-  model-prefix: ${OPENAI_COMPATIBLE_MODEL_PREFIX:}
-
-# Chatbot endpoint switch; runtime behavior is configured by agents.chatbot.
+# Chatbot HTTP SSE endpoint switch; runtime behavior is configured by agents.chatbot.
 chatbot:
   enabled: true
 

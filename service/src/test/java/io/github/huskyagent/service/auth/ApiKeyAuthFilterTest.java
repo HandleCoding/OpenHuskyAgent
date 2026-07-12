@@ -2,7 +2,6 @@ package io.github.huskyagent.service.auth;
 
 import io.github.huskyagent.infra.auth.AuthConfig;
 import io.github.huskyagent.infra.auth.PrincipalContext;
-import io.github.huskyagent.service.openai.OpenAiCompatibleProperties;
 import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -50,10 +49,11 @@ class ApiKeyAuthFilterTest {
     }
 
     @Test
-    void openAiPathAcceptsBearerAndFallbackUser() throws Exception {
+    void apiChatAcceptsValidKeyAndUser() throws Exception {
         ApiKeyAuthFilter filter = newFilter();
-        MockHttpServletRequest request = request("/v1/chat/completions");
-        request.addHeader("Authorization", "Bearer test-key");
+        MockHttpServletRequest request = request("/api/chat");
+        request.addHeader("X-Api-Key", "test-key");
+        request.addHeader("X-User-Id", "demo");
         MockHttpServletResponse response = new MockHttpServletResponse();
         CapturingFilterChain chain = new CapturingFilterChain();
 
@@ -61,40 +61,25 @@ class ApiKeyAuthFilterTest {
 
         assertEquals(200, response.getStatus());
         assertTrue(chain.invoked);
-        assertEquals("api:openai-client", chain.principalId);
-    }
-
-    @Test
-    void openAiPathReturnsOpenAiErrorShapeForInvalidKey() throws Exception {
-        ApiKeyAuthFilter filter = newFilter();
-        MockHttpServletRequest request = request("/v1/chat/completions");
-        request.addHeader("Authorization", "Bearer wrong");
-        MockHttpServletResponse response = new MockHttpServletResponse();
-
-        filter.doFilter(request, response, new MockFilterChain());
-
-        assertEquals(401, response.getStatus());
-        assertTrue(response.getContentAsString().contains("authentication_error"));
+        assertEquals("api:demo", chain.principalId);
     }
 
     @Test
     void registrationCoversApiChatEndpointWithoutTrailingSlash() {
         AuthConfig authConfig = new AuthConfig();
         authConfig.setEnabled(true);
-        OpenAiCompatibleProperties properties = new OpenAiCompatibleProperties();
 
-        var registration = ApiKeyAuthFilter.registrationBean(authConfig, properties);
+        var registration = ApiKeyAuthFilter.registrationBean(authConfig);
 
         assertTrue(registration.getUrlPatterns().contains("/api/chat"));
+        assertFalse(registration.getUrlPatterns().stream().anyMatch(p -> p.startsWith("/v1")));
     }
 
     private ApiKeyAuthFilter newFilter() {
         AuthConfig authConfig = new AuthConfig();
         authConfig.setEnabled(true);
         authConfig.setApiKeys(List.of("test-key"));
-        OpenAiCompatibleProperties properties = new OpenAiCompatibleProperties();
-        properties.setDefaultUserId("openai-client");
-        return new ApiKeyAuthFilter(authConfig, properties);
+        return new ApiKeyAuthFilter(authConfig);
     }
 
     private MockHttpServletRequest request(String uri) {

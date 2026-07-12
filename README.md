@@ -29,7 +29,7 @@ Husky can be used as:
 | Use case | What you get |
 |----------|--------------|
 | Personal AI assistant | TUI, local files, terminal/process tools, browser tools, memory, approvals |
-| Online chatbot / app backend | HTTP SSE `/api/chat`, OpenAI-compatible `/v1/*`, API key auth, per-user sessions, agent-scoped tools |
+| Online chatbot / app backend | HTTP SSE `/api/chat`, API key auth, per-user sessions, agent-scoped tools |
 | Enterprise assistant | Feishu, Telegram, and Slack multi-instance bots, agent–channel bindings, knowledge sources, audit tags |
 | Agent platform | Layered Java modules, tool providers, agents, hooks, runtime policies, MCP |
 
@@ -303,32 +303,7 @@ SSE events include `token`, `reasoning`, `message`, `tool_started`, `tool_comple
 
 Rate-limited agents return a structured error with a rate-limit signal instead of silently dropping the turn.
 
-### OpenAI-Compatible API (build apps on Husky)
-
-Expose each configured agent as an OpenAI-style model so clients can call Husky with standard SDKs.
-
-1. Enable in config (`openai-compatible.enabled=true` or `OPENAI_COMPATIBLE_ENABLED=true`).
-2. List models (agent ids):
-
-```bash
-curl -H 'X-Api-Key: <your-api-key>' \
-  http://localhost:18088/v1/models
-```
-
-3. Chat completions (non-stream or stream). The `model` field is the **agent id** (optionally prefixed via `openai-compatible.model-prefix`):
-
-```bash
-curl -H 'X-Api-Key: <your-api-key>' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "assistant",
-    "messages": [{"role": "user", "content": "Hello"}],
-    "stream": false
-  }' \
-  http://localhost:18088/v1/chat/completions
-```
-
-Auth uses the same Chatbot API keys when `AUTH_ENABLED=true`. This is the recommended integration surface for external AI products. See [docs/integrators.md](docs/integrators.md) for agent config, allowlists, and production notes.
+External apps should integrate via **Chatbot SSE** (`POST /api/chat`) or messaging channels. See [docs/integrators.md](docs/integrators.md).
 
 ### Feishu Channel
 
@@ -360,7 +335,6 @@ Slack v1 supports text messages, DM and channel/thread routing, channel mention 
 - **MCP integration** — stdio, SSE, and Streamable-HTTP MCP servers with agent-level visibility controls.
 - **Browser and vision** — Playwright browser automation and local/remote image analysis when enabled.
 - **Sub-agent delegation** — anonymous `delegate_task` children with three-layer policy (`agent.delegation` + `agents.*.delegation` + tool params).
-- **OpenAI-compatible surface** — `/v1/models` and `/v1/chat/completions` map models to agent ids for third-party clients.
 - **Observability** — audit logs, metrics, session stats, redaction, and `/actuator/husky`.
 
 ## Architecture
@@ -369,7 +343,7 @@ Husky uses a layered Java architecture:
 
 | Module | Responsibility |
 |--------|----------------|
-| `service/` | Spring Boot entry point, HTTP SSE, TUI WebSocket, Feishu adapters, auth, Actuator |
+| `service/` | Spring Boot entry point, HTTP SSE chatbot, TUI WebSocket, channel adapters, auth, Actuator |
 | `application/` | Agent orchestration, channel adapters, agent/session resolution, runtime queues, JSON-RPC methods, sub-agent runner |
 | `domain/` | ReAct graph, graph state, approvals, prompt builder, context manager, sessions, hooks, channel events |
 | `infra/` | Tools, memory, knowledge, MCP, browser, workspace, checkpoint store, AI clients, execution backends, config, observability |
@@ -397,7 +371,7 @@ Packaged defaults live in `service/src/main/resources/application.yml`. Installe
 | Agent loop | `agent.graph.max-react-loops`, `agent.llm.*`, `agent.tool.*`, `agent.checkpoint.enabled`, `agent.delegation.*` |
 | Context | `context.threshold-percent`, `context.context-length`, `context.model-context-lengths`, `context.tail-token-budget` |
 | Channels | `channels.feishu.instances.*`, `channels.telegram.instances.*`, `channels.slack.instances.*`, `tui.ws.*`, `chatbot.enabled` |
-| OpenAI-compatible API | `openai-compatible.enabled`, `openai-compatible.model-prefix`, `openai-compatible.stream-timeout-ms` |
+
 | Agents and bindings | `agents.*`, `agent-channel-bindings.*` — see [docs/integrators.md](docs/integrators.md) for allowlists, `model`, `rate-limit-*`, `delegation` |
 | Execution | `execution.backend.docker.*`, `execution.backend.idle-ttl-seconds` |
 | Web | `web.backend`, `web.proxy.*`, `BRAVE_SEARCH_API_KEY`, `TAVILY_API_KEY` |
@@ -417,7 +391,7 @@ Tool runtime follows the selected agent backend. Terminal/process tools execute 
 Before exposing Husky beyond local development:
 
 - Replace `HUSKY_API_KEYS` with strong random values.
-- Keep `AUTH_ENABLED=true` for public `/api/chat` and `/v1/*` endpoints.
+- Keep `AUTH_ENABLED=true` for public `/api/chat` endpoints.
 - Set `TUI_WS_ALLOWED_ORIGINS` to trusted origins; do not expose the TUI WebSocket with wildcard `*`.
 - Treat `approval: none` as no-approval mode; do not combine it with dangerous toolsets in online agents.
 - Prefer a dedicated internet-facing agent (for example `chatbot`) with narrow toolsets rather than full `assistant` capabilities.
