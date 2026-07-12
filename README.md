@@ -1,456 +1,227 @@
 <div align="center">
 
-<img src="assets/logo/banner.png" alt="Husky - Your AI Workforce" width="100%" />
+<img src="assets/logo/banner.png" alt="Husky" width="100%" />
 
-# Husky — Open-Source Agent Runtime Platform
+# Husky
 
-**Metadata-driven, compute/storage decoupled, and built for multiple scenarios. Deploy it as a personal assistant, an online chatbot backend, or an enterprise agent platform.**
-
-**Compared with Claude Managed Agents: self-hosted, fully open source, and runtime policies are customizable.**
+**Self-hosted agent runtime.** Define agents with tools, memory, skills, and policies — then expose them over TUI, HTTP SSE, or messaging channels.
 
 [中文](README.zh-CN.md) · English
 
 ![Java](https://img.shields.io/badge/Java-17-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0.5-brightgreen)
-![Spring AI](https://img.shields.io/badge/Spring%20AI-2.0.0--M4-brightgreen)
 ![LangGraph4j](https://img.shields.io/badge/LangGraph4j-1.8.12-blue)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 </div>
 
-## What Is Husky?
+## Overview
 
-Husky is a Java agent runtime built with Spring Boot, Spring AI, and LangGraph4j. It runs a ReAct loop with streaming output, tool calls, approvals, memory, knowledge retrieval, skills, MCP, browser automation, and multi-channel delivery.
+Husky is an open-source **agent platform** written in Java. A single process runs a ReAct graph (model → tools → observe) and routes each request through a resolved **agent** + **runtime policy**.
 
-The core idea is metadata-driven agent compute: the service starts once, then each request resolves its behavior from the request source, principal, channel, **agent**, session, visible tools, skills, memory policy, knowledge sources, MCP visibility, workspace/checkpoint storage policy, approval policy, and execution backend.
+| You want… | Use… |
+|-----------|------|
+| Local personal assistant | TUI + full-capability `assistant` agent |
+| App / product backend | `POST /api/chat` (SSE) + a narrow `chatbot` agent |
+| Team messaging bots | Feishu / Telegram / Slack instances bound to agents |
 
-Husky can be used as:
+**LLM providers:** any OpenAI Chat Completions–compatible endpoint (OpenAI, DeepSeek, …), plus Anthropic Messages protocol via `llm.providers` / `LLM_PROVIDERS_*`. Outbound config uses `OPENAI_*` (and optional `llm.providers.*`); that is **not** an inbound OpenAI server API.
 
-| Use case | What you get |
-|----------|--------------|
-| Personal AI assistant | TUI, local files, terminal/process tools, browser tools, memory, approvals |
-| Online chatbot / app backend | HTTP SSE `/api/chat`, API key auth, per-user sessions, agent-scoped tools |
-| Enterprise assistant | Feishu, Telegram, and Slack multi-instance bots, agent–channel bindings, knowledge sources, audit tags |
-| Agent platform | Layered Java modules, tool providers, agents, hooks, runtime policies, MCP |
+## Quick start (from source)
 
-## Quick Start
-
-The goal is to get Husky working once in under a minute: install, start the service, verify health, then open the TUI.
-
-### Step 1: Pick Your Install Path
-
-#### Linux / VPS Quick Install
-
-Use the installer when you want the fastest setup on a Linux host.
-
-Safer install path:
-
-```bash
-curl -fsSLO https://raw.githubusercontent.com/HandleCoding/OpenHuskyAgent/main/install.sh
-less install.sh
-bash install.sh
-```
-
-Convenience shortcut for trusted environments:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/HandleCoding/OpenHuskyAgent/main/install.sh | bash
-```
-
-Useful options:
-
-```bash
-bash install.sh --non-interactive
-bash install.sh --install-dir="$HOME/openHusky" --port=18088
-bash install.sh --upgrade
-husky update
-```
-
-The installer clones the repository into `~/openHusky` by default, installs JDK 17+ when needed, builds the service and TUI client JARs, writes runtime config to `~/.husky/.env`, creates the `~/.husky/config`, `~/.husky/skills`, `~/.husky/db`, `~/.husky/logs`, and `~/.husky/memory` directories, generates a random `HUSKY_API_KEYS` value, and can install a systemd service.
-
-`bin/husky` prefers `~/.husky/.env` and only falls back to the repo-local `.env` when the user-level config file is missing.
-
-#### macOS Quick Install (Homebrew)
-
-For the smoothest macOS install path, use the official Homebrew tap.
-
-```bash
-brew tap HandleCoding/husky
-brew install HandleCoding/husky/husky
-husky init
-husky serve
-```
-
-After `husky init`, edit `~/.husky/.env` and set `OPENAI_API_KEY` at minimum. Then choose one startup mode:
-
-- Foreground: `husky serve`
-- Background: `husky start`
-
-To upgrade a Homebrew install later:
-
-```bash
-brew update
-brew upgrade HandleCoding/husky/husky
-```
-
-Homebrew installs `openjdk@17` automatically, installs the `husky` launcher into your PATH, and keeps the runtime bundle under Homebrew-managed `libexec`.
-
-#### macOS / Windows / Any Platform From Source
-
-Use the source path when you are developing locally or not on Linux.
-
-Requirements:
-
-- JDK 17+
-- Git
-- An OpenAI-compatible chat model endpoint
-- Optional: Brave or Tavily API key for web search
-- Optional: Playwright Chromium for browser tools
-- Optional: Docker for Docker execution backend experiments
+**Requirements:** JDK 17+, Git, an API key for an OpenAI-compatible chat model.
 
 ```bash
 git clone https://github.com/HandleCoding/OpenHuskyAgent.git
 cd OpenHuskyAgent
 mkdir -p ~/.husky
 cp .env.example ~/.husky/.env
+# Edit ~/.husky/.env — at least OPENAI_API_KEY (and BASE_URL / MODEL if not OpenAI default)
 ```
 
-If you prefer a repo-local config for source-only work, `bin/husky` still falls back to `.env` when `~/.husky/.env` does not exist.
-
-### Step 2: Set Minimal Configuration
-
-Edit `~/.husky/.env` and set at least:
-
 ```bash
-OPENAI_API_KEY=your-key
-OPENAI_BASE_URL=https://api.openai.com
-OPENAI_MODEL=gpt-5.4
-```
-
-`OPENAI_API_KEY` is the only strictly required value for a first run if the default base URL and model work for your provider.
-
-### Step 3: Build And Start Husky
-
-```bash
-./mvnw -B -ntp clean install
+./mvnw -B -ntp -DskipTests package
 bin/husky serve
 ```
 
-Success signal: the service keeps running in the current terminal and starts listening on port `18088` unless you changed `HUSKY_PORT`.
-
-For local development, `bin/husky dev` starts the service and TUI together, but `serve` + `tui` is the clearest first-run path.
-
-### Step 4: Verify The Service
-
 ```bash
-curl http://localhost:18088/actuator/health
+# another terminal
+curl -s http://localhost:18088/actuator/health
+bin/husky tui --server ws://localhost:18088/api/tui
 ```
 
-Success signal: you should get JSON with `"status":"UP"`.
+`bin/husky` loads `~/.husky/.env` first; if missing, it falls back to the repo `.env`.
 
-### Step 5: Open The TUI
+### Other install paths
 
-In another terminal:
+| Path | When |
+|------|------|
+| [Linux installer](https://github.com/HandleCoding/OpenHuskyAgent/blob/main/install.sh) | VPS / one-shot deploy (`bash install.sh`, later `husky update`) |
+| Homebrew | `brew tap HandleCoding/husky && brew install HandleCoding/husky/husky` then `husky init` / `husky serve` |
+
+Background process (no systemd):
 
 ```bash
-husky tui --server ws://localhost:18088/api/tui
+bin/husky start    # PID: ~/.husky/husky.pid , logs: ~/.husky/logs/husky-serve.log
+bin/husky status
+bin/husky logs
+bin/husky stop
 ```
 
-Success signal: the TUI connects without errors and you can send a prompt immediately.
+Dev (service + TUI): `bin/husky dev`.
 
-## `~/.husky` Layout
-
-After installation, Husky keeps user-level config and runtime data under `~/.husky`:
+## Runtime layout (`~/.husky`)
 
 | Path | Purpose |
 |------|---------|
-| `~/.husky/.env` | Main runtime configuration, including model settings, API keys, ports, and feature toggles |
-| `~/.husky/config/` | User-managed configuration files such as `mcp-servers.json` |
-| `~/.husky/skills/` | Installed or user-authored skills loaded from the Husky data directory |
-| `~/.husky/db/` | Runtime SQLite data such as session state and checkpoints |
-| `~/.husky/logs/` | Optional log output and writable runtime log directory |
-| `~/.husky/memory/` | Persistent file-backed memory directory |
-| `~/.husky/memory/MEMORY.md` | Shared persistent notes managed by `memory_*` tools |
-| `~/.husky/memory/USER.md` | User profile memory managed by `user_*` tools |
+| `.env` | Secrets, model endpoint, ports, feature flags, channel tokens |
+| `config/application.yml` | Agents, channel instances, bindings (`HUSKY_CONFIG_FILE`) |
+| `config/mcp-servers.json` | MCP servers (when `MCP_ENABLED=true`) |
+| `db/` | SQLite sessions / checkpoints |
+| `memory/` | File-backed memory (`MEMORY.md`, `USER.md`, …) |
+| `skills/` | User / installed skills |
+| `logs/` | Service logs when using `husky start` |
 
-Configuration lives in `~/.husky/.env` and `~/.husky/config/`; persistent memory content lives separately under `~/.husky/memory/`.
+## Configuration
 
-Memory strategy notes:
+### Environment (`.env`)
 
-- `default` loads file-backed memory from `~/.husky/memory/` into prompts automatically.
-- `manual-only` keeps `MEMORY.md` and `USER.md` editable through memory tools without auto-injecting them into prompts.
-- `session-recall` uses session recall instead of persistent file-backed memory for prompt/session recall.
+| Variable | Default | Notes |
+|----------|---------|--------|
+| `OPENAI_API_KEY` | — | **Required** for model calls |
+| `OPENAI_BASE_URL` | `https://api.openai.com` | OpenAI-compatible **outbound** LLM base |
+| `OPENAI_COMPLETIONS_PATH` | `/v1/chat/completions` | Completions path on that base |
+| `OPENAI_MODEL` | `gpt-5.4` | Default model name for seeded `main` provider |
+| `OPENAI_TEMPERATURE` | `0.7` | |
+| `AUXILIARY_MODEL` | falls back to main | Summaries, compression, vision (OpenAI-compatible path) |
+| `HUSKY_PORT` | `18088` | |
+| `HUSKY_DATA_DIR` | `~/.husky` | |
+| `HUSKY_CONFIG_FILE` | `$HUSKY_DATA_DIR/config/application.yml` | Agents / channels / bindings |
+| `AUTH_ENABLED` | `true` | API key auth for `/api/chat` |
+| `HUSKY_API_KEYS` | example / generated | Comma-separated keys; change before public deploy |
+| `BROWSER_ENABLED` | `false` | Playwright tools |
+| `MCP_ENABLED` | `false` | Load MCP servers |
+| `WEB_BACKEND` | `auto` | `auto` / `brave` / `tavily` / `none` |
 
-You can back up or move `~/.husky` independently from the checked-out repository in `~/openHusky`.
+Optional: `LLM_PROVIDERS_MAIN_PROTOCOL=anthropic_messages` and related vars to run the main agent on Anthropic Messages wire (e.g. DeepSeek dual endpoint). See comments in `.env.example` patterns used in local deploys.
 
-### Upgrade An Existing Install
+### Agents & channels (YAML)
 
-The recommended local upgrade path depends on how you installed Husky.
+Edit `$HUSKY_CONFIG_FILE` (or package defaults in `service/src/main/resources/application.yml`).
 
-For a Homebrew install on macOS:
+- **`agents.<id>`** — tools, approval, memory, model, rate limits, …
+- **`channels.*.instances.*`** — Feishu / Telegram / Slack connection details  
+- **`agent-channel-bindings.<agentId>`** — which channel instances that agent owns  
 
-```bash
-brew update
-brew upgrade HandleCoding/husky/husky
-```
+Capability lists are **fail-closed**: empty `[]` = none, `["*"]` = all, concrete ids = only those. Invalid ids fail **startup**.
 
-For a git checkout managed with `install.sh`, use:
+Details: [docs/integrators.md](docs/integrators.md), [docs/agent_channel_binding_plan.md](docs/agent_channel_binding_plan.md).
 
-```bash
-husky update
-```
+## Use the platform
 
-`husky update` wraps `bash install.sh --upgrade`, refuses to run on a dirty checkout, and prints the active code/config/memory paths after the upgrade.
-
-If you want the lower-level command explicitly, this still works:
-
-```bash
-bash install.sh --upgrade
-```
-
-## Minimal Configuration
-
-Husky uses two user-editable runtime files after `husky init`:
-
-- `.env` for secrets, model endpoints, feature flags, and channel credentials.
-- `${HUSKY_DATA_DIR}/config/application.yml` for agents, channel instances, and agent-channel-bindings.
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `OPENAI_API_KEY` | empty | OpenAI-compatible API key; required for model calls |
-| `OPENAI_BASE_URL` | `https://api.openai.com` | OpenAI-compatible endpoint |
-| `OPENAI_COMPLETIONS_PATH` | `/v1/chat/completions` | Chat completions path |
-| `OPENAI_MODEL` | `gpt-5.4` | Main chat model |
-| `OPENAI_TEMPERATURE` | `0.7` | Main model temperature |
-| `AUXILIARY_*` | blank/main fallback | Optional model for summaries, compression, web summaries, and vision |
-| `HUSKY_PORT` | `18088` | HTTP/WebSocket service port |
-| `HUSKY_DATA_DIR` | `~/.husky` | Runtime data directory for DBs, skills, MCP config, and logs |
-| `HUSKY_CONFIG_FILE` | `${HUSKY_DATA_DIR}/config/application.yml` | Runtime YAML for agents, channels, and bindings |
-| `AUTH_ENABLED` | `true` | Enables API key auth for `/api/chat` |
-| `HUSKY_API_KEYS` | generated/example | Comma-separated Chatbot API keys; replace before public deployment |
-| `TUI_WS_ALLOWED_ORIGINS` | `*` | WebSocket origins; wildcard is local/dev only |
-| `WEB_BACKEND` | `auto` | `auto`, `brave`, `tavily`, or `none` |
-| `BRAVE_SEARCH_API_KEY` | empty | Enables Brave search |
-| `TAVILY_API_KEY` | empty | Enables Tavily search |
-| `PROXY_*` / `HUSKY_PROXY_URL` | env-driven | Shared outbound HTTP proxy settings |
-| `WEB_PROXY_*` | empty | Web-specific proxy override |
-| `BROWSER_ENABLED` | `false` | Enables Playwright browser tools |
-| `MCP_ENABLED` | `false` | Enables MCP server loading |
-| `MCP_CONFIG_PATH` | `${HUSKY_DATA_DIR}/config/mcp-servers.json` | MCP server config path |
-| `SKILLHUB_API_KEY` | empty | Enables authenticated SkillHub operations |
-
-Browser and MCP integrations are disabled by default. Enable them only when configured intentionally.
-
-### Background Service Options
-
-`husky serve` keeps the service in the current terminal. On macOS or other environments without `systemd`, use the lightweight background commands:
+### TUI
 
 ```bash
-husky start
-husky status
-husky logs
-husky stop
+bin/husky tui --server ws://localhost:18088/api/tui
 ```
 
-This mode writes its PID to `~/.husky/husky.pid` and logs to `~/.husky/logs/husky-serve.log`.
+Streaming, tool traces, approvals, multi-turn sessions over WebSocket JSON-RPC.
 
-For long-running Linux server deployments, `systemd` is still the recommended path:
+### HTTP API (Chatbot SSE)
 
-```bash
-sudo systemctl start husky-agent
-sudo systemctl status husky-agent
-journalctl -u husky-agent -f
-```
-
-## Use Husky
-
-### TUI Personal Assistant
-
-```bash
-husky tui --server ws://localhost:18088/api/tui
-```
-
-The TUI uses WebSocket JSON-RPC and supports streaming text, tool-call display, approval prompts, and session interaction.
-
-### Chatbot SSE API
+Primary **inbound** HTTP surface for apps:
 
 ```bash
 curl -N \
-  -H 'X-Api-Key: <your-api-key>' \
-  -H 'X-User-Id: demo-user' \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: text/event-stream' \
-  -d '{"message":"Search the latest Spring AI docs"}' \
+  -H "X-Api-Key: $HUSKY_API_KEY" \
+  -H "X-User-Id: demo-user" \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -d '{"message":"Hello"}' \
   http://localhost:18088/api/chat
 ```
 
-Request fields:
-
-| Field | Required | Purpose |
+| Input | Required | Purpose |
 |-------|----------|---------|
-| `message` | yes | User input |
-| `sessionId` | no | Existing server-issued session id; omit on first request |
+| `message` | yes | User text |
+| `sessionId` | no | Continue a server session (omit first turn) |
+| `X-Api-Key` | if auth on | Must match `HUSKY_API_KEYS` |
+| `X-User-Id` | if auth on | Stable end-user id |
+| `X-Agent` | no | Override agent when routing allows |
 
-Headers:
+SSE event names include `token`, `reasoning`, `tool_started`, `tool_completed`, `tool_failed`, `done`, `error`.
 
-| Header | Required | Purpose |
-|--------|----------|---------|
-| `X-Api-Key` | yes when auth is enabled | Chatbot API authentication |
-| `X-User-Id` | yes | Stable end-user identity for session ownership |
-| `X-Agent` | no | Explicit agent id for HTTP chatbot requests |
+### Messaging channels
 
-SSE events include `token`, `reasoning`, `message`, `tool_started`, `tool_completed`, `tool_failed`, `done`, and `error`.
+| Channel | Enable (typical) | Notes |
+|---------|------------------|--------|
+| Feishu | `FEISHU_ASSISTANT_ENABLED=true` + app credentials | WebSocket or webhook instances |
+| Telegram | `TELEGRAM_ASSISTANT_ENABLED=true` + bot token | One process per bot token |
+| Slack | `SLACK_ASSISTANT_ENABLED=true` + bot/app tokens + bot user id | Socket Mode |
 
-Rate-limited agents return a structured error with a rate-limit signal instead of silently dropping the turn.
-
-External apps should integrate via **Chatbot SSE** (`POST /api/chat`) or messaging channels. See [docs/integrators.md](docs/integrators.md).
-
-### Feishu Channel
-
-Husky supports Feishu WebSocket/webhook adapters with multiple app instances under `channels.feishu.instances.*`. Bind instances to agents through `agent-channel-bindings.*`, allowing different bots/accounts to expose different prompts, tools, memory, and approval policies.
-
-### Telegram Channel
-
-Husky supports a disabled-by-default Telegram long-polling adapter with multiple bot instances under `channels.telegram.instances.*`. Configure `TELEGRAM_ASSISTANT_ENABLED=true`, `TELEGRAM_ASSISTANT_BOT_TOKEN`, and preferably `TELEGRAM_ASSISTANT_BOT_USERNAME` so `agent-channel-bindings.*` can route the bot to the intended agent.
-
-Telegram v1 supports text messages, group mention gating, forum topic threads, typing indicators, inline approval buttons, and clarification buttons/replies. Long polling is single-consumer per bot token, so run only one Husky process per enabled Telegram token.
-
-### Slack Channel
-
-Husky supports a disabled-by-default Slack Socket Mode adapter with multiple bot instances under `channels.slack.instances.*`. Configure `SLACK_ASSISTANT_ENABLED=true`, `SLACK_ASSISTANT_BOT_TOKEN`, `SLACK_ASSISTANT_APP_TOKEN`, and `SLACK_ASSISTANT_BOT_USER_ID` so `agent-channel-bindings.*` can route the bot to the intended agent. When Slack is enabled, the bot user id is required because Socket Mode routing fails closed instead of silently falling back to a global default.
-
-Slack v1 supports text messages, DM and channel/thread routing, channel mention gating, threaded replies, Block Kit approval buttons, and clarification buttons/replies. Create a Slack app with Socket Mode enabled, an app-level token with `connections:write`, bot scopes such as `app_mentions:read`, `chat:write`, `im:history`, and the channel/group history scopes you enable, event subscriptions for `app_mention`, `message.im`, and optional channel/group message events, plus Interactivity enabled for Block Kit callbacks. To DM the bot, enable App Home -> Messages Tab and allow users to send messages from that tab. Invite the bot to private channels before testing there; `SLACK_ASSISTANT_SEND_TYPING_STATUS=false` by default because Slack normal messages do not have a true typing indicator API.
-
-## Capabilities
-
-- **ReAct graph runtime** — LangGraph4j drives model -> tool -> observation loops with interrupt/resume approvals.
-- **Streaming by channel** — TUI WebSocket, HTTP SSE, and Feishu adapters render the same runtime events differently.
-- **Agent runtime policy** — agents control prompts, toolsets, allow/deny lists, MCP servers, knowledge sources, skills, approval, backend, working directory, memory, audit, rate limits, and optional LLM model/provider.
-- **Fail-closed allowlists** — empty capability lists mean none; `["*"]` means all. Invalid concrete ids fail process startup.
-- **Built-in tools** — file read/write/edit/delete/move, apply patch, file search/listing, terminal/process, todo, web search/fetch, browser, memory, knowledge, skills, delegate, MCP, and vision tools.
-- **Parallel tool execution** — safe tools from the same model turn can run concurrently; approval-required tools are routed through a serial confirmation queue.
-- **Memory and checkpoints** — SQLite-backed sessions, graph checkpoints, memory tools, context compression, and model-context-length policies.
-- **Knowledge layer** — agent-scoped `knowledge_search` and `knowledge_fetch` over configured local knowledge sources.
-- **Skill system** — built-in skills, user-installed skills, SkillHub search/install, and progressive `skill_list` / `skill_view` loading.
-- **MCP integration** — stdio, SSE, and Streamable-HTTP MCP servers with agent-level visibility controls.
-- **Browser and vision** — Playwright browser automation and local/remote image analysis when enabled.
-- **Sub-agent delegation** — anonymous `delegate_task` children with three-layer policy (`agent.delegation` + `agents.*.delegation` + tool params).
-- **Observability** — audit logs, metrics, session stats, redaction, and `/actuator/husky`.
+Bind each instance under `agent-channel-bindings`. Channel-specific options live in env and `channels.*` YAML.
 
 ## Architecture
 
-Husky uses a layered Java architecture:
-
-| Module | Responsibility |
-|--------|----------------|
-| `service/` | Spring Boot entry point, HTTP SSE chatbot, TUI WebSocket, channel adapters, auth, Actuator |
-| `application/` | Agent orchestration, channel adapters, agent/session resolution, runtime queues, JSON-RPC methods, sub-agent runner |
-| `domain/` | ReAct graph, graph state, approvals, prompt builder, context manager, sessions, hooks, channel events |
-| `infra/` | Tools, memory, knowledge, MCP, browser, workspace, checkpoint store, AI clients, execution backends, config, observability |
-| `client/` | Independent terminal TUI client with no Spring dependency |
-
-Dependency direction is intentionally one-way: `service -> application -> domain -> infra`. The `client` module is separate and talks to the service through WebSocket JSON-RPC.
-
-Runtime behavior follows this model:
-
 ```text
-Transport -> Channel -> Channel Instance -> Agent -> Runtime Scope -> ReAct Graph
+Transport → Channel → Instance → Agent → Runtime Scope → ReAct Graph
 ```
 
-A request resolves its principal, channel identity, concrete account/bot binding, agent config, and session id. The resulting runtime scope controls prompt sections, visible tools, skills, memory, knowledge sources, MCP servers, approval mode, execution backend, workspace/checkpoint storage, audit tags, and graph cache keys.
+| Module | Role |
+|--------|------|
+| `service/` | Spring Boot, HTTP SSE, WebSocket, channel adapters, auth, Actuator |
+| `application/` | Orchestration, session/policy resolution, queues, sub-agents, TUI RPC |
+| `domain/` | ReAct graph, prompts, context compression, hooks, approvals |
+| `infra/` | Tools, memory, MCP, browser, checkpoints, **LlmTransport** (OpenAI + Anthropic wires) |
+| `client/` | Standalone TUI (no Spring) |
 
-This keeps Husky usable as a local personal assistant while allowing enterprise deployments to replace memory, knowledge, file/workspace, MCP, and checkpoint providers with remote implementations.
+Dependency direction: `service → application → domain → infra`.
 
-## Configuration Reference
+## Features (short)
 
-Packaged defaults live in `service/src/main/resources/application.yml`. Installed/runtime deployments should edit `${HUSKY_DATA_DIR}/config/application.yml`, which is loaded as an external Spring config override by `bin/husky`.
-
-| Area | Important keys |
-|------|----------------|
-| LLM | `spring.ai.openai.*`, `llm.providers.*`, `agent.auxiliary.*` |
-| Agent loop | `agent.graph.max-react-loops`, `agent.llm.*`, `agent.tool.*`, `agent.checkpoint.enabled`, `agent.delegation.*` |
-| Context | `context.threshold-percent`, `context.context-length`, `context.model-context-lengths`, `context.tail-token-budget` |
-| Channels | `channels.feishu.instances.*`, `channels.telegram.instances.*`, `channels.slack.instances.*`, `tui.ws.*`, `chatbot.enabled` |
-
-| Agents and bindings | `agents.*`, `agent-channel-bindings.*` — see [docs/integrators.md](docs/integrators.md) for allowlists, `model`, `rate-limit-*`, `delegation` |
-| Execution | `execution.backend.docker.*`, `execution.backend.idle-ttl-seconds` |
-| Web | `web.backend`, `web.proxy.*`, `BRAVE_SEARCH_API_KEY`, `TAVILY_API_KEY` |
-| Browser | `browser.enabled`, `browser.headless`, `browser.timeout-seconds`, `browser.allow-private-network` |
-| MCP | `mcp.enabled`, `mcp.config-path`, agent `allowed-mcp-servers` / `denied-mcp-servers` |
-| Knowledge | `knowledge.enabled`, `knowledge.local-sources`, limits for snippets/documents/depth |
-| Skills | `skill.builtin-dir`, `skill.dir`, `skill.managed-dirs`, `skillhub.*` |
-| Auth | `auth.enabled`, `auth.api-keys` |
-| Observability | `management.endpoints.web.exposure.include`, `husky.observability.*` |
-
-Storage defaults to local. Non-local workspace/checkpoint providers are extension points; unsupported remote types fail fast instead of silently falling back to local behavior.
-
-Tool runtime follows the selected agent backend. Terminal/process tools execute through the runtime backend. File tools are available for local backend and Docker backend only when persistent filesystem is enabled; SSH and non-persistent Docker runtimes hide file tools and fail closed if called directly. URL-based MCP servers are visible across local/Docker/SSH runtimes, while stdio MCP servers are local-only.
-
-## Security And Production Hardening
-
-Before exposing Husky beyond local development:
-
-- Replace `HUSKY_API_KEYS` with strong random values.
-- Keep `AUTH_ENABLED=true` for public `/api/chat` endpoints.
-- Set `TUI_WS_ALLOWED_ORIGINS` to trusted origins; do not expose the TUI WebSocket with wildcard `*`.
-- Treat `approval: none` as no-approval mode; do not combine it with dangerous toolsets in online agents.
-- Prefer a dedicated internet-facing agent (for example `chatbot`) with narrow toolsets rather than full `assistant` capabilities.
-- Restrict terminal, process, file mutation/search, browser automation, `skill_install`, `skill_manage`, and dangerous MCP tools in internet-facing agents.
-- Use empty / `["*"]` / concrete allowlists deliberately; invalid concrete skill, MCP, knowledge, or toolset ids fail startup (fail-closed).
-- Enable per-agent `rate-limit-*` for multi-tenant HTTP usage.
-- Keep Actuator endpoints on a trusted network or behind authenticated reverse proxy access.
-- Do not commit `.env`, local databases, private MCP configs, API keys, logs, or generated runtime data.
-
-Report vulnerabilities privately. See `SECURITY.md`.
+- ReAct loop with streaming and tool calls  
+- Parallel safe tools; approval queue for sensitive tools  
+- Multi-agent tools via `delegate_task` (policy-capped)  
+- Memory, skills, knowledge, MCP, browser/vision (optional)  
+- Context compression + SQLite checkpoints  
+- Per-agent rate limits and fail-closed allowlists  
 
 ## Development
 
 ```bash
-# Default tests; excludes live API and browser groups
-./mvnw -B -ntp test
-
-# Build packages without tests
+./mvnw -B -ntp test                    # default suite (excludes live-api & browser)
 ./mvnw -B -ntp -DskipTests package
+./mvnw -B -ntp test -pl domain         # one module
+./mvnw -B -ntp test -pl service -Dtest=ToolRegistrationIntegrationTest
 
-# Module tests
-./mvnw -B -ntp test -pl infra
-./mvnw -B -ntp test -pl domain
-./mvnw -B -ntp test -pl application
-./mvnw -B -ntp test -pl service
-./mvnw -B -ntp test -pl client
-
-# Single test class
-./mvnw -B -ntp test -Dtest=ToolRegistrationIntegrationTest -pl service
-
-# Explicit live API compatibility tests
+# Optional profiles
 OPENAI_API_KEY=... ./mvnw -B -ntp test -P live-api-tests
-
-# Explicit browser tests
 ./mvnw -B -ntp exec:java -pl infra -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install chromium"
 ./mvnw -B -ntp test -P browser-tests
 ```
 
-The installer uses `-DskipTests` for speed. Contributors should run the default test command before opening PRs.
+## Production notes
 
-## Documentation
+- Rotate `HUSKY_API_KEYS`; keep `AUTH_ENABLED=true` on public networks.  
+- Do not expose full `assistant` toolsets on the internet; use a narrow agent (e.g. `chatbot`).  
+- Set `TUI_WS_ALLOWED_ORIGINS` in production (avoid `*`).  
+- Keep Actuator and TUI off the public internet without extra controls.  
+- Do not commit `.env`, keys, DBs, or private MCP configs.  
 
-| Doc | Audience |
-|-----|----------|
-| [docs/integrators.md](docs/integrators.md) | Deploy Husky as a backend; agents, allowlists, OpenAI-compatible API, production checklist |
-| [docs/agent_channel_binding_plan.md](docs/agent_channel_binding_plan.md) | `agents.*` / channels / bindings configuration model |
-| [docs/agent-platform-roadmap.md](docs/agent-platform-roadmap.md) | Platform evolution roadmap |
-| [docs/roadmap.md](docs/roadmap.md) | Historical roadmap index |
+Security: [SECURITY.md](SECURITY.md).
+
+## Docs
+
+| Doc | Content |
+|-----|---------|
+| [docs/integrators.md](docs/integrators.md) | Deploy as backend, agents, allowlists, SSE, checklist |
+| [docs/agent_channel_binding_plan.md](docs/agent_channel_binding_plan.md) | Agents / channels / bindings model |
+| [docs/agent-platform-roadmap.md](docs/agent-platform-roadmap.md) | Platform roadmap |
 
 ## Contributing
 
-Please read:
-
-- `CONTRIBUTING.md`
-- `CODE_OF_CONDUCT.md`
-- `SECURITY.md`
-
-Issues and pull requests should avoid secrets, private prompts, local `.env` content, and customer data.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Do not include secrets or customer data in issues/PRs.
 
 ## License
 
-Husky is released under the MIT License. See `LICENSE`.
+[MIT](LICENSE)
