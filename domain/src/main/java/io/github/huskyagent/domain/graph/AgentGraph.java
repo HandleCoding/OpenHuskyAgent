@@ -26,7 +26,6 @@ import org.bsc.langgraph4j.*;
 import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.bsc.langgraph4j.spring.ai.serializer.jackson.SpringAIJacksonStateSerializer;
 import org.bsc.langgraph4j.utils.EdgeMappings;
-import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -52,7 +51,6 @@ public class AgentGraph {
     private static final String LABEL_APPROVED = "APPROVED";
     private static final String LABEL_REJECTED = "REJECTED";
 
-    private final ChatModel chatModel;
     private final LlmClientRegistry llmClientRegistry;
     private final PromptBuilder promptBuilder;
     private final LlmRetryPolicy llmRetryPolicy;

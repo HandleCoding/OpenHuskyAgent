@@ -251,9 +251,6 @@ class AgentDefinitionValidatorTest {
         llmClientRegistry = new LlmClientRegistry(
                 props,
                 new AgentConfig(),
-                null,
-                providerOf(null),
-                providerOf(null),
                 "https://api.openai.com",
                 "test-key",
                 "/v1/chat/completions",

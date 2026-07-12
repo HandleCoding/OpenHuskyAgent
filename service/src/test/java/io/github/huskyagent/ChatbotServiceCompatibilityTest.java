@@ -11,6 +11,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -21,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Tag("live-api")
 class ChatbotServiceCompatibilityTest extends AbstractIntegrationTest {
 
-    private static final Properties MAIN_APP_PROPERTIES = SpringAiChatModelCompatibilityTest.loadMainApplicationPropertiesForTests();
+    private static final Properties MAIN_APP_PROPERTIES = loadMainApplicationPropertiesForTests();
 
     @Autowired
     private SessionResolver sessionResolver;
@@ -70,5 +72,12 @@ class ChatbotServiceCompatibilityTest extends AbstractIntegrationTest {
             throw new IllegalStateException("Missing property in main application.yml: " + key);
         }
         return value;
+    }
+
+    private static Properties loadMainApplicationPropertiesForTests() {
+        YamlPropertiesFactoryBean factory = new YamlPropertiesFactoryBean();
+        factory.setResources(new ClassPathResource("application.yml"));
+        Properties properties = factory.getObject();
+        return properties != null ? properties : new Properties();
     }
 }

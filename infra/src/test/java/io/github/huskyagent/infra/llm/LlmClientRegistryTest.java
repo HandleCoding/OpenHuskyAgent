@@ -1,17 +1,16 @@
 package io.github.huskyagent.infra.llm;
 
-import io.github.huskyagent.infra.llm.ModelSelection;
 import io.github.huskyagent.infra.config.AgentConfig;
+import io.github.huskyagent.infra.llm.api.LlmProtocol;
+import io.github.huskyagent.infra.llm.api.LlmTransport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.model.tool.ToolCallingManager;
-import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.LinkedHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.mock;
 
 class LlmClientRegistryTest {
 
@@ -26,9 +25,6 @@ class LlmClientRegistryTest {
         registry = new LlmClientRegistry(
                 properties,
                 new AgentConfig(),
-                mock(ToolCallingManager.class),
-                mock(ObjectProvider.class),
-                mock(ObjectProvider.class),
                 "https://api.openai.com",
                 "test-key",
                 "/v1/chat/completions",
@@ -79,27 +75,24 @@ class LlmClientRegistryTest {
     }
 
     @Test
-    void getChatModelCachesBySelectionFingerprint() {
+    void getTransportCachesByEndpointConfig() {
         LlmProperties.Provider deepseek = new LlmProperties.Provider();
         deepseek.setBaseUrl("https://api.deepseek.com");
         deepseek.setApiKey("ds-key");
         deepseek.setModel("deepseek-chat");
+        deepseek.setProtocol("openai_chat_completions");
         properties.getProviders().put("deepseek", deepseek);
 
-        var a = registry.getChatModel(ModelSelection.builder()
+        LlmTransport a = registry.getTransport(ModelSelection.builder()
                 .providerId("deepseek")
                 .modelName("deepseek-chat")
                 .build());
-        var b = registry.getChatModel(ModelSelection.builder()
+        LlmTransport b = registry.getTransport(ModelSelection.builder()
                 .providerId("deepseek")
                 .modelName("deepseek-chat")
-                .build());
-        var c = registry.getChatModel(ModelSelection.builder()
-                .providerId("deepseek")
-                .modelName("deepseek-reasoner")
                 .build());
 
-        assertEquals(a, b);
-        assertEquals(false, a == c);
+        assertSame(a, b);
+        assertEquals(LlmProtocol.OPENAI_CHAT_COMPLETIONS, a.protocol());
     }
 }

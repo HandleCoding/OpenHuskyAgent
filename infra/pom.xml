@@ -20,10 +20,11 @@
             <artifactId>spring-ai-starter-mcp-client</artifactId>
         </dependency>
 
-        <!-- Spring AI OpenAI -->
+        <!-- Spring AI model types (Message, ToolCallback, …). OpenAI starter intentionally removed;
+             model HTTP goes through LlmTransport. MCP client also pulls spring-ai-model transitively. -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-model-openai</artifactId>
+            <artifactId>spring-ai-model</artifactId>
         </dependency>
 
         <!-- LangGraph4j Core -->

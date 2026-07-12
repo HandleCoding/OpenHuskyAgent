@@ -4,30 +4,18 @@ import io.github.huskyagent.infra.config.AgentConfig;
 import io.github.huskyagent.infra.llm.api.LlmProtocol;
 import io.github.huskyagent.infra.llm.api.LlmTransport;
 import io.github.huskyagent.infra.llm.transport.LlmTransportFactory;
-import io.micrometer.observation.ObservationRegistry;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.model.tool.ToolCallingManager;
-import org.springframework.ai.openai.HuskyOpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.ai.openai.api.OpenAiApi;
-import org.springframework.ai.retry.RetryUtils;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.retry.RetryTemplate;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Resolves {@link ModelSelection} to a cached {@link LlmTransport} (primary) or legacy {@link ChatModel}.
- * Seeds a {@code main} provider from {@code spring.ai.openai.*} when not explicitly configured.
+ * Resolves {@link ModelSelection} to a cached {@link LlmTransport}.
+ * Seeds a {@code main} provider from {@code spring.ai.openai.*} / {@code OPENAI_*} when not explicitly configured.
  */
 @Slf4j
 @Component
@@ -38,9 +26,6 @@ public class LlmClientRegistry {
 
     private final LlmProperties llmProperties;
     private final AgentConfig agentConfig;
-    private final ToolCallingManager toolCallingManager;
-    private final ObjectProvider<RetryTemplate> retryTemplateProvider;
-    private final ObjectProvider<ObservationRegistry> observationRegistryProvider;
     private final LlmTransportFactory transportFactory;
 
     private final String springBaseUrl;
@@ -49,16 +34,11 @@ public class LlmClientRegistry {
     private final String springModel;
     private final Double springTemperature;
 
-    private final ConcurrentHashMap<String, OpenAiApi> apiCache = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, ChatModel> modelCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, LlmTransport> transportCache = new ConcurrentHashMap<>();
 
     public LlmClientRegistry(
             LlmProperties llmProperties,
             AgentConfig agentConfig,
-            ToolCallingManager toolCallingManager,
-            ObjectProvider<RetryTemplate> retryTemplateProvider,
-            ObjectProvider<ObservationRegistry> observationRegistryProvider,
             @Value("${spring.ai.openai.base-url:https://api.openai.com}") String springBaseUrl,
             @Value("${spring.ai.openai.api-key:}") String springApiKey,
             @Value("${spring.ai.openai.completions-path:/v1/chat/completions}") String springCompletionsPath,
@@ -66,9 +46,6 @@ public class LlmClientRegistry {
             @Value("${spring.ai.openai.chat.options.temperature:0.7}") Double springTemperature) {
         this.llmProperties = llmProperties;
         this.agentConfig = agentConfig;
-        this.toolCallingManager = toolCallingManager;
-        this.retryTemplateProvider = retryTemplateProvider;
-        this.observationRegistryProvider = observationRegistryProvider;
         this.springBaseUrl = springBaseUrl;
         this.springApiKey = springApiKey;
         this.springCompletionsPath = springCompletionsPath;
@@ -112,7 +89,7 @@ public class LlmClientRegistry {
         if (existing.getTemperature() == null) {
             existing.setTemperature(springTemperature);
         }
-        if (isBlank(existing.getType())) {
+        if (isBlank(existing.getType()) && isBlank(existing.getProtocol())) {
             existing.setType(TYPE_OPENAI_COMPATIBLE);
         }
     }
@@ -161,22 +138,13 @@ public class LlmClientRegistry {
     }
 
     /**
-     * Primary model path: protocol-specific HTTP transport (not Spring AI ChatModel).
+     * Protocol-specific HTTP transport for model calls.
      */
     public LlmTransport getTransport(ModelSelection selection) {
         ModelSelection effective = resolveSelection(selection);
         LlmProperties.Provider provider = requireProvider(effective.getProviderId());
         String cacheKey = transportCacheKey(provider);
         return transportCache.computeIfAbsent(cacheKey, key -> createTransport(provider));
-    }
-
-    /**
-     * Legacy Spring AI ChatModel path (auxiliary / summary). Prefer {@link #getTransport}.
-     */
-    public ChatModel getChatModel(ModelSelection selection) {
-        ModelSelection effective = resolveSelection(selection);
-        String cacheKey = effective.fingerprint();
-        return modelCache.computeIfAbsent(cacheKey, key -> createChatModel(effective));
     }
 
     public LlmProperties.Provider requireProvider(String providerId) {
@@ -213,38 +181,6 @@ public class LlmClientRegistry {
         return transportFactory.create(endpoint);
     }
 
-    private ChatModel createChatModel(ModelSelection selection) {
-        LlmProperties.Provider provider = requireProvider(selection.getProviderId());
-        LlmProtocol protocol = LlmProtocol.fromConfig(provider.effectiveProtocolConfig());
-        if (protocol != LlmProtocol.OPENAI_CHAT_COMPLETIONS) {
-            throw new IllegalArgumentException("Legacy ChatModel path only supports openai_chat_completions; provider '"
-                    + selection.getProviderId() + "' uses " + protocol);
-        }
-        if (isBlank(provider.getBaseUrl())) {
-            throw new IllegalArgumentException("LLM provider '" + selection.getProviderId() + "' is missing base-url");
-        }
-
-        OpenAiApi api = apiCache.computeIfAbsent(apiCacheKey(provider), key -> buildApi(provider));
-        OpenAiChatOptions.Builder options = OpenAiChatOptions.builder()
-                .model(selection.getModelName());
-        if (selection.getTemperature() != null) {
-            options.temperature(selection.getTemperature());
-        }
-        if (selection.getMaxTokens() != null) {
-            options.maxTokens(selection.getMaxTokens());
-        }
-
-        log.debug("Creating ChatModel provider={} model={}", selection.getProviderId(), selection.getModelName());
-        RetryTemplate retryTemplate = resolveRetryTemplate();
-        ObservationRegistry observationRegistry = resolveObservationRegistry();
-        return new HuskyOpenAiChatModel(
-                api,
-                options.build(),
-                toolCallingManager,
-                retryTemplate,
-                observationRegistry);
-    }
-
     private String transportCacheKey(LlmProperties.Provider provider) {
         return String.join("|",
                 nullToEmpty(provider.effectiveProtocolConfig()),
@@ -253,45 +189,6 @@ public class LlmClientRegistry {
                 nullToEmpty(provider.getCompletionsPath()),
                 nullToEmpty(provider.getMessagesPath()),
                 nullToEmpty(provider.getAnthropicVersion()));
-    }
-
-    private RetryTemplate resolveRetryTemplate() {
-        RetryTemplate retry = retryTemplateProvider != null ? retryTemplateProvider.getIfAvailable() : null;
-        return retry != null ? retry : RetryUtils.DEFAULT_RETRY_TEMPLATE;
-    }
-
-    private ObservationRegistry resolveObservationRegistry() {
-        ObservationRegistry registry = observationRegistryProvider != null
-                ? observationRegistryProvider.getIfAvailable()
-                : null;
-        return registry != null ? registry : ObservationRegistry.NOOP;
-    }
-
-    private OpenAiApi buildApi(LlmProperties.Provider provider) {
-        AgentConfig.LlmConfig llm = agentConfig.getLlm();
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofSeconds(llm.getConnectTimeoutSeconds()));
-        requestFactory.setReadTimeout(Duration.ofMinutes(llm.getReadTimeoutMinutes()));
-
-        String path = !isBlank(provider.getCompletionsPath())
-                ? provider.getCompletionsPath().trim()
-                : "/v1/chat/completions";
-        String apiKey = provider.getApiKey() != null ? provider.getApiKey() : "";
-
-        return OpenAiApi.builder()
-                .baseUrl(provider.getBaseUrl().trim())
-                .apiKey(apiKey)
-                .completionsPath(path)
-                .restClientBuilder(RestClient.builder().requestFactory(requestFactory))
-                .build();
-    }
-
-    private String apiCacheKey(LlmProperties.Provider provider) {
-        return String.join("|",
-                nullToEmpty(provider.effectiveProtocolConfig()),
-                nullToEmpty(provider.getBaseUrl()),
-                nullToEmpty(provider.getApiKey()),
-                nullToEmpty(provider.getCompletionsPath()));
     }
 
     private static boolean isBlank(String value) {
