@@ -1,75 +1,69 @@
 package io.github.huskyagent.infra.ai;
 
 import io.github.huskyagent.infra.config.AgentConfig;
+import io.github.huskyagent.infra.llm.api.LlmContentPart;
+import io.github.huskyagent.infra.llm.api.LlmMessage;
+import io.github.huskyagent.infra.llm.api.LlmRequest;
+import io.github.huskyagent.infra.llm.api.LlmResult;
+import io.github.huskyagent.infra.llm.api.LlmTransport;
+import io.github.huskyagent.infra.llm.transport.OpenAiChatCompletionsTransport;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.content.Media;
-import org.springframework.ai.openai.api.OpenAiApi;
-import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.core.io.ByteArrayResource;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.util.MimeTypeUtils;
-import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
+import java.util.Base64;
 import java.util.List;
+import java.util.Objects;
 
+/**
+ * Lightweight LLM helper for non-agent tasks (summary, title, web extract, vision).
+ * Uses {@link LlmTransport} with OpenAI Chat Completions wire format only —
+ * independent of the main agent's protocol (e.g. main may be Anthropic).
+ */
 @Slf4j
 public class AuxiliaryClient {
 
-    private final ChatClient chatClient;
+    private final LlmTransport transport;
     private final String modelName;
     private final AgentConfig.AuxiliaryConfig config;
 
-    public AuxiliaryClient(ChatModel mainChatModel, AgentConfig.AuxiliaryConfig config) {
-        this.config = config;
+    public AuxiliaryClient(LlmTransport transport, AgentConfig.AuxiliaryConfig config) {
+        this.transport = Objects.requireNonNull(transport, "transport");
+        this.config = Objects.requireNonNull(config, "config");
         this.modelName = config.getModel();
-
-        ChatModel effectiveChatModel;
-        if (config.getBaseUrl() != null && !config.getBaseUrl().isBlank()
-                && config.getApiKey() != null && !config.getApiKey().isBlank()) {
-            log.info("Auxiliary model uses independent endpoint: {}", config.getBaseUrl());
-            effectiveChatModel = buildIndependentChatModel(config);
-        } else {
-            log.info("Auxiliary model shares main endpoint, model={}", modelName);
-            effectiveChatModel = mainChatModel;
-        }
-
-        OpenAiChatOptions options = OpenAiChatOptions.builder()
-                .model(modelName)
-                .temperature(config.getTemperature())
-                .maxTokens(config.getMaxTokens())
-                .build();
-
-        this.chatClient = ChatClient.builder(effectiveChatModel)
-                .defaultOptions(options)
-                .build();
     }
 
-    private static OpenAiChatModel buildIndependentChatModel(AgentConfig.AuxiliaryConfig config) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(Duration.ofSeconds(30));
-        requestFactory.setReadTimeout(Duration.ofMinutes(3));
+    /**
+     * Build from auxiliary config, falling back to shared OpenAI-compatible main endpoint fields.
+     */
+    public static AuxiliaryClient create(AgentConfig.AuxiliaryConfig config,
+                                         String sharedBaseUrl,
+                                         String sharedApiKey,
+                                         String sharedCompletionsPath) {
+        Objects.requireNonNull(config, "config");
+        boolean independent = notBlank(config.getBaseUrl()) && notBlank(config.getApiKey());
+        String baseUrl = independent ? config.getBaseUrl().trim() : requireBase(sharedBaseUrl);
+        String apiKey = independent
+                ? config.getApiKey().trim()
+                : (sharedApiKey != null ? sharedApiKey : "");
+        String path = notBlank(config.getCompletionsPath())
+                ? config.getCompletionsPath().trim()
+                : (notBlank(sharedCompletionsPath) ? sharedCompletionsPath.trim() : "/v1/chat/completions");
 
-        OpenAiApi openAiApi = OpenAiApi.builder()
-                .baseUrl(config.getBaseUrl())
-                .apiKey(config.getApiKey())
-                .completionsPath(config.getCompletionsPath() != null && !config.getCompletionsPath().isBlank()
-                        ? config.getCompletionsPath()
-                        : "/v1/chat/completions")
-                .restClientBuilder(RestClient.builder().requestFactory(requestFactory))
-                .build();
+        if (independent) {
+            log.info("Auxiliary model uses independent endpoint: {}", baseUrl);
+        } else {
+            log.info("Auxiliary model shares main OpenAI-compatible endpoint, model={}", config.getModel());
+        }
 
-        return OpenAiChatModel.builder()
-                .openAiApi(openAiApi)
-                .defaultOptions(OpenAiChatOptions.builder()
-                        .model(config.getModel())
-                        .temperature(config.getTemperature())
-                        .build())
-                .build();
+        LlmTransport transport = new OpenAiChatCompletionsTransport(
+                baseUrl,
+                apiKey,
+                path,
+                Duration.ofMinutes(3),
+                java.net.http.HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(30))
+                        .build());
+        return new AuxiliaryClient(transport, config);
     }
 
     public String summarize(String content) {
@@ -93,14 +87,32 @@ public class AuxiliaryClient {
             """.formatted(content);
 
         try {
-            return chatClient.prompt()
-                    .user(prompt)
-                    .call()
-                    .content();
+            return completeText(prompt, config.getMaxTokens());
         } catch (Exception e) {
             log.error("Failed to generate summary: {}", e.getMessage());
             return "Summary generation failed: " + e.getMessage();
         }
+    }
+
+    /**
+     * Raw single-turn completion for callers that supply a full prompt (e.g. context compression).
+     */
+    public String completeText(String userPrompt) {
+        return completeText(userPrompt, config.getMaxTokens());
+    }
+
+    public String completeText(String userPrompt, Integer maxTokens) {
+        if (userPrompt == null || userPrompt.isBlank()) {
+            return "";
+        }
+        LlmResult result = transport.complete(LlmRequest.builder()
+                .model(modelName)
+                .messages(List.of(LlmMessage.user(userPrompt)))
+                .temperature(config.getTemperature())
+                .maxTokens(maxTokens != null ? maxTokens : config.getMaxTokens())
+                .stream(false)
+                .build());
+        return result.text() != null ? result.text() : "";
     }
 
     public String generateTitle(String firstMessage) {
@@ -121,23 +133,17 @@ public class AuxiliaryClient {
             """.formatted(truncatedMessage);
 
         try {
-            String title = chatClient.prompt()
-                    .user(prompt)
-                    .call()
-                    .content();
-
-            if (title != null) {
+            String title = completeText(prompt, config.getMaxTokens());
+            if (!title.isBlank()) {
                 title = title.trim()
                         .replaceAll("^[\"']|[\"']$", "")
                         .replaceAll("[\\r\\n]", " ")
                         .trim();
-
                 if (title.length() > 50) {
                     title = title.substring(0, 47) + "...";
                 }
             }
-
-            return title != null ? title : "New Conversation";
+            return !title.isBlank() ? title : "New Conversation";
         } catch (Exception e) {
             log.error("Failed to generate title: {}", e.getMessage());
             return "New Conversation";
@@ -166,41 +172,23 @@ public class AuxiliaryClient {
             """.formatted(question.trim());
 
         try {
-            Media media = new Media(
-                    MimeTypeUtils.parseMimeType(mimeType),
-                    imageResource(imageData, mimeType)
-            );
-            UserMessage message = UserMessage.builder()
-                    .text(prompt)
-                    .media(List.of(media))
-                    .build();
-
-            return chatClient.prompt()
-                    .messages(message)
-                    .call()
-                    .content();
+            String b64 = Base64.getEncoder().encodeToString(imageData);
+            LlmMessage message = LlmMessage.userMultimodal(
+                    prompt,
+                    List.of(LlmContentPart.imageBase64(mimeType.trim(), b64)));
+            LlmResult result = transport.complete(LlmRequest.builder()
+                    .model(modelName)
+                    .messages(List.of(message))
+                    .temperature(config.getTemperature())
+                    .maxTokens(config.getMaxTokens())
+                    .stream(false)
+                    .build());
+            String text = result.text();
+            return text != null && !text.isBlank() ? text : "Image analysis returned empty content";
         } catch (Exception e) {
             log.error("Failed to analyze image with model {}: {}", modelName, e.getMessage());
             return "Image analysis failed: " + e.getMessage();
         }
-    }
-
-    private ByteArrayResource imageResource(byte[] imageData, String mimeType) {
-        return new ByteArrayResource(imageData) {
-            @Override
-            public String getFilename() {
-                return "image." + imageExtension(mimeType);
-            }
-        };
-    }
-
-    private String imageExtension(String mimeType) {
-        return switch (mimeType) {
-            case "image/png" -> "png";
-            case "image/gif" -> "gif";
-            case "image/webp" -> "webp";
-            default -> "jpg";
-        };
     }
 
     public String translate(String text, String targetLang) {
@@ -217,10 +205,7 @@ public class AuxiliaryClient {
             """.formatted(targetLang, text);
 
         try {
-            return chatClient.prompt()
-                    .user(prompt)
-                    .call()
-                    .content();
+            return completeText(prompt, config.getMaxTokens());
         } catch (Exception e) {
             log.error("Failed to translate: {}", e.getMessage());
             return text;
@@ -245,10 +230,7 @@ public class AuxiliaryClient {
             """.formatted(focus, content);
 
         try {
-            return chatClient.prompt()
-                    .user(prompt)
-                    .call()
-                    .content();
+            return completeText(prompt, config.getMaxTokens());
         } catch (Exception e) {
             log.error("Failed to extract key info: {}", e.getMessage());
             return "";
@@ -285,14 +267,26 @@ public class AuxiliaryClient {
         );
 
         try {
-            return chatClient.prompt()
-                    .user(prompt)
-                    .options(OpenAiChatOptions.builder().maxTokens(config.getWebSummaryMaxTokens()).build())
-                    .call()
-                    .content();
+            int max = config.getWebSummaryMaxTokens() > 0
+                    ? config.getWebSummaryMaxTokens()
+                    : config.getMaxTokens();
+            String text = completeText(prompt, max);
+            return text.isBlank() ? null : text;
         } catch (Exception e) {
             log.error("Failed to summarize web content: {}", e.getMessage());
             return null;
         }
+    }
+
+    private static String requireBase(String sharedBaseUrl) {
+        if (!notBlank(sharedBaseUrl)) {
+            throw new IllegalArgumentException(
+                    "Auxiliary LLM has no base-url: set agent.auxiliary.base-url or spring.ai.openai.base-url / OPENAI_BASE_URL");
+        }
+        return sharedBaseUrl.trim();
+    }
+
+    private static boolean notBlank(String value) {
+        return value != null && !value.isBlank();
     }
 }

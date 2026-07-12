@@ -1,7 +1,7 @@
 package io.github.huskyagent.infra.config;
 
 import io.github.huskyagent.infra.ai.AuxiliaryClient;
-import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -9,7 +9,15 @@ import org.springframework.context.annotation.Configuration;
 public class AuxiliaryConfig {
 
     @Bean
-    public AuxiliaryClient auxiliaryClient(ChatModel chatModel, AgentConfig agentConfig) {
-        return new AuxiliaryClient(chatModel, agentConfig.getAuxiliary());
+    public AuxiliaryClient auxiliaryClient(
+            AgentConfig agentConfig,
+            @Value("${spring.ai.openai.base-url:}") String sharedBaseUrl,
+            @Value("${spring.ai.openai.api-key:}") String sharedApiKey,
+            @Value("${spring.ai.openai.completions-path:/v1/chat/completions}") String sharedCompletionsPath) {
+        return AuxiliaryClient.create(
+                agentConfig.getAuxiliary(),
+                sharedBaseUrl,
+                sharedApiKey,
+                sharedCompletionsPath);
     }
 }

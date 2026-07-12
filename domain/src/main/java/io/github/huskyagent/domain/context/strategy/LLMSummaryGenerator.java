@@ -2,26 +2,27 @@ package io.github.huskyagent.domain.context.strategy;
 
 import io.github.huskyagent.domain.context.SummaryConfig;
 import io.github.huskyagent.domain.context.SummaryStrategy;
+import io.github.huskyagent.infra.ai.AuxiliaryClient;
 import io.github.huskyagent.infra.context.ContextConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Context compression summarizer backed by {@link AuxiliaryClient} (OpenAI-compatible transport).
+ * On failure, falls back to a truncated concatenation so compression can still proceed.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class LLMSummaryGenerator implements SummaryStrategy {
 
     private final ContextConfig config;
-    private ChatModel summaryChatModel;
+    private final AuxiliaryClient auxiliaryClient;
 
     private static final String SUMMARY_PROMPT_TEMPLATE = """
         Compress the following conversation history into a structured summary while preserving key information needed to continue later.
@@ -84,34 +85,25 @@ public class LLMSummaryGenerator implements SummaryStrategy {
         return "llmSummary";
     }
 
-    public void setSummaryChatModel(ChatModel chatModel) {
-        this.summaryChatModel = chatModel;
-    }
-
     @Override
     public String generate(List<Message> turns, SummaryConfig summaryConfig) {
         if (turns == null || turns.isEmpty()) {
             return "";
         }
 
-        if (summaryChatModel == null) {
-            log.warn("Summary chat model not initialized, returning simple concatenation");
-            return simpleSummarize(turns);
-        }
-
         try {
             String conversationText = formatMessages(turns);
             String prompt = String.format(SUMMARY_PROMPT_TEMPLATE, conversationText);
-
-            ChatClient chatClient = ChatClient.create(summaryChatModel);
-            String summary = chatClient.prompt()
-                .user(prompt)
-                .call()
-                .content();
-
+            Integer maxTokens = summaryConfig != null && summaryConfig.maxTokens() > 0
+                    ? summaryConfig.maxTokens()
+                    : config.getMaxSummaryTokens();
+            String summary = auxiliaryClient.completeText(prompt, maxTokens);
             log.info("Generated summary: {} chars", summary != null ? summary.length() : 0);
-            return summary != null ? summary : "";
-
+            if (summary == null || summary.isBlank()) {
+                log.warn("LLM summary empty, falling back to simple concatenation");
+                return simpleSummarize(turns);
+            }
+            return summary;
         } catch (Exception e) {
             log.error("Failed to generate LLM summary", e);
             return simpleSummarize(turns);
@@ -128,24 +120,15 @@ public class LLMSummaryGenerator implements SummaryStrategy {
             return previousSummary;
         }
 
-        if (summaryChatModel == null) {
-            log.warn("Summary chat model not initialized, returning previous summary");
-            return previousSummary;
-        }
-
         try {
             String newConversationText = formatMessages(newTurns);
             String prompt = String.format(UPDATE_PROMPT_TEMPLATE, previousSummary, newConversationText);
-
-            ChatClient chatClient = ChatClient.create(summaryChatModel);
-            String updated = chatClient.prompt()
-                .user(prompt)
-                .call()
-                .content();
-
+            Integer maxTokens = summaryConfig != null && summaryConfig.maxTokens() > 0
+                    ? summaryConfig.maxTokens()
+                    : config.getMaxSummaryTokens();
+            String updated = auxiliaryClient.completeText(prompt, maxTokens);
             log.info("Updated summary: {} chars", updated != null ? updated.length() : 0);
-            return updated != null ? updated : previousSummary;
-
+            return updated != null && !updated.isBlank() ? updated : previousSummary;
         } catch (Exception e) {
             log.error("Failed to update summary", e);
             return previousSummary;

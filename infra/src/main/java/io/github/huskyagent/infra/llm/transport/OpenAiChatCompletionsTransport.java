@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.github.huskyagent.infra.llm.api.LlmCapabilities;
+import io.github.huskyagent.infra.llm.api.LlmContentPart;
 import io.github.huskyagent.infra.llm.api.LlmMessage;
 import io.github.huskyagent.infra.llm.api.LlmProtocol;
 import io.github.huskyagent.infra.llm.api.LlmRequest;
@@ -201,8 +202,45 @@ public final class OpenAiChatCompletionsTransport implements LlmTransport {
             }
             return node;
         }
+        if (message.hasParts()) {
+            ArrayNode content = node.putArray("content");
+            for (LlmContentPart part : message.parts()) {
+                content.add(toOpenAiContentPart(part));
+            }
+            return node;
+        }
         node.put("content", message.content() != null ? message.content() : "");
         return node;
+    }
+
+    private ObjectNode toOpenAiContentPart(LlmContentPart part) {
+        ObjectNode node = MAPPER.createObjectNode();
+        if (part == null) {
+            node.put("type", "text");
+            node.put("text", "");
+            return node;
+        }
+        return switch (part.kind()) {
+            case TEXT -> {
+                node.put("type", "text");
+                node.put("text", part.text() != null ? part.text() : "");
+                yield node;
+            }
+            case IMAGE_URL -> {
+                node.put("type", "image_url");
+                ObjectNode imageUrl = node.putObject("image_url");
+                imageUrl.put("url", part.url() != null ? part.url() : "");
+                yield node;
+            }
+            case IMAGE_BASE64 -> {
+                node.put("type", "image_url");
+                ObjectNode imageUrl = node.putObject("image_url");
+                String mime = part.mimeType() != null ? part.mimeType() : "image/jpeg";
+                String b64 = part.dataBase64() != null ? part.dataBase64() : "";
+                imageUrl.put("url", "data:" + mime + ";base64," + b64);
+                yield node;
+            }
+        };
     }
 
     private ObjectNode toOpenAiTool(LlmToolDefinition tool) {

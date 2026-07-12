@@ -199,6 +199,32 @@ class OpenAiChatCompletionsTransportTest {
     }
 
     @Test
+    void completeSendsMultimodalImageAsDataUrl() throws Exception {
+        responseBody = """
+                {"choices":[{"message":{"role":"assistant","content":"seen"},"finish_reason":"stop"}]}
+                """;
+        LlmRequest request = LlmRequest.builder()
+                .model("vision-model")
+                .messages(List.of(LlmMessage.userMultimodal(
+                        "what is this?",
+                        List.of(io.github.huskyagent.infra.llm.api.LlmContentPart.imageBase64(
+                                "image/png", "AAAA")))))
+                .stream(false)
+                .build();
+
+        LlmResult result = transport().complete(request);
+        assertEquals("seen", result.text());
+
+        JsonNode body = MAPPER.readTree(lastRequestBody.get());
+        JsonNode content = body.get("messages").get(0).get("content");
+        assertTrue(content.isArray());
+        assertEquals("text", content.get(0).get("type").asText());
+        assertEquals("what is this?", content.get(0).get("text").asText());
+        assertEquals("image_url", content.get(1).get("type").asText());
+        assertEquals("data:image/png;base64,AAAA", content.get(1).get("image_url").get("url").asText());
+    }
+
+    @Test
     void protocolAndFactory() {
         assertEquals(LlmProtocol.OPENAI_CHAT_COMPLETIONS, transport().protocol());
         LlmTransportFactory factory = new LlmTransportFactory();
